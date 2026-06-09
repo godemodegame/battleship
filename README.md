@@ -8,6 +8,46 @@ The game must be fully on-chain for match state and rules, use Fhenix/CoFHE for 
 
 All project documentation, game UI text, player-facing copy, errors, labels, and prompts must be written in English.
 
+## Playable Build
+
+This repo contains a **playable mobile-first 3D Battleship game** built from the
+specs below (Vite + React + React Three Fiber + Three.js + Zustand).
+
+```bash
+npm install
+npm run dev      # http://localhost:5173  (assets are copied into public/ automatically)
+npm run build    # type-check + production build into dist/
+```
+
+Flow: **Enter Battle → Choose Opponent (difficulty) → Place Fleet → Battle → Victory/Defeat.**
+
+What is implemented:
+
+- 10×10 board and the classic fleet (1×4, 2×3, 3×2, 4×1) with the classic
+  non-touching placement rule (`docs/game-mechanics.md`);
+- the real user-provided **FBX** ship/board/prop models (loaded at runtime —
+  no GLB converter was available, and the files are small);
+- **procedural VFX** for the projectile, miss plume, hit impact, and sunk wreck.
+  These are built in code because the `vfx-*` 3D models were never produced
+  (only the prompt files exist) — see `assets/3d-models/prompts/vfx-*.md`;
+- neo-noir visual language, mobile-first portrait HUD, and English-only copy
+  (`docs/visual-style-guide.md`, `docs/interface-and-buttons-guide.md`,
+  `docs/copy-deck.md`);
+- a local **Practice vs Bot** mode with easy / normal / hard strategies that
+  mirror `docs/computer-opponent-design.md`.
+
+What is scaffolded / deferred:
+
+- the on-chain authority (Arbitrum Sepolia) and **Fhenix/CoFHE** encrypted
+  gameplay. The game rules run through a single framework-agnostic engine
+  (`src/game/`) deliberately shaped so an on-chain/FHE source of truth can
+  replace it later. `Play Against Friend` and `Open Match` are shown as
+  disabled because they require the deployed contract.
+
+Source layout: `src/game/` (engine, fleet, bot, store), `src/three/`
+(scene, board, ships, models, `vfx/`), `src/ui/` (screens + components),
+`src/copy/en.ts` (all player-facing text).
+
 ## Documentation
 
 Read the documents in this order:

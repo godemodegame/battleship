@@ -1,1 +1,12 @@
 .DS_Store
+node_modules
+dist
+dist-ssr
+*.local
+
+# Generated at dev/build time from assets/3d-models (see scripts/copy-assets.mjs)
+public/models
+public/textures
+
+# Editor
+.idea
