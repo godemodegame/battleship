@@ -12,12 +12,22 @@ state.
 
 ## Current Playable Architecture
 
-The repository currently implements one local practice application:
+The repository implements a playable local practice application behind a router,
+with the practice/on-chain boundary from Phase 1 in place:
 
-- `src/App.tsx` keeps the React Three Fiber canvas mounted and selects one of
-  four UI overlays: `home`, `placement`, `battle`, or `gameover`;
-- `src/state/store.ts` is one Zustand store containing navigation, placement,
-  the complete plaintext match, bot turns, animation queues, and UI state;
+- `src/app/` holds the router shell and routes; `/practice` mounts the practice
+  app and `/match/:deploymentId/:matchId` mounts the on-chain route shell;
+- `src/practice/PracticeApp.tsx` keeps the React Three Fiber canvas mounted and
+  selects one of four UI overlays: `home`, `placement`, `battle`, or `gameover`;
+- `src/practice/practiceStore.ts` is the practice-only Zustand store containing
+  navigation, placement, the complete plaintext match, bot turns, animation
+  queues, and UI state; it lives behind the practice boundary;
+- `src/render/model.ts` defines the shared, mode-neutral `BattleRenderModel` the
+  3D scene consumes, fed by `src/practice/practiceRenderModel.ts` (practice) and
+  `src/onchain/renderModel.ts` (public on-chain adapter);
+- `src/onchain/phaseResolver.ts` is the pure match phase resolver and
+  `src/onchain/deployments.ts` is the versioned deployment manifest reader;
+- `src/copy/` holds typed English copy and error mappings;
 - `src/game/board.ts` contains placement and board helpers;
 - `src/game/engine.ts` creates plaintext boards and resolves attacks;
 - `src/game/bot.ts` selects the local practice bot target;
@@ -27,8 +37,9 @@ The repository currently implements one local practice application:
 - `src/lib/sfx.ts` owns synthesized sound and the only persisted setting
   (`localStorage.eb-muted`).
 
-There is no router, Privy provider, contract client, event sync, CoFHE client,
-query cache, or deployment configuration yet.
+There is no Privy provider, contract client, event sync, CoFHE client, or query
+cache yet. A versioned deployment manifest reader exists, but no contract is
+deployed, so its single record is reserved (`status: 'pending'`).
 
 In practice mode, the local store is intentionally authoritative. It knows both
 fleets and calls `applyAttack()` directly. That authority must never be reused

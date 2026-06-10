@@ -42,7 +42,7 @@ vi.mock('../lib/sfx', () => ({
 
 import App from '../App'
 import { LoadingOverlay, MuteButton } from './common'
-import { resetPracticeState, setPracticeRandomSource, useStore } from '../state/store'
+import { resetPracticeState, setPracticeRandomSource, useStore } from '../practice/practiceStore'
 
 const twoCellShip: Placement[] = [
   { slot: 3, row: 0, col: 0, orientation: 'h' },

@@ -26,7 +26,7 @@ vi.mock('../lib/sfx', () => ({
   },
 }))
 
-import { matchSummary, resetPracticeState, setPracticeRandomSource, useStore } from './store'
+import { matchSummary, resetPracticeState, setPracticeRandomSource, useStore } from './practiceStore'
 
 const twoCellShip: Placement[] = [
   { slot: 3, row: 0, col: 0, orientation: 'h' },

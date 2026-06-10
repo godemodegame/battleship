@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useStore } from '../state/store'
+import { useStore } from '../practice/practiceStore'
 import { cellLabel } from '../game/constants'
 import type { BoardState, Side } from '../game/types'
 import { MuteButton } from './common'

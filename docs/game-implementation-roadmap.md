@@ -162,6 +162,10 @@ Goal:
 - prevent the current local referee store from becoming mixed with contract
   state.
 
+Progress:
+
+- `GAME-101` through `GAME-110` complete.
+
 Tasks:
 
 | ID | Priority | Status | Work |
@@ -169,13 +173,13 @@ Tasks:
 | GAME-101 | P0 | Complete | Add a router and route-level application shell |
 | GAME-102 | P0 | Complete | Keep local practice under an explicit practice route or mode boundary |
 | GAME-103 | P0 | Complete | Create an empty on-chain application shell and match route |
-| GAME-104 | P0 | | Split practice orchestration from shared UI and scene state |
-| GAME-105 | P0 | | Add a pure on-chain match phase resolver with tests |
-| GAME-106 | P0 | | Introduce `PublicBattleRenderModel` and public board adapters |
-| GAME-107 | P0 | | Refactor the 3D scene to consume mode-specific render data |
-| GAME-108 | P1 | | Move shared English copy and error mappings into typed modules |
-| GAME-109 | P1 | | Add a versioned deployment manifest reader |
-| GAME-110 | P1 | | Support `/match/:deploymentId/:matchId` direct navigation and refresh |
+| GAME-104 | P0 | Complete | Split practice orchestration from shared UI and scene state |
+| GAME-105 | P0 | Complete | Add a pure on-chain match phase resolver with tests |
+| GAME-106 | P0 | Complete | Introduce `PublicBattleRenderModel` and public board adapters |
+| GAME-107 | P0 | Complete | Refactor the 3D scene to consume mode-specific render data |
+| GAME-108 | P1 | Complete | Move shared English copy and error mappings into typed modules |
+| GAME-109 | P1 | Complete | Add a versioned deployment manifest reader |
+| GAME-110 | P1 | Complete | Support `/match/:deploymentId/:matchId` direct navigation and refresh |
 
 Implementation rules:
 
@@ -194,6 +198,24 @@ Exit criteria:
 - the router restores a versioned match route after refresh;
 - phase resolver tests cover wallet, network, placement, battle, resolving,
   terminal, and unavailable states.
+
+Realized structure:
+
+- practice orchestration lives in `src/practice/practiceStore.ts` behind the
+  practice boundary; `src/game/engine.ts` and `src/game/bot.ts` stay
+  practice-only;
+- the 3D scene (`src/three/Scene.tsx`) renders battle boards from the shared,
+  mode-neutral `BattleRenderModel` (`src/render/model.ts`), produced by the
+  practice adapter (`src/practice/practiceRenderModel.ts`) and the public
+  on-chain adapter (`src/onchain/renderModel.ts`, which never imports the attack
+  engine);
+- shared English copy and error mappings are typed modules under `src/copy/`;
+- the versioned deployment manifest reader (`src/onchain/deployments.ts`)
+  resolves `deploymentId`, rejecting unknown ids and any chain id other than
+  `421614`;
+- the `/match/:deploymentId/:matchId` route resolves its deployment on direct
+  navigation and refresh, showing a recoverable unavailable state for unknown
+  ids.
 
 Specification:
 
@@ -587,7 +609,7 @@ Phase status:
 | Phase | Status |
 | --- | --- |
 | 0. Stabilize local practice | Complete (June 10, 2026) |
-| 1. Separate modes | In progress (GAME-101, GAME-102, GAME-103 complete) |
+| 1. Separate modes | Complete (GAME-101 through GAME-110) |
 | 2. Privy and network | Not started |
 | 3. Contract public lifecycle | Not started |
 | 4. CoFHE encrypted rules | Not started |
