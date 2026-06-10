@@ -59,7 +59,7 @@ Rules:
 The current overlay explains only rules that are playable now:
 
 - `Place your fleet in secret on a 10×10 grid. Ships never touch, even diagonally.`
-- `Take turns firing at the enemy grid. Miss, hit, or sink — then the turn passes.`
+- `Fire at the enemy grid. Hit or sink to shoot again; a miss passes the turn.`
 - `Sink the entire enemy fleet before the bot finds yours.`
 - `In the on-chain version, fleets stay encrypted with Fhenix and every move is a transaction. This build plays the same rules locally.`
 

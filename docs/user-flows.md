@@ -580,9 +580,10 @@ Errors:
 Success result:
 
 - result is shown;
-- if no winner, turn passes to the creator.
+- after a miss, turn passes to the creator;
+- after a hit or sunk ship, the opponent fires again.
 
-## Flow 12: Alternating Turns
+## Flow 12: Battle Turn Loop
 
 Goal:
 
@@ -593,6 +594,8 @@ Loop:
 1. Current player selects a target cell.
 2. Current player taps `Fire`.
 3. Current player confirms transaction.
+4. A miss passes the turn to the opponent.
+5. A hit or sunk ship lets the current player fire again.
 4. Contract validates turn and target.
 5. Contract resolves shot through Fhenix/CoFHE.
 6. UI shows result.

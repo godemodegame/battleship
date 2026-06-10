@@ -62,7 +62,7 @@ The only playable mode is a local match against a computer opponent:
 - the bot targets using public shot results only - it never reads your ship
   positions (see `docs/practice-mode-and-bot-ai.md`);
 - the player always fires first;
-- the turn passes after every valid attack, regardless of result;
+- a hit or sunk ship grants another shot; a miss passes the turn;
 - classic rules: 10x10 board, 10-ship fleet (1x4, 2x3, 3x2, 4x1), no-touch
   placement (see `docs/local-game-engine.md`).
 
@@ -145,8 +145,8 @@ instead of being rewritten:
   implements the same fleet and no-touch rules the contract will enforce on
   encrypted placements;
 - attack resolution (`applyAttack` in `src/game/engine.ts`) matches the
-  contract turn model: one attack per turn, turn passes on every result,
-  win on last sunk cell;
+  contract turn model: a hit or sunk ship keeps the turn, a miss passes it,
+  and the last sunk ship wins;
 - the Zustand store stands in for contract state plus events - the planned
   migration replaces store mutations with transactions and store reads with
   contract-event-derived state (see `docs/frontend-architecture.md`);

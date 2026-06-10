@@ -78,11 +78,10 @@ every `rnd` parameter in the game layer accepts it.
 `applyAttack` rules (each mirrors a future contract revert or transition):
 
 - miss marks the cell `1` and passes the turn;
-- hit marks the cell `2` and passes the turn - the turn passes on hits
-  too, this variant has no extra shot;
+- hit marks the cell `2` and keeps the turn with the attacker;
 - the final hit on a ship flips every ship cell to `3` (including earlier
-  `2` cells) and reports `sunk` with the ship's slot;
-- sinking the last ship sets `winner` and the turn does not pass;
+  `2` cells), reports `sunk` with the ship's slot, and keeps the turn;
+- sinking the last ship sets `winner` and ends the match;
 - throws `Invalid attack` when: it is not the attacker's turn, the cell was
   already attacked, or the match already has a winner;
 - immutability: the input `MatchState` is unchanged after an attack.
@@ -143,8 +142,8 @@ Public-information invariant (the fairness contract from
 
 With fake timers (Vitest) and the real engine:
 
-- `fire()` resolves the player shot, then triggers exactly one bot reply,
-  then clears `busy`;
+- `fire()` returns control after a player hit, or after a player miss runs bot
+  replies until the bot misses or wins, then clears `busy`;
 - `fire()` is a no-op when busy, when it is not the player's turn, or when
   the cell is already attacked;
 - a player win skips the bot reply and moves to `gameover`;

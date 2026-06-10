@@ -150,7 +150,8 @@ Required shot finalization tests:
 - wrong ciphertext hash is rejected;
 - invalid signature is rejected;
 - finalized shot clears pending state;
-- non-win shot changes turn;
+- miss changes the turn to the defender;
+- hit and sunk keep the turn with the attacker;
 - win shot sets winner and finishes match.
 
 Required cancel, forfeit, and timeout tests:

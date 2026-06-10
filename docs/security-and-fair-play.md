@@ -13,7 +13,8 @@ The MVP must protect:
 - hidden fleet placement;
 - encrypted board state;
 - valid turn order;
-- one attack per turn;
+- only one unresolved attack at a time;
+- turn retention after a hit or sunk ship and turn passing after a miss;
 - repeated attack prevention;
 - placement validity;
 - public result integrity;

@@ -791,7 +791,8 @@ State updates:
 - update move result;
 - update defender public board masks;
 - if `Win`, set status and winner;
-- otherwise set `currentTurn` to defender;
+- if `Miss`, set `currentTurn` to defender;
+- if `Hit` or `Sunk`, keep `currentTurn` with the attacker;
 - clear pending shot;
 - update deadline.
 

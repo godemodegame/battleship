@@ -69,7 +69,7 @@ export function HomeScreen() {
             <h2>How It Works</h2>
             <ul>
               <li>Place your fleet in secret on a 10×10 grid. Ships never touch, even diagonally.</li>
-              <li>Take turns firing at the enemy grid. Miss, hit, or sink — then the turn passes.</li>
+              <li>Fire at the enemy grid. Hit or sink to shoot again; a miss passes the turn.</li>
               <li>Sink the entire enemy fleet before the bot finds yours.</li>
               <li>In the on-chain version, fleets stay encrypted with Fhenix and every move is a transaction. This build plays the same rules locally.</li>
             </ul>

@@ -11,7 +11,8 @@ The base version should be simple, clear, and ready for future expansion. First,
 The local practice build implements these mechanics: the 10 by 10 board, the
 classic ten-ship fleet, the classic no-touch placement rule, manual and
 automatic placement, attack resolution with miss/hit/sunk results, turn
-passing after every valid attack, victory check, and the game-over summary.
+passing after a miss, an extra shot after a hit or sunk ship, victory check,
+and the game-over summary.
 
 The opponent in the current build is a local practice bot rather than a second
 human player; on-chain PvP is the planned MVP. See
@@ -73,7 +74,8 @@ Possible attack results:
 - sunk: the hit destroyed the last remaining segment of a ship;
 - repeated attack: the cell was already attacked before, so the move must not be counted.
 
-In the base version, the turn passes to the opponent after every valid attack. If the project later wants to follow other Battleship rule variants, it can add an extra turn after a hit.
+The turn passes to the opponent after a miss. A hit or sunk ship keeps the
+turn with the attacker, who may fire again.
 
 ## Sinking a Ship
 
@@ -101,7 +103,9 @@ The game ends immediately after the winning attack. After the match ends, the ga
 5. The game checks the attack result.
 6. The game updates the board state.
 7. If all opponent ships are destroyed, the game ends.
-8. If there is no winner yet, the turn passes to the other player.
+8. If there is no winner and the result is a miss, the turn passes to the
+   other player.
+9. If the result is a hit or sunk ship, the attacker takes another shot.
 
 ## First Version
 

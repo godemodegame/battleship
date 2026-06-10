@@ -85,14 +85,16 @@ The flow:
 
 1. The player makes a move.
 2. The shot result is resolved on-chain through Fhenix/CoFHE.
-3. The contract changes the turn to the bot.
+3. After a player miss, the contract changes the turn to the bot. After a hit
+   or sunk ship, the player keeps the turn and this bot flow does not start.
 4. The UI shows `Opponent Turn`.
 5. The player taps `Advance Opponent Turn`.
 6. The wallet opens for a transaction.
 7. The player confirms the transaction.
 8. The contract computes the bot target.
 9. The contract resolves the bot attack against the player's encrypted fleet.
-10. The contract changes the turn back to the player, unless the bot won.
+10. After a bot miss, the contract changes the turn back to the player. After
+    a hit or sunk ship, another bot move must be advanced unless the bot won.
 
 This is not as seamless as a server-driven bot, but it keeps the game backendless and fully transaction-based.
 
@@ -332,7 +334,8 @@ Backendless bot attack flow:
 9. Contract enters `ResolvingBotShot`.
 10. Authorized Fhenix/CoFHE decryption flow publishes the result.
 11. Contract emits `BotShotResolved`.
-12. Contract either finishes the match or returns turn to the player.
+12. Contract finishes the match on a win, returns the turn to the player on a
+    miss, or keeps the bot turn after a hit or sunk ship.
 
 ## Required Functions
 

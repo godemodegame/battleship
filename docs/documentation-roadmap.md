@@ -135,7 +135,7 @@ This document should cover:
 - placement validation;
 - no-touch rule;
 - attack resolution;
-- turn passing after every valid attack;
+- turn passing after a miss and retention after a hit;
 - sunk-ship halo deduction;
 - game-over summary calculations;
 - which logic is production game logic and which logic is prototype-only.

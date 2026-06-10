@@ -81,7 +81,7 @@ export const isAttacked = (board: BoardState, cell: number) => board.shots[cell]
 
 /**
  * Resolve an attack by `by` against the opposing board. Returns a new match
- * state; per docs/game-mechanics.md the turn passes after every valid attack.
+ * state. A miss passes the turn; a hit or sunk ship grants another shot.
  */
 export function applyAttack(
   match: MatchState,
@@ -98,7 +98,7 @@ export function applyAttack(
   return {
     match: {
       boards: { ...match.boards, [defender]: board },
-      turn: winner ? match.turn : defender,
+      turn: result === 'miss' ? defender : by,
       moves: [...match.moves, move],
       winner,
     },

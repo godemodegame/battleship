@@ -243,18 +243,28 @@ export const useStore = create<AppState>((set, get) => {
         set({ screen: 'gameover', busy: false })
         return
       }
+      if (result !== 'miss') {
+        set({ focus: 'enemy', busy: false })
+        return
+      }
 
       set({ focus: 'player' })
       await delay(SWING_MS + 350 + Math.random() * 500)
       if (interrupted()) return
 
-      const target = chooseBotTarget(get().match!.boards.player, difficulty)
-      const botResult = await resolveShot('bot', target)
-      if (botResult === 'aborted') return
-      if (botResult === 'won') {
-        sfx.lose()
-        set({ screen: 'gameover', busy: false })
-        return
+      while (get().match?.turn === 'bot') {
+        const target = chooseBotTarget(get().match!.boards.player, difficulty)
+        const botResult = await resolveShot('bot', target)
+        if (botResult === 'aborted') return
+        if (botResult === 'won') {
+          sfx.lose()
+          set({ screen: 'gameover', busy: false })
+          return
+        }
+        if (botResult === 'miss') break
+
+        await delay(350 + Math.random() * 350)
+        if (interrupted()) return
       }
 
       set({ focus: 'enemy' })

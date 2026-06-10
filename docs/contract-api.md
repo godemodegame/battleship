@@ -710,7 +710,9 @@ State changes:
 - clear pending shot;
 - clear `pendingMoveId`;
 - if result is `Win`, set status `Finished` and winner;
-- otherwise set status `InProgress` and current turn to defender;
+- otherwise set status `InProgress`;
+- if result is `Miss`, set current turn to defender;
+- if result is `Hit` or `Sunk`, keep current turn with the attacker;
 - update `lastActionAt`;
 - set next turn deadline if not finished.
 
@@ -735,11 +737,15 @@ event MatchFinished(
 );
 ```
 
+`TurnChanged` is emitted only when a miss changes `currentTurn`. A hit or sunk
+ship keeps the same attacker and does not emit a turn-change event.
+
 Frontend behavior:
 
 - any caller may finalize if the decrypt result is valid;
 - show `Miss`, `Hit`, `Sunk`, `Victory`, or `Defeat`;
-- if no win, update turn state.
+- after a miss, update the active player to the defender;
+- after a hit or sunk ship, let the attacker select another target.
 
 Errors:
 

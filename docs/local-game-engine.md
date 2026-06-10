@@ -122,10 +122,9 @@ State is never mutated: every attack returns a new `MatchState`.
 
 ### Turn Passing
 
-Per `docs/game-mechanics.md`, the turn passes to the defender after every
-valid attack, hit or miss - there is no extra shot on a hit. The single
-exception is the winning shot: when the last ship sinks, `winner` is set and
-the turn does not pass (the match is over).
+Per `docs/game-mechanics.md`, a miss passes the turn to the defender. A hit or
+sunk ship keeps the turn with the attacker, allowing another shot. When the
+last ship sinks, `winner` is set and the match ends immediately.
 
 ### Win Condition
 
@@ -167,7 +166,7 @@ changes and need design review):
 - board indexing and the 10-ship fleet definition;
 - `shipCells`, `canPlace`, `isFleetComplete` (placement and no-touch rules);
 - `applyAttack` semantics: validity checks, miss/hit/sunk resolution, turn
-  passing after every attack, win on last sunk ship.
+  passing after a miss, another shot after a hit, win on last sunk ship.
 
 Prototype-only logic (free to change, will not move on-chain):
 

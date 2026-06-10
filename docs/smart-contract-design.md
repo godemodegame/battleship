@@ -220,7 +220,8 @@ Basic attack flow:
 8. The contract moves the match to `ResolvingShot`.
 9. After authorized decryption, the contract publishes the public result.
 10. If win is true, the match ends.
-11. If there is no winner, the turn passes to the other player.
+11. If the result is `Miss`, the turn passes to the defender.
+12. If the result is `Hit` or `Sunk`, the attacker keeps the turn.
 
 Because of the FHE and decryption flow, the attack result may not be instant. The UI should show a state such as `Resolving shot...`.
 

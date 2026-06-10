@@ -21,9 +21,11 @@ the mode is clearly labeled as practice.
 - The bot's fleet is auto-placed with the same `autoPlaceFleet` used by the
   player's `Auto Place` button.
 - The player always fires first.
-- After the player's shot resolves, the store waits a short randomized delay
-  (about 1.1-1.6 s, for camera swing and pacing) and plays the bot's reply.
-  The bot has no real "thinking time"; the delay is presentation.
+- A hit or sunk ship grants another shot. After the player misses, the store
+  waits a short randomized delay (about 1.1-1.6 s, for camera swing and
+  pacing) and starts the bot's turn.
+- The bot keeps firing after hits and sunk ships until it misses or wins. The
+  bot has no real "thinking time"; delays between shots are presentation.
 
 Limitations:
 
