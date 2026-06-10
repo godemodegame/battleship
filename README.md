@@ -46,6 +46,7 @@ production bundle; `npm run preview` serves that bundle.
 Current build documentation:
 
 - [Current Playable Build](docs/current-playable-build.md) - what the game does today, how to run it, and how the prototype maps to the on-chain target.
+- [Local Game Engine](docs/local-game-engine.md) - exact rules implemented by the local engine: board indexing, fleet, placement, attacks, and turn passing.
 
 For the target on-chain product, read the documents in this order:
 
