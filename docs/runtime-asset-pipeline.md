@@ -15,7 +15,8 @@ covers the assets as they exist and load today.
 Source assets (committed for regeneration and review, never loaded by the
 game):
 
-- `assets/3d-models/fbx/` - the eleven Tripo-generated FBX models;
+- `assets/3d-models/fbx/` - the seventeen Tripo-generated FBX models,
+  including intact and destroyed variants for all six ship classes;
 - `assets/3d-models/glb/` - the three `vfx-*` GLB files exported from the
   VFX Forge studio (`vfx-app/`, see `docs/vfx-forge-workflow.md`);
 - `assets/3d-models/prompts/` - generation prompt per model.
@@ -25,17 +26,19 @@ Runtime assets (served statically by Vite, loaded by the game at startup):
 - `public/models/` - all FBX and GLB models;
 - `public/textures/` - one JPG color texture per FBX model.
 
-The runtime files are byte-identical copies of the source files. Replacing an
-asset means updating both locations (source first, then copy to `public/`),
-so the source tree always reproduces what ships.
+Runtime model files are byte-identical copies of the source files. Texture
+copies may be downscaled for mobile delivery; the six destroyed-ship maps
+retain their 2048x2048 sources and ship as 1024x1024 runtime JPGs. Replacing
+an asset means updating both locations (source first, then producing the
+runtime copy), so the source tree always reproduces what ships.
 
 ## FBX versus GLB
 
 Two formats are in use, for a historical reason worth keeping explicit:
 
-- FBX - the eleven static models (board, ships, props, projectile, sealed
-  cell) came out of Tripo as FBX with a separate color texture. They are
-  loaded with `useFBX` and textured at runtime.
+- FBX - the seventeen static models (board, intact and destroyed ships,
+  props, projectile, sealed cell) came out of Tripo as FBX with a separate
+  color texture. They are loaded with `useFBX` and textured at runtime.
 - GLB - the three `vfx-*` effects are procedurally built and exported by
   `vfx-app`. They embed their materials and a baked `play` animation clip,
   and are loaded with `useGLTF`.
@@ -54,6 +57,8 @@ Names are kebab-case and stable; code references them by string:
 - ship models follow `ship-<class>` and are mapped from gameplay class ids
   by `SHIP_MODEL` in `src/three/models.ts` (`carrier` -> `ship-carrier`,
   `patrol-boat` -> `ship-patrol-boat`, and so on);
+- destroyed ship models follow `ship-<class>-destroyed` and are mapped by
+  `DESTROYED_SHIP_MODEL`;
 - effects follow `vfx-<effect>` and are mapped by `VFX_URL` in
   `src/three/Effects.tsx`;
 - props follow `prop-<name>`.
@@ -72,7 +77,8 @@ space, anisotropy 4, shadows on). Consequences:
   emissive maps;
 - material polish from the generation tool does not survive import; the
   in-game look comes from the texture plus scene lighting;
-- all current textures are 2048x2048 JPGs (see the budget note below).
+- intact ships and props currently use 2048x2048 JPGs;
+- destroyed ships use 2048x2048 source maps and 1024x1024 runtime JPGs.
 
 The source FBX files also retain Tripo export-time references to
 `*.fbm/tripo_image_*.jpg`. Those materials are never used. The default Three
@@ -80,14 +86,16 @@ loading manager redirects only those stale embedded references to a
 transparent pixel so they cannot create false loading failures or duplicate
 texture downloads.
 
-Two models bypass texture pairing entirely:
+One model bypasses texture pairing entirely:
 
 - `hidden-enemy-grid-cell.fbx` - only its geometry is used; the sealed
   enemy cells are instanced with a custom holographic material
   (`SealedCells` in `src/three/Board.tsx`). Its texture is still preloaded,
   which is harmless but wasted bytes;
-- sunk and ghost ship variants override the styled material with flat
-  charred/hologram materials (`src/three/Ships.tsx`).
+
+Placement ghost ships override the intact model's styled material with a
+flat hologram material. Sunk ships use their class-specific destroyed FBX
+and JPG pair.
 
 ## Normalization and Scale Expectations
 
@@ -170,9 +178,9 @@ be baked into core glTF, so the game drives fade-out at runtime
 
 Current payload (the baseline to defend):
 
-- `public/models/` - about 1.3 MB (eleven FBX + three GLB);
-- `public/textures/` - about 3.8 MB (eleven 2048x2048 JPGs - the bulk of
-  the payload);
+- `public/models/` - about 1.6 MB (seventeen FBX + three GLB);
+- `public/textures/` - about 5.0 MB (eleven 2048x2048 and six 1024x1024
+  JPGs - the bulk of the payload);
 - everything loads before first interaction.
 
 Before adding or replacing an asset:

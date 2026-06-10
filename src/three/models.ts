@@ -89,6 +89,15 @@ export const SHIP_MODEL: Record<ShipClassId, string> = {
   'patrol-boat': 'ship-patrol-boat',
 }
 
+export const DESTROYED_SHIP_MODEL: Record<ShipClassId, string> = {
+  'carrier': 'ship-carrier-destroyed',
+  'battleship': 'ship-battleship-destroyed',
+  'cruiser': 'ship-cruiser-destroyed',
+  'destroyer': 'ship-destroyer-destroyed',
+  'submarine': 'ship-submarine-destroyed',
+  'patrol-boat': 'ship-patrol-boat-destroyed',
+}
+
 /** Board-local position of a cell center, origin at the board center. */
 export function cellPosition(row: number, col: number): [number, number] {
   return [(col - 4.5) * CELL, (row - 4.5) * CELL]
@@ -97,6 +106,7 @@ export function cellPosition(row: number, col: number): [number, number] {
 export function preloadAll() {
   for (const name of [
     ...Object.values(SHIP_MODEL),
+    ...Object.values(DESTROYED_SHIP_MODEL),
     'tactical-ocean-board',
     'attack-projectile',
     'hidden-enemy-grid-cell',

@@ -17,9 +17,10 @@ Production build (`npm run build`) plus runtime assets:
 - JS bundle: 1.11 MB minified, ~314 KB gzipped (one chunk; three.js and
   React dominate);
 - CSS: ~9 KB;
-- models (`public/models/`): ~1.3 MB (eleven FBX, three GLB);
-- textures (`public/textures/`): ~3.8 MB (eleven 2048x2048 JPGs);
-- total first-load transfer: ~5.5 MB, all loaded up front behind the
+- models (`public/models/`): ~1.6 MB (seventeen FBX, three GLB);
+- textures (`public/textures/`): ~5.0 MB (eleven 2048x2048 JPGs and six
+  1024x1024 destroyed-ship JPGs);
+- total first-load transfer: ~7.7 MB, all loaded up front behind the
   loading overlay before the menu is interactive.
 
 Scene complexity in battle:
@@ -48,8 +49,9 @@ Scene complexity in battle:
 ## Load Targets
 
 - Total first-load transfer (bundle + models + textures): **8 MB ceiling**;
-  current ~5.5 MB leaves ~2.5 MB headroom for wallet/Fhenix code and new
-  assets.
+  current ~7.7 MB leaves little headroom, so future wallet/Fhenix code or
+  assets will require lazy loading, code splitting, or further texture
+  optimization.
 - Time from navigation to interactive menu: **under 5 s on a 4G-class
   connection (~10 Mbit/s) on a reference phone**; under 15 s on slow 3G.
 - The loading overlay must always show progress; a stalled bar (missing
@@ -64,10 +66,9 @@ Scene complexity in battle:
   whole battle scene should stay under ~60k triangles including
   instancing.
 - Model files: tens of KB each; anything over 300 KB needs justification.
-- Textures: 2048x2048 JPG is the maximum; props and one-cell ships should
-  drop to 1024x1024 (the current 2048 textures on small models are
-  headroom to reclaim, not a precedent). Total texture payload stays under
-  4 MB.
+- Textures: 2048x2048 JPG is the maximum; props, wrecks, and one-cell ships
+  should use 1024x1024 where practical. The current 2048 textures on small
+  intact models are headroom to reclaim, not a precedent.
 - One color map per model is the material model (`useStyledFBX`); do not
   add normal/roughness maps without revisiting this budget.
 

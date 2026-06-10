@@ -1,7 +1,12 @@
 import * as THREE from 'three'
 import { useMemo } from 'react'
 import type { Orientation, ShipClassId } from '../game/types'
-import { CELL, SHIP_MODEL, useNormalizedModel } from './models'
+import {
+  CELL,
+  DESTROYED_SHIP_MODEL,
+  SHIP_MODEL,
+  useNormalizedModel,
+} from './models'
 
 interface ShipProps {
   classId: ShipClassId
@@ -9,7 +14,7 @@ interface ShipProps {
   row: number
   col: number
   orientation: Orientation
-  /** 'fleet' = player's live ship, 'sunk' = charred, 'ghost' = placement preview */
+  /** 'fleet' = live ship, 'sunk' = destroyed model, 'ghost' = placement preview */
   variant?: 'fleet' | 'sunk' | 'ghost'
   ghostValid?: boolean
 }
@@ -24,21 +29,11 @@ function shipTransform(length: number, row: number, col: number, orientation: Or
 }
 
 export function Ship({ classId, length, row, col, orientation, variant = 'fleet', ghostValid }: ShipProps) {
-  const model = useNormalizedModel(SHIP_MODEL[classId], length * CELL * 0.92, 0.55 + 0.3 * length)
+  const modelName = variant === 'sunk' ? DESTROYED_SHIP_MODEL[classId] : SHIP_MODEL[classId]
+  const model = useNormalizedModel(modelName, length * CELL * 0.92, 0.55 + 0.3 * length)
   const instance = useMemo(() => {
     const clone = model.clone(true)
-    if (variant === 'sunk') {
-      const charred = new THREE.MeshStandardMaterial({
-        color: '#1a1216',
-        roughness: 0.9,
-        metalness: 0.2,
-        emissive: '#FF2EA6',
-        emissiveIntensity: 0.14,
-      })
-      clone.traverse((obj) => {
-        if ((obj as THREE.Mesh).isMesh) (obj as THREE.Mesh).material = charred
-      })
-    } else if (variant === 'ghost') {
+    if (variant === 'ghost') {
       const ghost = new THREE.MeshStandardMaterial({
         color: ghostValid ? '#0e3640' : '#3a0d18',
         emissive: ghostValid ? '#21F4FF' : '#FF3B30',
