@@ -57,3 +57,30 @@ export const deploymentCopy = {
     'This deployment is registered, but its contract is not live yet. ' +
     'On-chain actions unlock in a later phase.',
 } as const
+
+/**
+ * Wallet connection, network guard, and recovery copy (GAME-204, GAME-207,
+ * GAME-209). Mirrors the Player-Facing Error Mapping table in
+ * `docs/network-and-wallet-requirements.md`.
+ */
+export const walletCopy = {
+  notConfigured: 'Wallet connection is not configured for this build.',
+  connect: 'Connect Wallet',
+  connecting: 'Connecting…',
+  disconnect: 'Disconnect',
+  loading: 'Loading wallet…',
+  walletRequired: 'Connect wallet to continue',
+  connectCancelled: 'Wallet connection cancelled.',
+  signatureRejected: 'Action cancelled in wallet.',
+  walletUnavailable: 'This wallet is not available. Choose another wallet.',
+  wrongNetwork: 'Switch to Arbitrum Sepolia to continue.',
+  switchNetwork: 'Switch to Arbitrum Sepolia',
+  switchCancelled: 'Network switch cancelled. Try again to continue.',
+  switching: 'Switching network…',
+  clientUnavailable: 'Network request failed. Try again.',
+  noTestEth: 'Add Arbitrum Sepolia ETH before sending transactions.',
+  transactionReverted: 'Transaction failed. Match state was refreshed.',
+  accountChanged: 'Wallet changed. Match state was refreshed.',
+  sessionExpired: 'Reconnect your wallet to continue.',
+  faucetHint: 'Need testnet ETH? Use an Arbitrum Sepolia faucet, then try again.',
+} as const

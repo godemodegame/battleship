@@ -227,21 +227,80 @@ Goal:
 
 - establish wallet identity and a reliable write guard.
 
+Progress:
+
+- `GAME-202` through `GAME-210` complete.
+- `GAME-201` and `GAME-211` require a real Privy dashboard application and
+  manual testing with funded external wallets, neither of which is available
+  in this environment; both remain open (see Remaining work below).
+
 Tasks:
 
-| ID | Priority | Work |
-| --- | --- | --- |
-| GAME-201 | P0 | Create Privy development and staging application configuration |
-| GAME-202 | P0 | Install Privy React SDK and viem-compatible wallet integration |
-| GAME-203 | P0 | Configure wallet-only login with external EVM wallets |
-| GAME-204 | P0 | Implement active wallet, address, disconnect, and session UI |
-| GAME-205 | P0 | Implement the Arbitrum Sepolia `421614` network guard |
-| GAME-206 | P0 | Block every contract write when account, chain, or client readiness fails |
-| GAME-207 | P0 | Implement wrong-network switch and rejection recovery |
-| GAME-208 | P1 | Implement account-change and session-expiry cleanup |
-| GAME-209 | P1 | Add Arbitrum Sepolia balance check and funding guidance |
-| GAME-210 | P1 | Restore intended route after mobile wallet handoff |
-| GAME-211 | P1 | Test MetaMask and Coinbase Wallet on desktop and mobile |
+| ID | Priority | Status | Work |
+| --- | --- | --- | --- |
+| GAME-201 | P0 | Not started (external) | Create Privy development and staging application configuration |
+| GAME-202 | P0 | Complete | Install Privy React SDK and viem-compatible wallet integration |
+| GAME-203 | P0 | Complete | Configure wallet-only login with external EVM wallets |
+| GAME-204 | P0 | Complete | Implement active wallet, address, disconnect, and session UI |
+| GAME-205 | P0 | Complete | Implement the Arbitrum Sepolia `421614` network guard |
+| GAME-206 | P0 | Complete | Block every contract write when account, chain, or client readiness fails |
+| GAME-207 | P0 | Complete | Implement wrong-network switch and rejection recovery |
+| GAME-208 | P1 | Complete | Implement account-change and session-expiry cleanup |
+| GAME-209 | P1 | Complete | Add Arbitrum Sepolia balance check and funding guidance |
+| GAME-210 | P1 | Complete | Restore intended route after mobile wallet handoff |
+| GAME-211 | P1 | Not started (manual) | Test MetaMask and Coinbase Wallet on desktop and mobile |
+
+Realized structure:
+
+- `src/onchain/wallet/chain.ts` defines the Arbitrum Sepolia chain id, public
+  RPC, explorer, and the viem chain object shared by Privy config and viem
+  clients;
+- `src/onchain/wallet/WalletContext.ts` defines `WalletConnectionValue`, the
+  app-wide wallet/network shape (`configured`, `ready`, `authenticated`,
+  `address`, `chainId`, `login`, `logout`, `switchToArbitrumSepolia`,
+  `getEthereumProvider`), independent of Privy so every consumer (including
+  tests) can run without the SDK;
+- `src/onchain/wallet/WalletProvider.tsx` renders `<PrivyProvider>` configured
+  for wallet-only login, no embedded wallets, EVM-only wallet discovery
+  (MetaMask/Coinbase Wallet), and Arbitrum Sepolia as the only
+  default/supported chain, then bridges Privy's `usePrivy`/`useWallets` into
+  `WalletContext`. When `VITE_PRIVY_APP_ID` is unset, it provides a
+  "not configured" context value and never loads Privy, so practice mode and
+  the test suite need no Privy app id;
+- `src/onchain/wallet/networkGuard.ts` is a pure decision table
+  (`resolveWalletGuard`/`canSubmitWrite`) covering not-configured, loading,
+  wallet-required, wrong-network, client-unavailable, and ready states;
+- `src/onchain/wallet/useViemClients.ts` provides a shared Arbitrum Sepolia
+  public client and a wallet client rebuilt whenever the active wallet,
+  address, or chain changes;
+- `src/onchain/wallet/useNetworkGuard.ts` combines the above into the live
+  guard state plus a `switchNetwork` action for GAME-207 (handles rejection
+  and error outcomes);
+- `src/onchain/wallet/useBalanceCheck.ts` and `balance.ts` read the Arbitrum
+  Sepolia balance and flag low balances for funding guidance;
+- `src/onchain/wallet/mobileReturn.ts` and `useMobileWalletReturn.ts` persist
+  only the intended route, match id, and pending action type to
+  `sessionStorage` before a wallet handoff, and resume a recovery callback
+  when the tab regains visibility;
+- `src/onchain/wallet/useAccountChangeCleanup.ts` detects account-changed,
+  chain-changed, and session-expired transitions for future feature stores to
+  clear account-bound state;
+- `src/onchain/wallet/WalletConnectionPanel.tsx` renders connect/disconnect,
+  address, wrong-network/switch recovery, and low-balance funding copy on the
+  `/match/:deploymentId/:matchId` route; wallet copy lives in
+  `src/copy/en.ts` (`walletCopy`).
+
+Remaining work:
+
+- GAME-201: create the development and staging Privy applications in the
+  Privy dashboard (wallet-only login, embedded wallets off, Arbitrum Sepolia
+  as default/supported chain, EVM-only wallet list) and set
+  `VITE_PRIVY_APP_ID` per environment. `.env.example` documents the required
+  configuration;
+- GAME-211: once a Privy app id is configured, manually test MetaMask and
+  Coinbase Wallet connection, network switching, and mobile handoff/return on
+  desktop Chromium/Safari and iOS Safari/Android Chrome with funded Arbitrum
+  Sepolia test wallets.
 
 Exit criteria:
 
@@ -252,6 +311,12 @@ Exit criteria:
 - connection, signature, and network-switch rejection are recoverable;
 - account changes clear account-bound transient state;
 - mobile return restores the intended match route.
+
+Exit status:
+
+- code-complete and unit-tested as of June 10, 2026; not yet met because
+  GAME-201 (Privy app configuration) and GAME-211 (manual wallet testing)
+  remain open.
 
 Specification:
 
@@ -610,7 +675,7 @@ Phase status:
 | --- | --- |
 | 0. Stabilize local practice | Complete (June 10, 2026) |
 | 1. Separate modes | Complete (GAME-101 through GAME-110) |
-| 2. Privy and network | Not started |
+| 2. Privy and network | In progress (GAME-202–210 complete; GAME-201, GAME-211 open) |
 | 3. Contract public lifecycle | Not started |
 | 4. CoFHE encrypted rules | Not started |
 | 5. Friend-match frontend | Not started |

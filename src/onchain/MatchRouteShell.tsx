@@ -6,6 +6,7 @@ import {
 } from './phaseResolver'
 import { getActiveDeploymentId, getDeployment, isDeploymentReady } from './deployments'
 import { deploymentCopy, matchRouteCopy } from '../copy/en'
+import { WalletConnectionPanel } from './wallet/WalletConnectionPanel'
 
 /** Demo addresses (match the ones used in phaseResolver.test.ts for consistency). */
 const DEMO_CREATOR = '0x1111111111111111111111111111111111111111' as const
@@ -186,6 +187,8 @@ export function MatchRouteShell() {
         <h1>{matchRouteCopy.heading}</h1>
         <p className="tagline">{matchRouteCopy.tagline(deploymentId, matchId)}</p>
       </div>
+
+      <WalletConnectionPanel />
 
       <PhasePanel phase={phase} />
 
