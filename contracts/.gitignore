@@ -1,0 +1,9 @@
+node_modules/
+artifacts/
+cache/
+# Local hardhat-node deployment records are throwaway; testnet records are committed.
+deployments/31337/
+dist/
+coverage/
+.env
+.env.*

@@ -277,6 +277,16 @@ Minimum record:
 }
 ```
 
+Realized in Phase 3 (`contracts/scripts/deploymentRecord.ts`): the committed
+record is a superset of the minimum above, adding `schemaVersion: 1`,
+`status: "active"`, a populated `cofheVersions` map, and
+`deployedBytecodeKeccak256` (hash of the on-chain runtime code, which must
+equal the compiled artifact because the contract has no constructor arguments
+or immutables). `contracts/scripts/deploy.ts` writes records and refuses to
+reuse a `deploymentId`; `contracts/scripts/validate-deployment.ts` validates
+schema, ABI hash, chain id, and bytecode against an RPC. Local hardhat-node
+records under `contracts/deployments/31337/` are not committed.
+
 Rules:
 
 - never edit the address of an existing `deploymentId`;

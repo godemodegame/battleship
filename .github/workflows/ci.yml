@@ -23,3 +23,24 @@ jobs:
       - run: npm run test:screen
       - run: npx playwright install --with-deps chromium
       - run: npm run test:e2e
+
+  contracts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    defaults:
+      run:
+        working-directory: contracts
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: contracts/.nvmrc
+          cache: npm
+          cache-dependency-path: contracts/package-lock.json
+
+      - run: npm ci
+      - run: npm run compile
+      - run: npm test

@@ -285,21 +285,25 @@ Goal:
 
 - create a tested contract foundation without introducing plaintext fleets.
 
+Progress:
+
+- `GAME-301` through `GAME-311` complete (June 10, 2026).
+
 Tasks:
 
-| ID | Priority | Work |
-| --- | --- | --- |
-| GAME-301 | P0 | Create `contracts/` package with Hardhat and pinned Node/tool versions |
-| GAME-302 | P0 | Install CoFHE Hardhat plugin, mock contracts, and Solidity dependencies |
-| GAME-303 | P0 | Define enums, public views, errors, constants, and timeout configuration |
-| GAME-304 | P0 | Implement strict `createMatch(invitedOpponent)` |
-| GAME-305 | P0 | Implement invited-player `joinMatch(matchId)` |
-| GAME-306 | P0 | Implement `cancelMatch`, `forfeit`, and timeout hooks |
-| GAME-307 | P0 | Implement `getMatch`, `getPlayers`, and player match history reads |
-| GAME-308 | P0 | Emit the specified lifecycle events |
-| GAME-309 | P0 | Add access-control, invalid-status, deadline, and self-invite tests |
-| GAME-310 | P1 | Add deterministic deployment and ABI/type generation scripts |
-| GAME-311 | P1 | Add deployment record schema and bytecode/address validation |
+| ID | Priority | Status | Work |
+| --- | --- | --- | --- |
+| GAME-301 | P0 | Complete | Create `contracts/` package with Hardhat and pinned Node/tool versions |
+| GAME-302 | P0 | Complete | Install CoFHE Hardhat plugin, mock contracts, and Solidity dependencies |
+| GAME-303 | P0 | Complete | Define enums, public views, errors, constants, and timeout configuration |
+| GAME-304 | P0 | Complete | Implement strict `createMatch(invitedOpponent)` |
+| GAME-305 | P0 | Complete | Implement invited-player `joinMatch(matchId)` |
+| GAME-306 | P0 | Complete | Implement `cancelMatch`, `forfeit`, and timeout hooks |
+| GAME-307 | P0 | Complete | Implement `getMatch`, `getPlayers`, and player match history reads |
+| GAME-308 | P0 | Complete | Emit the specified lifecycle events |
+| GAME-309 | P0 | Complete | Add access-control, invalid-status, deadline, and self-invite tests |
+| GAME-310 | P1 | Complete | Add deterministic deployment and ABI/type generation scripts |
+| GAME-311 | P1 | Complete | Add deployment record schema and bytecode/address validation |
 
 Implementation rules:
 
@@ -314,6 +318,44 @@ Exit criteria:
 - generated ABI and frontend types come from the compiled artifact;
 - deployment scripts can produce a local deployment record;
 - no hidden fleet data exists in the public lifecycle implementation.
+
+Exit status:
+
+- met on June 10, 2026.
+
+Realized structure:
+
+- `contracts/` is a standalone Hardhat 2 package (Node `20.19.5` via `.nvmrc`,
+  solc `0.8.25`, Cancun EVM target, exact-pinned dependencies) with the CoFHE
+  set installed and pinned (`@fhenixprotocol/cofhe-contracts` 0.1.4, mock
+  contracts and `cofhe-hardhat-plugin` 0.3.1, `cofhejs` 0.3.1); the plugin is
+  loaded in Phase 4 because Phase 3 has no FHE operations, and
+  `contracts/contracts/test/CofheCompileCheck.sol` proves the Solidity
+  dependency compiles;
+- `contracts/contracts/BattleshipGame.sol` implements the public lifecycle:
+  strict `createMatch(invitedOpponent)` (zero-address and self-invite
+  rejected), invited-only `joinMatch` with a 24-hour join deadline,
+  creator-only `cancelMatch` before start (also the join-timeout recovery
+  path), `forfeit` once an opponent exists, and `claimTimeoutWin` for
+  placement and turn deadlines (fails closed until fleets and turns exist);
+  fleet and attack APIs are deliberately absent until the Phase 4 decision
+  gate, and timeouts are compiled-in constants so deployed bytecode stays
+  byte-deterministic;
+- reads are `getMatch`, `getPlayers`, `getPlayerMatches` (paginated, capped),
+  and `getPlayerMatchCount`; lifecycle events are `MatchCreated`,
+  `MatchJoined`, `MatchCancelled`, `MatchForfeited`, `TimeoutWinClaimed`;
+- 47 Hardhat tests cover the transitions, access control, deadlines, and
+  pagination; `contracts/contracts/test/BattleshipGameHarness.sol` (test-only,
+  never deployed) forces Phase 4/7 states so timeout-win transitions are
+  exercised today;
+- `scripts/deploy.ts` writes immutable deployment records to
+  `contracts/deployments/<chainId>/<deploymentId>.json` and verifies on-chain
+  bytecode equals the artifact; `scripts/generate-abi.ts` emits
+  `contracts/abi/BattleshipGame.json` and the viem `as const` module
+  `src/onchain/abi/battleshipGame.ts`; `scripts/validate-deployment.ts` checks
+  record schema, ABI hash, chain id, and bytecode hash against an RPC;
+- CI runs the contracts package (`npm ci`, compile, test) as a separate job;
+  `npm run test:contracts` delegates from the repository root.
 
 Specifications:
 
@@ -633,7 +675,7 @@ Phase status:
 | 0. Stabilize local practice | Complete (June 10, 2026) |
 | 1. Separate modes | Complete (GAME-101 through GAME-110) |
 | 2. Privy and network | In progress (P0 GAME-201–207 complete; P1 208–211 pending) |
-| 3. Contract public lifecycle | Not started |
+| 3. Contract public lifecycle | Complete (GAME-301 through GAME-311) |
 | 4. CoFHE encrypted rules | Not started |
 | 5. Friend-match frontend | Not started |
 | 6. Encrypted fleet UI | Not started |

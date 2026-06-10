@@ -6,6 +6,27 @@ This document defines the proposed smart contract data model for the mobile-firs
 
 It turns the contract behavior, Fhenix integration, and technical architecture documents into concrete storage concepts. It does not define final function signatures. Function-level details belong in `docs/contract-api.md`.
 
+## Implementation Status
+
+Phase 3 (`contracts/contracts/BattleshipGame.sol`) realized the public slice
+of this model: the core constants, all enums except `BotDifficulty`, the
+`Match`, `PlayerState`, `PublicBoard`, and `TimeoutState` storage structs, the
+`MatchView` and `PlayerPublicView` read structs, and the
+`matches`/`playerMatchIds` mappings with ids starting at `1`. Decisions taken:
+
+- timeouts are compiled-in constants (24 hours each) rather than constructor
+  configuration, so deployed bytecode is byte-deterministic and deployment
+  records can be validated by exact bytecode hash;
+- `RESOLVING_TIMEOUT` is a placeholder constant until the Phase 4 prototype
+  defines the resolving-recovery rule;
+- bot state is omitted entirely instead of stored empty (`BotState`,
+  `BotDifficulty`, and `PlayerSlot` routing arrive only if bot mode lands);
+- `EncryptedFleet`, `FleetHealth`, `Move`, and `PendingShot` storage is
+  deferred to Phase 4/7 so the encrypted encoding is not frozen before the
+  CoFHE feasibility measurements;
+- move history storage shape (array versus mapping) remains open until the
+  attack flow lands.
+
 ## Design Goals
 
 The data model must support:
