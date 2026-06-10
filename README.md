@@ -48,6 +48,7 @@ Current build documentation:
 - [Current Playable Build](docs/current-playable-build.md) - what the game does today, how to run it, and how the prototype maps to the on-chain target.
 - [Local Game Engine](docs/local-game-engine.md) - exact rules implemented by the local engine: board indexing, fleet, placement, attacks, and turn passing.
 - [Practice Mode and Bot AI](docs/practice-mode-and-bot-ai.md) - the local practice bot: difficulty behavior, public-information targeting, and migration paths.
+- [Runtime Asset Pipeline](docs/runtime-asset-pipeline.md) - how 3D assets flow from sources to the running game: locations, formats, normalization, preload, and replacement steps.
 
 For the target on-chain product, read the documents in this order:
 
