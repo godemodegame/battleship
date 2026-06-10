@@ -230,7 +230,9 @@ Required tests:
 - Fhenix pending state reducer;
 - plaintext placement clearing rules.
 
-The phase resolver is especially important because `/match/:matchId` drives many screens from contract state.
+The phase resolver is especially important because
+`/match/:deploymentId/:matchId` drives many screens from a versioned contract
+deployment and contract state.
 
 ## Frontend Component Tests
 
