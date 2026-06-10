@@ -13,10 +13,12 @@
  * on-chain action is offered.
  */
 
+import { ARBITRUM_SEPOLIA_CHAIN_ID } from './wallet/network'
+
 export type Address = `0x${string}`
 
-/** The only chain supported for the MVP. */
-export const MVP_CHAIN_ID = 421614 as const
+/** The only chain supported for the MVP. Single source: `wallet/network.ts`. */
+export const MVP_CHAIN_ID = ARBITRUM_SEPOLIA_CHAIN_ID
 
 /** Deployment id selected when the build does not set one explicitly. */
 export const DEFAULT_DEPLOYMENT_ID = 'arb-sepolia-v1'

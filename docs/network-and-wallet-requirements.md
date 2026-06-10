@@ -68,6 +68,32 @@ contract write.
 Do not include a second RainbowKit, Web3Modal, or direct WalletConnect
 connection surface. Privy's connect UI owns wallet discovery and connection.
 
+### Dashboard Setup Checklist (GAME-201)
+
+Per Privy app (one for development, one for staging):
+
+- enable wallet login; disable email, SMS, social, and passkey login methods;
+- disable embedded wallet creation;
+- set the allowed origins to the local dev origin and the staging domain;
+- copy the app id into `VITE_PRIVY_APP_ID` (local `.env.local`, staging env).
+
+The code-side configuration that backs these choices lives in
+`src/onchain/wallet/privyConfig.ts` (`loginMethods: ['wallet']`,
+`embeddedWallets.ethereum.createOnLogin: 'off'`, `walletChainType:
+'ethereum-only'`, `supportedChains`/`defaultChain` = Arbitrum Sepolia). When
+`VITE_PRIVY_APP_ID` is unset the app runs practice-only and on-chain routes show
+a recoverable "wallet not configured" message; see `.env.example`.
+
+### Implementation Status
+
+- P0 (`GAME-201`–`GAME-207`) implemented in `src/onchain/wallet/`: wallet-only
+  Privy login, viem public/wallet clients, the `421614` network guard, the
+  central `evaluateWriteReadiness` write guard, and wrong-network switch /
+  rejection recovery.
+- P1 (`GAME-208`–`GAME-211`) — account-change/session cleanup, balance/funding
+  guidance, mobile route restore, and the MetaMask/Coinbase device matrix below
+  — are a separate branch and remain a manual checklist.
+
 ## Supported Wallet Scope
 
 The tested MVP support matrix is:
