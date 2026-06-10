@@ -1259,4 +1259,6 @@ After this API spec, write:
 
 - `docs/frontend-architecture.md`
 
-That document should explain how the web app consumes this API through wagmi, viem, Fhenix SDK, event listeners, and mobile UI state.
+That document should explain how the web app consumes this API through Privy,
+viem, optional wagmi hooks through Privy's integration, Fhenix SDK, event
+listeners, and mobile UI state.

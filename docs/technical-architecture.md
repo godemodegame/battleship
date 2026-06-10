@@ -43,7 +43,9 @@ Recommended frontend stack:
 - Vite React for the first MVP implementation;
 - React Three Fiber for 3D scene composition;
 - Three.js under React Three Fiber;
-- wagmi for wallet and account state;
+- Privy React SDK for wallet login, external wallet connection, and session
+  state;
+- wagmi through Privy's integration if React contract hooks are useful;
 - viem for contract reads and writes;
 - `@cofhe/sdk` for Fhenix/CoFHE browser integration;
 - Zustand or a small local store for UI and match state.
@@ -95,7 +97,8 @@ flowchart TD
   WebApp --> Scene["3D Scene Layer"]
   WebApp --> UI["Tactical UI Layer"]
   WebApp --> Wallet["Wallet Layer"]
-  Wallet --> Viem["wagmi + viem"]
+  Wallet --> Privy["Privy React SDK"]
+  Privy --> Viem["wagmi + viem"]
   WebApp --> CofheSDK["@cofhe/sdk"]
   CofheSDK --> CoFHE["Fhenix / CoFHE Infrastructure"]
   Viem --> Contracts["Battleship Smart Contracts"]
@@ -229,9 +232,15 @@ The wallet layer manages:
 
 Recommended libraries:
 
-- wagmi for React account state and connection;
+- Privy React SDK for wallet-only authentication, connection UI, session, and
+  active external wallet state;
+- Privy's wagmi integration if wagmi hooks are used;
 - viem for public and wallet clients;
-- WalletConnect-compatible connector for mobile wallets.
+- Privy's external-wallet connectors for injected and WalletConnect-compatible
+  mobile wallets.
+
+Privy is the only wallet connection surface. Do not add a second RainbowKit,
+Web3Modal, or direct WalletConnect modal.
 
 Required states:
 
@@ -577,11 +586,11 @@ No private keys should be committed.
 
 Required frontend config:
 
+- Privy app id;
 - Arbitrum Sepolia chain id;
 - RPC URL;
 - contract address;
 - Fhenix supported chain setting;
-- WalletConnect project id if used;
 - asset base URL;
 - optional indexer URL.
 

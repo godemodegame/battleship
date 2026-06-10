@@ -64,15 +64,16 @@ For the target on-chain product, read the documents in this order:
 6. [Contract Data Model](docs/contract-data-model.md) - storage structures, enums, public fields, and encrypted fields.
 7. [Contract API Specification](docs/contract-api.md) - functions, events, errors, access rules, and frontend expectations.
 8. [Frontend Architecture](docs/frontend-architecture.md) - mobile web app layers, routes, stores, wallet, Fhenix, and 3D boundaries.
-9. [Security and Fair Play](docs/security-and-fair-play.md) - hidden-state threat model, trust boundaries, and fair-play controls.
-10. [Testing Strategy](docs/testing-strategy.md) - contract, Fhenix, frontend, mobile, and end-to-end test plan.
-11. [Copy Deck](docs/copy-deck.md) - centralized English UI labels, states, errors, and accessibility copy.
-12. [Backendless Computer Opponent Design](docs/computer-opponent-design.md) - optional on-chain bot mode without a gameplay backend.
-13. [Visual Style Guide](docs/visual-style-guide.md) - overall art direction and rendering language.
-14. [Interface and Buttons Guide](docs/interface-and-buttons-guide.md) - menu, opponent selection, HUD, and button system.
-15. [User Flows](docs/user-flows.md) - player journeys for the friend-match MVP.
-16. [Documentation Audit](docs/documentation-audit.md) - current coverage and missing implementation docs.
-17. [Documentation Roadmap](docs/documentation-roadmap.md) - what should be documented next.
+9. [Network and Wallet Requirements](docs/network-and-wallet-requirements.md) - Privy wallet scope, Arbitrum Sepolia guard, mobile return, funding, and recovery rules.
+10. [Security and Fair Play](docs/security-and-fair-play.md) - hidden-state threat model, trust boundaries, and fair-play controls.
+11. [Testing Strategy](docs/testing-strategy.md) - contract, Fhenix, frontend, mobile, and end-to-end test plan.
+12. [Copy Deck](docs/copy-deck.md) - centralized English UI labels, states, errors, and accessibility copy.
+13. [Backendless Computer Opponent Design](docs/computer-opponent-design.md) - optional on-chain bot mode without a gameplay backend.
+14. [Visual Style Guide](docs/visual-style-guide.md) - overall art direction and rendering language.
+15. [Interface and Buttons Guide](docs/interface-and-buttons-guide.md) - menu, opponent selection, HUD, and button system.
+16. [User Flows](docs/user-flows.md) - player journeys for the friend-match MVP.
+17. [Documentation Audit](docs/documentation-audit.md) - current coverage and missing implementation docs.
+18. [Documentation Roadmap](docs/documentation-roadmap.md) - what should be documented next.
 
 ## Asset Planning
 

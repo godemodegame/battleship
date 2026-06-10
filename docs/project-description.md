@@ -194,7 +194,8 @@ The initial stack can look like this:
 - smart contracts: Solidity;
 - confidential computation: Fhenix/CoFHE;
 - client encryption: `@cofhe/sdk`;
-- wallet connection: wagmi/viem or another compatible web3 stack;
+- wallet connection and session: Privy with external EVM wallets;
+- contract clients: viem, with wagmi through Privy's integration if useful;
 - mobile app later: PWA, Capacitor, or React Native.
 
 The final stack should be selected after a separate technical design phase.
