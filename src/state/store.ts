@@ -84,6 +84,26 @@ export function setPracticeRandomSource(rnd: () => number = Math.random) {
   randomSource = rnd
 }
 
+/** Resets practice flow state when leaving the practice route. */
+export function resetPracticeState() {
+  useStore.setState({
+    screen: 'home',
+    difficulty: 'normal',
+    howItWorksOpen: false,
+    placements: FLEET.map(() => null),
+    selectedSlot: null,
+    placeOrientation: 'h',
+    match: null,
+    focus: 'enemy',
+    selectedCell: null,
+    busy: false,
+    effects: [],
+    projectiles: [],
+    toast: null,
+    forfeited: false,
+  })
+}
+
 function shotToast(result: 'miss' | 'hit' | 'sunk', by: Side, label: string | undefined): Toast {
   const yours = by === 'player'
   if (result === 'miss') return { id: nextId++, text: 'Miss', tone: 'cyan' }

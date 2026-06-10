@@ -1,31 +1,25 @@
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { MemoryRouter, Route, Routes } from 'react-router-dom'
-import { describe, expect, it, vi } from 'vitest'
+import { MemoryRouter, Routes } from 'react-router-dom'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { resetPracticeState } from '../../state/store'
+import { appRoutes } from './appRoutes'
 
 vi.mock('../../three/Scene', () => ({
   GameCanvas: () => <canvas data-testid="game-canvas" />,
 }))
 
-import { PracticeApp } from '../../practice/PracticeApp'
-import { MatchRouteShell } from '../../onchain/MatchRouteShell'
-import { AppShell } from './AppShell'
-import { NotFoundScreen } from './NotFoundScreen'
-
 function TestRouter({ initialEntries }: { initialEntries: string[] }) {
   return (
     <MemoryRouter initialEntries={initialEntries}>
-      <Routes>
-        <Route element={<AppShell />}>
-          <Route index element={<PracticeApp />} />
-          <Route path="practice" element={<PracticeApp />} />
-          <Route path="match/:deploymentId/:matchId" element={<MatchRouteShell />} />
-          <Route path="*" element={<NotFoundScreen />} />
-        </Route>
-      </Routes>
+      <Routes>{appRoutes}</Routes>
     </MemoryRouter>
   )
 }
+
+beforeEach(() => {
+  resetPracticeState()
+})
 
 describe('application routes', () => {
   it('renders the route-level shell on every route', () => {
