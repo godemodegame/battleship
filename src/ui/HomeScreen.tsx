@@ -2,6 +2,7 @@ import { useNavigate } from 'react-router-dom'
 import { useStore } from '../practice/practiceStore'
 import type { Difficulty } from '../game/types'
 import { MuteButton } from './common'
+import { haptics } from '../lib/haptics'
 
 const DIFFICULTIES: { id: Difficulty; label: string }[] = [
   { id: 'easy', label: 'Easy' },
@@ -57,7 +58,10 @@ export function HomeScreen() {
                 role="radio"
                 aria-checked={difficulty === d.id}
                 className={difficulty === d.id ? 'on' : ''}
-                onClick={() => setDifficulty(d.id)}
+                onClick={() => {
+                  setDifficulty(d.id)
+                  haptics.tap()
+                }}
               >
                 {d.label}
               </button>
@@ -65,7 +69,13 @@ export function HomeScreen() {
           </div>
         </div>
 
-        <button className="btn primary" onClick={startPlacement}>
+        <button
+          className="btn primary"
+          onClick={() => {
+            startPlacement()
+            haptics.confirm()
+          }}
+        >
           Practice vs Bot
         </button>
         <button className="btn" disabled title="On-chain PvP coming soon">
@@ -90,7 +100,13 @@ export function HomeScreen() {
               <li>Sink the entire enemy fleet before the bot finds yours.</li>
               <li>In the on-chain version, fleets stay encrypted with Fhenix and every move is a transaction. This build plays the same rules locally.</li>
             </ul>
-            <button className="btn primary" onClick={() => setHowItWorksOpen(false)}>
+            <button
+              className="btn primary"
+              onClick={() => {
+                setHowItWorksOpen(false)
+                haptics.tap()
+              }}
+            >
               Done
             </button>
           </div>

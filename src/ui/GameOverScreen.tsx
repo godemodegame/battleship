@@ -1,4 +1,5 @@
 import { matchSummary, useStore } from '../practice/practiceStore'
+import { haptics } from '../lib/haptics'
 
 export function GameOverScreen() {
   const match = useStore((s) => s.match)
@@ -44,10 +45,22 @@ export function GameOverScreen() {
           </div>
         </div>
 
-        <button className="btn primary wide" onClick={rematch}>
+        <button
+          className="btn primary wide"
+          onClick={() => {
+            rematch()
+            haptics.confirm()
+          }}
+        >
           Play Again
         </button>
-        <button className="btn ghost wide" onClick={toHome}>
+        <button
+          className="btn ghost wide"
+          onClick={() => {
+            toHome()
+            haptics.tap()
+          }}
+        >
           Main Menu
         </button>
       </div>

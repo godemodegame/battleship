@@ -3,6 +3,7 @@ import { useStore } from '../practice/practiceStore'
 import { cellLabel } from '../game/constants'
 import type { BoardState, Side } from '../game/types'
 import { MuteButton } from './common'
+import { haptics } from '../lib/haptics'
 
 function FleetStrip({ board, label, enemy }: { board: BoardState; label: string; enemy?: boolean }) {
   return (
@@ -67,7 +68,14 @@ export function BattleHUD() {
       )}
 
       <div className="bottom-stack battle">
-        <button className="btn fire wide" onClick={() => void fire()} disabled={!canFire}>
+        <button
+          className="btn fire wide"
+          onClick={() => {
+            void fire()
+            if (canFire) haptics.fire()
+          }}
+          disabled={!canFire}
+        >
           {canFire ? `Fire at ${cellLabel(selectedCell)}` : yourTurn ? 'Select a target cell' : status.text}
         </button>
       </div>
@@ -78,7 +86,13 @@ export function BattleHUD() {
             <h2>Forfeit Match</h2>
             <p>Abandon ship? The match counts as a defeat.</p>
             <div className="button-row">
-              <button className="btn small" onClick={() => setConfirmForfeit(false)}>
+              <button
+                className="btn small"
+                onClick={() => {
+                  setConfirmForfeit(false)
+                  haptics.tap()
+                }}
+              >
                 Cancel
               </button>
               <button
@@ -86,6 +100,7 @@ export function BattleHUD() {
                 onClick={() => {
                   setConfirmForfeit(false)
                   forfeit()
+                  haptics.lose()
                 }}
               >
                 Forfeit

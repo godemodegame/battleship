@@ -5,6 +5,7 @@ import { applyAttack, createMatch, sunkHalo } from '../game/engine'
 import { chooseBotTarget } from '../game/bot'
 import type { Difficulty, MatchState, Orientation, Placement, Side } from '../game/types'
 import { sfx } from '../lib/sfx'
+import { haptics } from '../lib/haptics'
 import { resultCopy } from '../copy/en'
 
 export type Screen = 'home' | 'placement' | 'battle' | 'gameover'
@@ -166,6 +167,7 @@ export const useStore = create<AppState>((set, get) => {
       toast: shotToast(move.result, by, shipLabel),
     }))
     sfx[move.result]()
+    haptics[move.result]()
 
     await delay(move.result === 'sunk' ? SUNK_MS : IMPACT_MS)
     if (interrupted(sessionId)) return 'aborted'
@@ -195,6 +197,7 @@ export const useStore = create<AppState>((set, get) => {
 
     startPlacement: () => {
       sfx.ui()
+      haptics.tap()
       set({
         screen: 'placement',
         placements: FLEET.map(() => null),
@@ -211,9 +214,15 @@ export const useStore = create<AppState>((set, get) => {
       })
     },
 
-    selectSlot: (selectedSlot) => set({ selectedSlot }),
+    selectSlot: (selectedSlot) => {
+      if (selectedSlot !== null) haptics.tap()
+      set({ selectedSlot })
+    },
 
-    rotateSelected: () => set((s) => ({ placeOrientation: rotated(s.placeOrientation) })),
+    rotateSelected: () => {
+      haptics.tap()
+      set((s) => ({ placeOrientation: rotated(s.placeOrientation) }))
+    },
 
     placeAt: (row, col) => {
       const { placements, selectedSlot, placeOrientation } = get()
@@ -221,12 +230,14 @@ export const useStore = create<AppState>((set, get) => {
       const candidate: Placement = { slot: selectedSlot, row, col, orientation: placeOrientation }
       if (!canPlace(placements, candidate)) {
         sfx.deny()
+        haptics.deny()
         return
       }
       const next = placements.slice()
       next[selectedSlot] = candidate
       const nextEmpty = next.findIndex((p) => p === null)
       sfx.place()
+      haptics.place()
       set({ placements: next, selectedSlot: nextEmpty === -1 ? null : nextEmpty })
     },
 
@@ -244,6 +255,7 @@ export const useStore = create<AppState>((set, get) => {
           const next = placements.slice()
           next[p.slot] = null
           sfx.ui()
+          haptics.tap()
           set({ placements: next, selectedSlot: p.slot, placeOrientation: p.orientation })
           return
         }
@@ -252,11 +264,13 @@ export const useStore = create<AppState>((set, get) => {
 
     autoPlace: () => {
       sfx.place()
+      haptics.medium()
       set({ placements: autoPlaceFleet(randomSource), selectedSlot: null })
     },
 
     clearPlacement: () => {
       sfx.ui()
+      haptics.tap()
       set({ placements: FLEET.map(() => null), selectedSlot: 0 })
     },
 
@@ -264,6 +278,7 @@ export const useStore = create<AppState>((set, get) => {
       const { placements } = get()
       if (!isFleetComplete(placements)) return
       sfx.confirm()
+      haptics.confirm()
       set({
         screen: 'battle',
         match: createMatch(placements, autoPlaceFleet(randomSource)),
@@ -282,9 +297,13 @@ export const useStore = create<AppState>((set, get) => {
         (match.boards.bot.shots[cell] !== 0 || sunkHalo(match.boards.bot).has(cell))
       ) {
         sfx.deny()
+        haptics.deny()
         return
       }
-      if (cell !== null) sfx.ui()
+      if (cell !== null) {
+        sfx.ui()
+        haptics.select()
+      }
       set({ selectedCell: cell })
     },
 
@@ -294,6 +313,7 @@ export const useStore = create<AppState>((set, get) => {
       if (!match || match.winner || busy || match.turn !== 'player') return
       if (selectedCell === null || match.boards.bot.shots[selectedCell] !== 0) return
       set({ busy: true, selectedCell: null })
+      haptics.fire()
 
       const result = await resolveShot('player', selectedCell, sessionId)
       if (result === 'aborted' || interrupted(sessionId)) {
@@ -302,6 +322,7 @@ export const useStore = create<AppState>((set, get) => {
       }
       if (result === 'won') {
         sfx.win()
+        haptics.win()
         set({ screen: 'gameover', busy: false })
         return
       }
@@ -326,6 +347,7 @@ export const useStore = create<AppState>((set, get) => {
         }
         if (botResult === 'won') {
           sfx.lose()
+          haptics.lose()
           set({ screen: 'gameover', busy: false })
           return
         }
@@ -351,6 +373,7 @@ export const useStore = create<AppState>((set, get) => {
       const { match } = get()
       if (!match || match.winner) return
       sfx.lose()
+      haptics.lose()
       set({
         forfeited: true,
         match: { ...match, winner: 'bot' },
@@ -365,6 +388,7 @@ export const useStore = create<AppState>((set, get) => {
 
     toHome: () => {
       sfx.ui()
+      haptics.tap()
       set({ screen: 'home', match: null, effects: [], projectiles: [], toast: null })
     },
   }

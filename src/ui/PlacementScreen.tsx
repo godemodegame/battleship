@@ -2,6 +2,7 @@ import { useStore } from '../practice/practiceStore'
 import { FLEET } from '../game/constants'
 import { isFleetComplete } from '../game/board'
 import { MuteButton } from './common'
+import { haptics } from '../lib/haptics'
 
 export function PlacementScreen() {
   const placements = useStore((s) => s.placements)
@@ -20,7 +21,14 @@ export function PlacementScreen() {
   return (
     <div className="hud">
       <div className="topbar">
-        <button className="icon-btn" aria-label="Back" onClick={toHome}>
+        <button
+          className="icon-btn"
+          aria-label="Back"
+          onClick={() => {
+            toHome()
+            haptics.tap()
+          }}
+        >
           ‹
         </button>
         <div className="topbar-status">
@@ -55,7 +63,11 @@ export function PlacementScreen() {
         </div>
 
         <div className="button-row">
-          <button className="btn small" onClick={rotateSelected} disabled={selectedSlot === null}>
+          <button
+            className="btn small"
+            onClick={rotateSelected}
+            disabled={selectedSlot === null}
+          >
             Rotate · {orientation === 'h' ? 'Horizontal' : 'Vertical'}
           </button>
           <button className="btn small" onClick={autoPlace}>
