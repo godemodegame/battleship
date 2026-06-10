@@ -265,6 +265,64 @@ body,
   letter-spacing: 0.04em;
 }
 
+/* ---------- wallet (Phase 2) ---------- */
+
+.wallet-bar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin: 8px 0;
+}
+
+.wallet-address {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 13px;
+  color: var(--white);
+  letter-spacing: 0.04em;
+}
+
+.network-badge {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  padding: 3px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+}
+
+.network-badge.ok {
+  color: var(--cyan);
+  border-color: rgba(33, 244, 255, 0.5);
+}
+
+.network-badge.warn {
+  color: var(--amber);
+  border-color: rgba(255, 176, 0, 0.5);
+}
+
+.wrong-network-panel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  text-align: center;
+  margin: 12px 0;
+}
+
+.wrong-network-panel h2 {
+  margin: 0;
+  color: var(--amber);
+}
+
+.error-note {
+  margin: 0;
+  font-size: 13px;
+  color: var(--red);
+  letter-spacing: 0.03em;
+}
+
 /* ---------- modal ---------- */
 
 .modal-backdrop {

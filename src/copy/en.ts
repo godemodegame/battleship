@@ -36,6 +36,26 @@ export const resultCopy = {
   sunkYours: (ship: string) => `Sunk — your ${ship} is lost`,
 } as const
 
+/** Wallet session + network copy (GAME-204 / GAME-207). */
+export const walletCopy = {
+  connect: 'Connect Wallet',
+  connecting: 'Connecting…',
+  disconnect: 'Disconnect',
+  networkBadge: 'Arbitrum Sepolia',
+  walletLabel: 'Wallet',
+  /** Truncate a checksum/lowercased address for display: 0x1234…abcd */
+  shortAddress: (address: string) =>
+    address.length > 10 ? `${address.slice(0, 6)}…${address.slice(-4)}` : address,
+  connectPrompt: 'Connect an external wallet on Arbitrum Sepolia to play on-chain.',
+  configMissing:
+    'Wallet connection is not configured in this build. Local practice still works.',
+  wrongNetworkHeading: 'Wrong Network',
+  wrongNetworkBody: 'This match runs on Arbitrum Sepolia. Switch networks to continue.',
+  switchAction: 'Switch to Arbitrum Sepolia',
+  switching: 'Switching…',
+  chooseAnotherWallet: 'Disconnect / choose another wallet',
+} as const
+
 /** Copy for the versioned `/match/:deploymentId/:matchId` route shell. */
 export const matchRouteCopy = {
   kicker: 'On-chain Match',

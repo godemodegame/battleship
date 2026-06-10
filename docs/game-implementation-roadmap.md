@@ -227,21 +227,43 @@ Goal:
 
 - establish wallet identity and a reliable write guard.
 
+Progress:
+
+- P0 slice `GAME-201` through `GAME-207` complete (Privy + viem, no wagmi).
+- P1 `GAME-208`–`GAME-211` not started (separate branch).
+
 Tasks:
 
-| ID | Priority | Work |
-| --- | --- | --- |
-| GAME-201 | P0 | Create Privy development and staging application configuration |
-| GAME-202 | P0 | Install Privy React SDK and viem-compatible wallet integration |
-| GAME-203 | P0 | Configure wallet-only login with external EVM wallets |
-| GAME-204 | P0 | Implement active wallet, address, disconnect, and session UI |
-| GAME-205 | P0 | Implement the Arbitrum Sepolia `421614` network guard |
-| GAME-206 | P0 | Block every contract write when account, chain, or client readiness fails |
-| GAME-207 | P0 | Implement wrong-network switch and rejection recovery |
-| GAME-208 | P1 | Implement account-change and session-expiry cleanup |
-| GAME-209 | P1 | Add Arbitrum Sepolia balance check and funding guidance |
-| GAME-210 | P1 | Restore intended route after mobile wallet handoff |
-| GAME-211 | P1 | Test MetaMask and Coinbase Wallet on desktop and mobile |
+| ID | Priority | Status | Work |
+| --- | --- | --- | --- |
+| GAME-201 | P0 | Complete | Create Privy development and staging application configuration |
+| GAME-202 | P0 | Complete | Install Privy React SDK and viem-compatible wallet integration |
+| GAME-203 | P0 | Complete | Configure wallet-only login with external EVM wallets |
+| GAME-204 | P0 | Complete | Implement active wallet, address, disconnect, and session UI |
+| GAME-205 | P0 | Complete | Implement the Arbitrum Sepolia `421614` network guard |
+| GAME-206 | P0 | Complete | Block every contract write when account, chain, or client readiness fails |
+| GAME-207 | P0 | Complete | Implement wrong-network switch and rejection recovery |
+| GAME-208 | P1 | Not started | Implement account-change and session-expiry cleanup |
+| GAME-209 | P1 | Not started | Add Arbitrum Sepolia balance check and funding guidance |
+| GAME-210 | P1 | Not started | Restore intended route after mobile wallet handoff |
+| GAME-211 | P1 | Not started | Test MetaMask and Coinbase Wallet on desktop and mobile |
+
+Realized structure:
+
+- the single wallet/network layer lives under `src/onchain/wallet/`: pure,
+  unit-tested core (`network.ts` Arbitrum Sepolia `421614` constant + guard,
+  `session.ts` `deriveWalletSession`, `writeGuard.ts` `evaluateWriteReadiness`),
+  a thin Privy + viem bridge (`privyConfig.ts`, `WalletProvider.tsx`,
+  `WalletSessionContext.ts`), and prop-driven UI (`WalletSessionBar.tsx`,
+  `WrongNetworkPanel.tsx`);
+- Privy is the only connection UI (wallet-only login, embedded-wallet creation
+  off, `supportedChains`/`defaultChain` = Arbitrum Sepolia); the build degrades
+  to practice-only when `VITE_PRIVY_APP_ID` is unset;
+- `evaluateWriteReadiness` is the central guard every future contract write must
+  pass; Phase 2 has no contract calls yet, so it is built and tested but not yet
+  gating a transaction;
+- the `/match` route sources wallet/chain from the live session for real match
+  ids; the `demo-*` URL harness stays self-contained until contract reads land.
 
 Exit criteria:
 
@@ -610,7 +632,7 @@ Phase status:
 | --- | --- |
 | 0. Stabilize local practice | Complete (June 10, 2026) |
 | 1. Separate modes | Complete (GAME-101 through GAME-110) |
-| 2. Privy and network | Not started |
+| 2. Privy and network | In progress (P0 GAME-201–207 complete; P1 208–211 pending) |
 | 3. Contract public lifecycle | Not started |
 | 4. CoFHE encrypted rules | Not started |
 | 5. Friend-match frontend | Not started |

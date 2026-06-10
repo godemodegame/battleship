@@ -5,7 +5,10 @@ import {
   type MatchView,
 } from './phaseResolver'
 import { getActiveDeploymentId, getDeployment, isDeploymentReady } from './deployments'
-import { deploymentCopy, matchRouteCopy } from '../copy/en'
+import { deploymentCopy, matchRouteCopy, walletCopy } from '../copy/en'
+import { useWalletSession } from './wallet/WalletSessionContext'
+import { WalletSessionBar } from './wallet/WalletSessionBar'
+import { WrongNetworkPanel } from './wallet/WrongNetworkPanel'
 
 /** Demo addresses (match the ones used in phaseResolver.test.ts for consistency). */
 const DEMO_CREATOR = '0x1111111111111111111111111111111111111111' as const
@@ -131,6 +134,7 @@ function DeploymentUnavailable({ deploymentId }: { deploymentId: string }) {
 
 export function MatchRouteShell() {
   const params = useParams()
+  const wallet = useWalletSession()
   const deploymentId = params.deploymentId ?? getActiveDeploymentId()
   const matchId = params.matchId ?? 'demo'
 
@@ -163,20 +167,33 @@ export function MatchRouteShell() {
   // guard and the match from on-chain reads (public MatchView shape only).
   const id = matchId.toLowerCase()
   const hasDemoMarker = id.includes('demo')
-  const demoWallet = hasDemoMarker && (id.includes('join') || id.includes('invited'))
-    ? DEMO_INVITED
-    : hasDemoMarker && (id.includes('observer') || id.includes('spectator'))
-    ? DEMO_SPECTATOR
-    : DEMO_CREATOR
 
-  const demoInput = {
-    hasWallet: !(hasDemoMarker && id.includes('no-wallet')),
-    walletAddress: (hasDemoMarker && id.includes('no-wallet')) ? null : demoWallet,
-    isCorrectChain: !(hasDemoMarker && id.includes('wrong-chain')),
-    match: demoMatch,
-  }
+  // Demo ids form a self-contained visualization harness that derives the viewer
+  // wallet + active chain from the URL (kept from GAME-103 so the Phase 1 route
+  // tests stay green). Real match ids source wallet identity and the active chain
+  // from the live Privy session (GAME-204/205). The harness is removed when real
+  // contract reads land (Phase 5).
+  const resolverInput = hasDemoMarker
+    ? {
+        hasWallet: !id.includes('no-wallet'),
+        walletAddress: id.includes('no-wallet')
+          ? null
+          : id.includes('join') || id.includes('invited')
+            ? DEMO_INVITED
+            : id.includes('observer') || id.includes('spectator')
+              ? DEMO_SPECTATOR
+              : DEMO_CREATOR,
+        isCorrectChain: !id.includes('wrong-chain'),
+        match: demoMatch,
+      }
+    : {
+        hasWallet: wallet.session.isConnected,
+        walletAddress: wallet.session.address,
+        isCorrectChain: wallet.session.isCorrectChain,
+        match: demoMatch,
+      }
 
-  const phase = resolveMatchPhase(demoInput)
+  const phase = resolveMatchPhase(resolverInput)
   const ready = isDeploymentReady(deployment)
 
   return (
@@ -187,7 +204,31 @@ export function MatchRouteShell() {
         <p className="tagline">{matchRouteCopy.tagline(deploymentId, matchId)}</p>
       </div>
 
+      {!hasDemoMarker && (
+        <WalletSessionBar
+          session={wallet.session}
+          onConnect={wallet.actions.connect}
+          onDisconnect={wallet.actions.disconnect}
+          configMissing={wallet.configMissing}
+        />
+      )}
+
       <PhasePanel phase={phase} />
+
+      {!hasDemoMarker && phase.kind === 'wallet-required' && !wallet.configMissing && (
+        <p className="footnote" data-testid="wallet-connect-prompt">
+          {walletCopy.connectPrompt}
+        </p>
+      )}
+
+      {!hasDemoMarker && phase.kind === 'wrong-network' && (
+        <WrongNetworkPanel
+          session={wallet.session}
+          onSwitch={wallet.actions.switchToArbitrumSepolia}
+          onDisconnect={wallet.actions.disconnect}
+          switchError={wallet.lastError}
+        />
+      )}
 
       <div className="home-actions">
         <Link className="btn primary" to="/practice">
