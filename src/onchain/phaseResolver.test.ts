@@ -9,6 +9,7 @@ import {
 const CREATOR = '0x1111111111111111111111111111111111111111' as const
 const OPPONENT = '0x2222222222222222222222222222222222222222' as const
 const INVITED = '0x3333333333333333333333333333333333333333' as const
+const SPECTATOR = '0x4444444444444444444444444444444444444444' as const
 
 function baseMatch(overrides: Partial<MatchView> = {}): MatchView {
   return {
@@ -154,5 +155,28 @@ describe('resolveMatchPhase', () => {
     // @ts-expect-error force bad status for coverage
     const bad = resolveMatchPhase(input({ match: { ...baseMatch(), status: 'Bogus' } }))
     expect(bad.kind).toBe('unavailable')
+  })
+
+  it('non-participant (third-party/spectator wallet) receives passive state for active phases', () => {
+    // This covers the participant-role guard added for GAME-103 (prevents non-players
+    // from seeing "Place your fleet", "Your turn", etc. when viewing a public match).
+    const placement = baseMatch({ status: 'WaitingForPlacement', opponent: OPPONENT })
+    const p = resolveMatchPhase(input({ walletAddress: SPECTATOR, match: placement }))
+    expect(p.kind).toBe('waiting-for-opponent')
+
+    const battle = baseMatch({ status: 'InProgress', opponent: OPPONENT, currentTurn: CREATOR })
+    const b = resolveMatchPhase(input({ walletAddress: SPECTATOR, match: battle }))
+    expect(b.kind).toBe('waiting-for-opponent')
+
+    const resolving = baseMatch({ status: 'ResolvingShot', opponent: OPPONENT, currentTurn: OPPONENT })
+    const r = resolveMatchPhase(input({ walletAddress: SPECTATOR, match: resolving }))
+    expect(r.kind).toBe('waiting-for-opponent')
+
+    // Finished is safe to show to spectators (youWon will be null)
+    const fin = resolveMatchPhase(
+      input({ walletAddress: SPECTATOR, match: baseMatch({ status: 'Finished', winner: CREATOR, opponent: OPPONENT }) }),
+    )
+    expect(fin.kind).toBe('finished')
+    if (fin.kind === 'finished') expect(fin.youWon).toBe(null)
   })
 })

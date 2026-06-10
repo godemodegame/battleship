@@ -10,16 +10,19 @@ async function readOnchainSource(rel: string): Promise<string> {
   return readFile(abs, 'utf8')
 }
 
-describe('on-chain module isolation (GAME-102)', () => {
+describe('on-chain module isolation (GAME-103 empty shell)', () => {
   it('phaseResolver source does not reference the local attack engine or bot', async () => {
     const src = await readOnchainSource('./phaseResolver.ts')
-    // Only flag actual module imports, not prose in comments.
-    expect(src).not.toMatch(/from ['"][^'"]*\/(engine|bot)['"]|from ['"][^'"]*\b(engine|bot)\b['"]/)
+    // Only flag actual module imports (static or dynamic), not prose in comments.
+    // Covers: import ... from '...' , import('...') , require('...') , export ... from '...'
+    const bad = /(?:from\s+['"]|import\s*\(\s*['"]|require\s*\(\s*['"]|export[^;]+from\s+['"])[^'"]*\b(engine|bot)\b/i
+    expect(src).not.toMatch(bad)
   })
 
   it('MatchRouteShell source does not reference the local attack engine or bot', async () => {
     const src = await readOnchainSource('./MatchRouteShell.tsx')
-    expect(src).not.toMatch(/from ['"][^'"]*\/(engine|bot)['"]|from ['"][^'"]*\b(engine|bot)\b['"]/)
+    const bad = /(?:from\s+['"]|import\s*\(\s*['"]|require\s*\(\s*['"]|export[^;]+from\s+['"])[^'"]*\b(engine|bot)\b/i
+    expect(src).not.toMatch(bad)
   })
 
   it('loading the on-chain modules at runtime does not transitively require engine or bot for their public exports', async () => {

@@ -1,22 +1,18 @@
 /**
  * Pure on-chain match phase resolver.
  *
- * NOTE: Address is a simple branded hex string for now. When the contract
- * client layer lands it can be re-exported from a shared viem-compatible type.
- */
-
-export type Address = `0x${string}`
-
-/**
- * Pure on-chain match phase resolver.
- *
  * This module translates wallet + network + public contract-derived MatchView
  * into a UI phase. It must remain free of local practice engine logic
  * (no imports from ../game/engine or ../game/bot).
  *
  * The input shape is intentionally small and will be populated by future
  * contract read clients. All values are public on-chain data.
+ *
+ * NOTE: Address is a simple branded hex string for now. When the contract
+ * client layer lands it can be re-exported from a shared viem-compatible type.
  */
+
+export type Address = `0x${string}`
 
 export type HexAddress = Address
 
@@ -98,42 +94,51 @@ export function resolveMatchPhase(input: PhaseResolverInput): MatchPhase {
   }
 
   const me = norm(walletAddress)
+  const isCreator = norm(match.creator) === me
+  const isOpponent = norm(match.opponent) === me
   const isInvited = norm(match.invitedOpponent) === me
-  // Creator / opponent checks are available for future per-player placement status.
-  // Currently only used indirectly via demo data and later slices.
+  const isParticipant = isCreator || isOpponent || isInvited
+
+  // Only the invited wallet should be offered the join action while waiting.
+  // For all other active phases (placement, battle, resolving), a non-participant
+  // (e.g. a spectator or unrelated wallet) must not receive actionable UI state.
+  // They see a safe passive state instead. (Creator/opponent/invited fields on
+  // MatchView exist precisely for this; real contract data will populate them.)
 
   switch (match.status) {
     case 'WaitingForOpponent': {
-      // Only the invited wallet should be offered the join action
       if (isInvited && !match.opponent) {
         return { kind: 'join' }
       }
       return { kind: 'waiting-for-opponent' }
     }
 
-    case 'WaitingForPlacement': {
-      // In the GAME-102 slice we return a simple actionable placement phase.
-      // Later client code will map real per-player PlacementStatus here.
-      return {
-        kind: 'placement',
-        canSubmit: true,
-        submitted: false,
-        waitingForOpponent: false,
-        validating: false,
-      }
-    }
-
-    case 'ValidatingPlacement': {
-      return {
-        kind: 'placement',
-        canSubmit: false,
-        submitted: true,
-        waitingForOpponent: true,
-        validating: true,
-      }
-    }
-
+    case 'WaitingForPlacement':
+    case 'ValidatingPlacement':
     case 'ReadyToStart': {
+      if (!isParticipant) {
+        return { kind: 'waiting-for-opponent' }
+      }
+      if (match.status === 'WaitingForPlacement') {
+        // In the initial on-chain shell (GAME-103) we return a simple actionable placement phase.
+        // Later client code will map real per-player PlacementStatus here.
+        return {
+          kind: 'placement',
+          canSubmit: true,
+          submitted: false,
+          waitingForOpponent: false,
+          validating: false,
+        }
+      }
+      if (match.status === 'ValidatingPlacement') {
+        return {
+          kind: 'placement',
+          canSubmit: false,
+          submitted: true,
+          waitingForOpponent: true,
+          validating: true,
+        }
+      }
       return {
         kind: 'placement',
         canSubmit: false,
@@ -144,16 +149,24 @@ export function resolveMatchPhase(input: PhaseResolverInput): MatchPhase {
     }
 
     case 'InProgress': {
+      if (!isParticipant) {
+        return { kind: 'waiting-for-opponent' }
+      }
       const myTurn = norm(match.currentTurn) === me
       return { kind: 'battle', isMyTurn: myTurn }
     }
 
     case 'ResolvingShot': {
+      if (!isParticipant) {
+        return { kind: 'waiting-for-opponent' }
+      }
       return { kind: 'resolving' }
     }
 
     case 'Finished': {
-      const youWon = match.winner ? norm(match.winner) === me : null
+      // Only a participant (creator or opponent) can have a meaningful youWon true/false.
+      // Spectators / non-participants get null ("match finished" from their perspective).
+      const youWon = isParticipant && match.winner ? norm(match.winner) === me : null
       return { kind: 'finished', youWon }
     }
 

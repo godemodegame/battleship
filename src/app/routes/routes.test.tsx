@@ -149,4 +149,13 @@ describe('application routes', () => {
     render(<TestRouter initialEntries={['/match/arb-sepolia-v1/demo-cancel']} />)
     expect(screen.getByTestId('match-phase-kind').textContent).toContain('cancelled')
   })
+
+  it('renders non-participant (demo spectator) as waiting-for-opponent even on active phases', () => {
+    // Exercises the participant guard + demo spectator wallet selection + hasDemoMarker hardening.
+    render(<TestRouter initialEntries={['/match/arb-sepolia-v1/demo-battle-observer']} />)
+    expect(screen.getByTestId('match-phase-kind').textContent).toContain('waiting-for-opponent')
+    // No battle-detail or placement-detail should be present for a spectator.
+    expect(screen.queryByTestId('battle-detail')).toBeNull()
+    expect(screen.queryByTestId('placement-detail')).toBeNull()
+  })
 })
