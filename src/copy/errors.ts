@@ -9,6 +9,11 @@
 export const ERROR_MESSAGES = {
   'wallet-not-connected': 'Wallet not connected',
   'wrong-network': 'Wrong network',
+  // Wallet/connection recovery copy (GAME-204/207), mirrors the Player-Facing
+  // Error Mapping table in docs/network-and-wallet-requirements.md.
+  'connection-cancelled': 'Wallet connection cancelled.',
+  'chain-switch-rejected': 'Network switch cancelled. Try again to continue.',
+  'unsupported-wallet': 'This wallet is not available. Choose another wallet.',
   'not-invited': 'Only the invited player can join',
   'not-your-turn': 'It is not your turn',
   'cell-already-attacked': 'This cell was already attacked',

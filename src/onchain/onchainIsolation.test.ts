@@ -31,6 +31,23 @@ describe('on-chain module isolation (GAME-103 empty shell)', () => {
     expect(src).not.toMatch(bad)
   })
 
+  it('wallet modules do not reference the local attack engine or bot (GAME-201–207)', async () => {
+    const bad = /(?:from\s+['"]|import\s*\(\s*['"]|require\s*\(\s*['"]|export[^;]+from\s+['"])[^'"]*\b(engine|bot)\b/i
+    const files = [
+      './wallet/network.ts',
+      './wallet/session.ts',
+      './wallet/writeGuard.ts',
+      './wallet/privyConfig.ts',
+      './wallet/WalletSessionContext.ts',
+      './wallet/WalletProvider.tsx',
+      './wallet/WalletSessionBar.tsx',
+      './wallet/WrongNetworkPanel.tsx',
+    ]
+    for (const file of files) {
+      expect(await readOnchainSource(file)).not.toMatch(bad)
+    }
+  })
+
   it('the public render adapter never exposes hull geometry', async () => {
     const { decodePublicBoard, publicBattleToRenderModel } = await import('./renderModel')
     const board = decodePublicBoard({ misses: [], hits: [], sunk: [3], shipsRemaining: 1 })
