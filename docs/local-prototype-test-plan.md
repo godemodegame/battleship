@@ -6,10 +6,11 @@
 the code that exists now - the local practice build - so the rules the
 contract will later mirror are locked down by tests before web3 work starts.
 
-The repository currently has no automated tests. This plan is the milestone 0
-referenced by the testing strategy.
+Before `GAME-001`, the repository had no automated tests. The test runner
+foundation is now present; the behavior coverage in this plan is the remaining
+milestone 0 work referenced by the testing strategy.
 
-## Proposed Stack and Setup
+## Implemented Stack and Setup
 
 - Vitest for unit tests (`src/game/*` is pure TypeScript with injected
   randomness, so no DOM or mocks are needed);
@@ -17,9 +18,20 @@ referenced by the testing strategy.
   canvas mocked out;
 - Playwright for browser smoke and regression runs against `npm run dev`.
 
-Dev dependencies to add: `vitest`, `@testing-library/react`,
-`@testing-library/user-event`, `jsdom`, `@playwright/test`. Wire
-`npm test` (Vitest) and `npm run test:e2e` (Playwright).
+The foundation is implemented by `GAME-001` with `vitest`,
+`@testing-library/react`, `@testing-library/user-event`, `jsdom`, and
+`@playwright/test`. Available commands:
+
+```txt
+npm test
+npm run test:watch
+npm run test:e2e
+npm run test:e2e:install
+```
+
+Playwright is configured for the required desktop `1280x800` and mobile
+`390x844` Chromium viewports. Feature-level unit, screen, and browser tests
+remain assigned to `GAME-002` through `GAME-009`.
 
 A tiny seeded RNG (for example mulberry32) belongs in a shared test util;
 every `rnd` parameter in the game layer accepts it.

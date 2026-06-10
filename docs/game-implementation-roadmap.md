@@ -107,6 +107,10 @@ Goal:
 
 - protect the working game before introducing web3 complexity.
 
+Progress:
+
+- `GAME-001` complete on June 10, 2026.
+
 Tasks:
 
 | ID | Priority | Work |
