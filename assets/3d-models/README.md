@@ -3,7 +3,7 @@
 ## Purpose
 
 This folder stores the 3D model prompts and the generated source assets for
-the game. All fourteen catalog models have been generated and are in use by
+the game. All twenty catalog models have been generated and are in use by
 the playable build; how they load at runtime is documented in
 `docs/runtime-asset-pipeline.md`.
 
@@ -18,13 +18,15 @@ All model prompts must follow that guide and must describe an original visual st
 Current structure:
 
 - `assets/3d-models/prompts/` - prompt files for generating each model;
-- `assets/3d-models/fbx/` - the eleven Tripo-generated FBX source models;
+- `assets/3d-models/fbx/` - the seventeen Tripo-generated FBX source models,
+  including intact and destroyed variants for every ship class;
 - `assets/3d-models/glb/` - the three `vfx-*` GLB files exported from the
   VFX Forge studio (`vfx-app/`).
 
 Runtime copies live in `public/models/` (models) and `public/textures/`
-(one `<name>-texture.jpg` per FBX model). Source and runtime files are kept
-byte-identical; update both when replacing an asset.
+(one `<name>-texture.jpg` per FBX model). Models are kept byte-identical.
+Runtime textures may be downscaled from their source maps for mobile load
+performance; update both locations when replacing an asset.
 
 Reserved for later, not created yet: `source/` (editable tool-native files),
 `textures/` (shared maps), `previews/`, and `lod/`.
@@ -33,9 +35,9 @@ Reserved for later, not created yet: `source/` (editable tool-native files),
 
 The original plan preferred `.glb` everywhere. The shipped reality:
 
-- the eleven static models (board, ships, props, projectile, sealed cell)
-  came out of Tripo as `.fbx` with a separate color texture, and the game
-  loads them as FBX + JPG;
+- the seventeen static models (board, intact and destroyed ships, props,
+  projectile, sealed cell) came out of Tripo as `.fbx` with a separate color
+  texture, and the game loads them as FBX + JPG;
 - the three `vfx-*` effects are `.glb` with embedded materials and a baked
   `play` animation clip, produced by `vfx-app` (see
   `docs/vfx-forge-workflow.md`).
@@ -57,7 +59,7 @@ Required export properties:
 
 ## Model List
 
-All fourteen models are generated and in use. Runtime names reflect the
+All twenty models are generated and in use. Runtime names reflect the
 actual shipped format.
 
 | Priority | Asset | Runtime Name | Prompt File | Purpose |
@@ -70,6 +72,12 @@ actual shipped format.
 | P0 | Destroyer | `ship-destroyer.fbx` | `prompts/ship-destroyer.md` | Fast narrow ship |
 | P0 | Submarine | `ship-submarine.fbx` | `prompts/ship-submarine.md` | Low-profile hidden ship |
 | P1 | Patrol boat | `ship-patrol-boat.fbx` | `prompts/ship-patrol-boat.md` | One-cell ship |
+| P0 | Destroyed carrier | `ship-carrier-destroyed.fbx` | - | Carrier sunk-state model |
+| P0 | Destroyed battleship | `ship-battleship-destroyed.fbx` | - | Battleship sunk-state model |
+| P0 | Destroyed cruiser | `ship-cruiser-destroyed.fbx` | - | Cruiser sunk-state model |
+| P0 | Destroyed destroyer | `ship-destroyer-destroyed.fbx` | - | Destroyer sunk-state model |
+| P0 | Destroyed submarine | `ship-submarine-destroyed.fbx` | - | Submarine sunk-state model |
+| P1 | Destroyed patrol boat | `ship-patrol-boat-destroyed.fbx` | - | Patrol boat sunk-state model |
 | P1 | Attack projectile | `attack-projectile.fbx` | `prompts/attack-projectile.md` | Shot object and trail anchor |
 | P1 | Miss water plume | `vfx-miss-water-plume.glb` | `prompts/vfx-miss-water-plume.md` | Miss impact effect (built by `vfx-app`, not Tripo) |
 | P1 | Hit impact | `vfx-hit-impact.glb` | `prompts/vfx-hit-impact.md` | Hit impact effect (built by `vfx-app`, not Tripo) |
