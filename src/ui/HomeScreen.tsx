@@ -1,3 +1,4 @@
+import { useNavigate } from 'react-router-dom'
 import { useStore } from '../practice/practiceStore'
 import type { Difficulty } from '../game/types'
 import { MuteButton } from './common'
@@ -8,7 +9,21 @@ const DIFFICULTIES: { id: Difficulty; label: string }[] = [
   { id: 'hard', label: 'Hard' },
 ]
 
+/**
+ * Temporary bridge to the on-chain match route so the wallet connection flow is
+ * reachable from the menu before the real friend-match menu lands (Phase 5,
+ * GAME-504/505). Mirrors `getActiveDeploymentId()` in
+ * `src/onchain/deployments.ts` (the canonical source) but is inlined here to keep
+ * the on-chain/viem bundle out of the practice chunk. Replace this handler when
+ * GAME-505 (`Play Against Friend` address input) is built.
+ */
+function onchainLobbyPath(): string {
+  const deploymentId = import.meta.env.VITE_ACTIVE_DEPLOYMENT_ID || 'arb-sepolia-v1'
+  return `/match/${deploymentId}/lobby`
+}
+
 export function HomeScreen() {
+  const navigate = useNavigate()
   const difficulty = useStore((s) => s.difficulty)
   const setDifficulty = useStore((s) => s.setDifficulty)
   const startPlacement = useStore((s) => s.startPlacement)
