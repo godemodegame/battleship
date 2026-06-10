@@ -96,9 +96,10 @@ validation and sunk tracking dominate total feasibility:
 - Ship segments: ship identity is the public array position, so per-ship
   health initializes from public constants at zero FHE cost, and full
   geometric validation (range, straightness, contiguity, row bounds) costs
-  ~130 FHE operations once per fleet (~13M mock gas, measured 12.9M in the
-  implemented `submitFleet`). The only encoding whose complete rule set fits
-  a transaction budget.
+  ~130 FHE operations once per fleet (the implemented `submitFleet`,
+  including input verification, storage, and validation, measures
+  ~14.7M mock gas). The only encoding whose complete rule set fits a
+  transaction budget.
 
 Cross-ship overlap is deliberately not validated on-chain: overlapping your
 own ships strictly harms the cheater (fewer distinct hittable cells, each
@@ -134,30 +135,38 @@ saving nothing).
 ## Full-Match Budget (GAME-411)
 
 Measured by `test/fullMatchBenchmark.test.ts` on the implemented
-`BattleshipGame.sol` (mock environment, complete two-player match driven to
-a win):
+`BattleshipGame.sol`: a complete two-player match (26 moves: all 20 fleet
+cells hit plus six misses exercising both turn directions) in the mock
+environment.
 
 | Operation | Mock gas (measured) | Count per match |
 | --- | --- | --- |
-| `createMatch` | ~239k | 1 |
-| `joinMatch` | ~141k | 1 |
-| `submitFleet` (incl. encrypted validation) | ~12.9M | 2 |
-| `finalizeFleetValidation` | ~167k | 2 |
-| `attack` (full encrypted shot pipeline) | ~10.0M | 24-99 |
-| `finalizeAttack` | ~190-247k | one per attack |
-| Whole 24-shot match | ~272M total | - |
+| `createMatch` | ~229k | 1 |
+| `joinMatch` | ~130k | 1 |
+| `submitFleet` (incl. encrypted validation) | ~14.2-14.7M | 2 per player attempt |
+| `finalizeFleetValidation` | ~75-113k | 2 |
+| `attack` (full encrypted shot pipeline) | ~12.3-13.0M (avg 12.6M) | 20-105 |
+| `finalizeAttack` | ~105-122k | one per attack |
+| Whole 26-move match | ~360M total | - |
 
 Working budget for Arbitrum Sepolia (to validate in GAME-906):
 
-- the two FHE-heavy transactions (`submitFleet`, `attack`) stay within a
-  30M-gas block even at mock prices, with ~55% headroom;
+- the two FHE-heavy transactions stay within a 30M-gas block even at mock
+  prices: `submitFleet` uses ~49% of a block, `attack` at most ~43%;
 - mock pricing overstates real CoFHE task-creation gas (every operation
-  pays mock storage bookkeeping), so testnet absolutes are expected lower;
-  the budget alarm threshold is set at the mock numbers: any testnet
-  `attack` above 10M gas or `submitFleet` above 13M reopens the encoding
-  decision before Phase 6 freezes the frontend integration;
-- finalization transactions are cheap (<250k) and permissionless, so
+  pays mock storage bookkeeping and events), so testnet absolutes are
+  expected lower; the budget alarm threshold is set at the mock numbers:
+  any testnet `attack` above 13M gas or `submitFleet` above 15M reopens the
+  encoding decision before Phase 6 freezes the frontend integration;
+- finalization transactions are cheap (<125k) and permissionless, so
   result-finalization gas is not a bottleneck for either player.
+
+Mock-environment security caveat: the mock task manager deploys with
+encrypted-input signature verification disabled (`verifierSigner = 0`), so
+the protocol guarantee that encrypted inputs are bound to the submitting
+account and chain (rejecting cross-account ciphertext replay) cannot be
+exercised under mocks. It is enforced by the real zk verifier on Arbitrum
+Sepolia and is part of the GAME-906 testnet regression.
 
 ## Re-measurement
 
