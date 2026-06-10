@@ -50,6 +50,32 @@ export function createMatch(
 
 export const otherSide = (side: Side): Side => (side === 'player' ? 'bot' : 'player')
 
+/** Adjacent cells that are empty or belong to a different ship (classic no-touch halo). */
+function haloCellsAroundShip(board: BoardState, shipIndex: number): number[] {
+  const cells: number[] = []
+  const seen = new Set<number>()
+  for (const cell of board.ships[shipIndex].cells) {
+    for (const near of neighborhood(cell)) {
+      if (board.shipAt[near] !== board.shipAt[cell] && !seen.has(near)) {
+        seen.add(near)
+        cells.push(near)
+      }
+    }
+  }
+  return cells
+}
+
+/** Mark provably empty halo cells as misses without overwriting prior shots. */
+export function markSunkHaloMisses(
+  shots: CellShot[],
+  board: BoardState,
+  shipIndex: number,
+): void {
+  for (const near of haloCellsAroundShip(board, shipIndex)) {
+    if (shots[near] === 0) shots[near] = 1
+  }
+}
+
 function applyShot(board: BoardState, cell: number): { board: BoardState; result: ShotResult; shipSlot: number | null } {
   const shots = board.shots.slice()
   const shipIndex = board.shipAt[cell]
@@ -65,11 +91,7 @@ function applyShot(board: BoardState, cell: number): { board: BoardState; result
   if (sunk) {
     ship.sunk = true
     for (const c of ship.cells) shots[c] = 3
-    for (const c of ship.cells) {
-      for (const near of neighborhood(c)) {
-        if (board.shipAt[near] !== board.shipAt[c] && shots[near] === 0) shots[near] = 1
-      }
-    }
+    markSunkHaloMisses(shots, board, shipIndex)
   } else {
     shots[cell] = 2
   }
@@ -118,13 +140,9 @@ export function applyAttack(
  */
 export function sunkHalo(board: BoardState): Set<number> {
   const halo = new Set<number>()
-  for (const ship of board.ships) {
+  for (const [shipIndex, ship] of board.ships.entries()) {
     if (!ship.sunk) continue
-    for (const cell of ship.cells) {
-      for (const near of neighborhood(cell)) {
-        if (board.shipAt[near] !== board.shipAt[cell]) halo.add(near)
-      }
-    }
+    for (const near of haloCellsAroundShip(board, shipIndex)) halo.add(near)
   }
   return halo
 }

@@ -115,6 +115,13 @@ Resolution (`applyShot`):
   covers the full length the ship sinks - every cell of the ship flips to
   `shots = 3` (including earlier `2` hits) and the result is `sunk`,
   otherwise the cell becomes `2` and the result is `hit`;
+- on `sunk`, every untouched halo cell around that ship (adjacent cells not
+  belonging to the same ship, per the no-touch rule) is also written as
+  `shots = 1`. These implicit misses do not create extra `Move` entries;
+  they mirror the `sunkHalo` deduction so the shot map, UI dimming, and bot
+  target pool stay aligned. On-chain play still records one public result per
+  coordinate attack (`docs/smart-contract-design.md`); halo auto-marking is
+  prototype engine convenience, not a separate contract transaction.
 - the result and the sunk ship's `slot` are recorded as a `Move`
   (`{ by, cell, result, shipSlot }`) and appended to `match.moves`.
 
@@ -134,16 +141,21 @@ directly when the player forfeits; forfeit is UI-level, not an engine rule.
 
 ## Sunk-ship Halo Deduction
 
-`sunkHalo(board)` returns every cell adjacent (including diagonals) to a sunk
-ship's cells, excluding the ship's own cells. Under the no-touch rule those
-cells are provably empty, so the deduction uses public information only -
-exactly what an observer of shot results could infer.
+`haloCellsAroundShip` / `markSunkHaloMisses` / `sunkHalo(board)` share one
+predicate: every cell adjacent (including diagonals) to a sunk ship's cells,
+excluding the ship's own cells. Under the no-touch rule those cells are
+provably empty, so the deduction uses public information only - exactly what an
+observer of shot results could infer.
 
-It is used twice:
+`applyShot` persists those cells as implicit misses (`shots = 1`) when a ship
+sinks. `sunkHalo` returns the same set for read-only checks.
+
+It is used in three places:
 
 - the enemy board dims halo cells and refuses to select them
   (`src/three/Scene.tsx`);
-- `Normal` and `Hard` bots exclude halo cells from their target pool.
+- `Normal` and `Hard` bots exclude halo cells from their target pool;
+- `applyShot` writes halo misses into `shots` so the map matches the deduction.
 
 ## Game-over Summary
 
