@@ -6,7 +6,51 @@ This document defines how the mobile browser frontend should be structured for t
 
 It translates the project, user flow, contract API, and Fhenix integration documents into an implementable web app architecture.
 
-## Goals
+It also records the architecture of the playable local practice build and the
+required migration boundary between local simulation and contract-derived
+state.
+
+## Current Playable Architecture
+
+The repository currently implements one local practice application:
+
+- `src/App.tsx` keeps the React Three Fiber canvas mounted and selects one of
+  four UI overlays: `home`, `placement`, `battle`, or `gameover`;
+- `src/state/store.ts` is one Zustand store containing navigation, placement,
+  the complete plaintext match, bot turns, animation queues, and UI state;
+- `src/game/board.ts` contains placement and board helpers;
+- `src/game/engine.ts` creates plaintext boards and resolves attacks;
+- `src/game/bot.ts` selects the local practice bot target;
+- `src/three/` renders both boards, ships, camera states, projectiles, and
+  effects directly from the local store;
+- `src/ui/` renders the four screen overlays;
+- `src/lib/sfx.ts` owns synthesized sound and the only persisted setting
+  (`localStorage.eb-muted`).
+
+There is no router, Privy provider, contract client, event sync, CoFHE client,
+query cache, or deployment configuration yet.
+
+In practice mode, the local store is intentionally authoritative. It knows both
+fleets and calls `applyAttack()` directly. That authority must never be reused
+for an on-chain friend match.
+
+## Migration Principle
+
+Practice and on-chain modes should coexist as two orchestration paths:
+
+- practice mode keeps using the local engine and local bot;
+- on-chain mode derives match truth from contract reads and finalized events;
+- pure placement helpers, board coordinates, model loaders, sound, and visual
+  effects may be shared;
+- plaintext match objects and bot-only state must not cross into on-chain
+  mode.
+
+Do not gradually add wallet and contract fields to the existing monolithic
+`useStore` until it becomes a mixed source of truth. Introduce an on-chain route
+shell and dedicated contract/query state, then adapt the existing scene to a
+public render model.
+
+## Target Goals
 
 The frontend must support:
 
@@ -47,7 +91,8 @@ Recommended MVP stack:
 - TypeScript;
 - React Three Fiber;
 - Three.js;
-- wagmi;
+- Privy React SDK for wallet-only login, connection, and session state;
+- wagmi through Privy's integration if React contract hooks are useful;
 - viem;
 - `@cofhe/sdk`;
 - Zustand;
@@ -110,6 +155,16 @@ src/
     App.tsx
     providers/
     routes/
+    phaseResolver.ts
+  practice/
+    practiceStore.ts
+    PracticeApp.tsx
+  onchain/
+    OnchainApp.tsx
+    matchQueries.ts
+    matchCommands.ts
+    eventSync.ts
+    renderModel.ts
   components/
     buttons/
     layout/
@@ -131,7 +186,9 @@ src/
     InteractionController.tsx
   web3/
     chains.ts
-    wallet.ts
+    privyConfig.ts
+    networkGuard.ts
+    clients.ts
     wagmiConfig.ts
   fhenix/
     cofheClient.ts
@@ -159,10 +216,14 @@ src/
     textures/
   copy/
     en.ts
+    errors.ts
   utils/
 ```
 
-The exact structure can change during implementation, but hidden-state privacy boundaries must remain explicit.
+This is a migration target, not a required immediate refactor. Existing
+`src/game`, `src/three`, and `src/ui` modules can move incrementally. The
+important boundary is that on-chain components consume a public render model
+rather than the local plaintext `MatchState`.
 
 ## Routes
 
@@ -226,21 +287,24 @@ The onboarding completion flag may be stored locally, but wallet connection stat
 The root app should initialize providers in this order:
 
 1. React error boundary.
-2. Router.
-3. wagmi wallet provider.
-4. Query/cache provider if used.
-5. Fhenix provider.
+2. Privy provider.
+3. Privy wagmi integration and query/cache provider if wagmi is used.
+4. Router.
+5. CoFHE client bridge after wallet and network readiness.
 6. App state provider if context is needed.
 7. 3D scene root.
 
-The Fhenix provider should wait until wallet and network state are ready before connecting the CoFHE client.
+Privy owns the connection UI. No second wallet modal should be mounted. The
+CoFHE client bridge must wait until Privy has an active external EVM wallet and
+the chain guard confirms Arbitrum Sepolia.
 
 ## Wallet and Network Layer
 
 The wallet layer should handle:
 
-- wallet connection;
-- wallet disconnect;
+- Privy readiness and authentication state;
+- active external EVM wallet selection;
+- wallet connection and disconnect through Privy;
 - account changes;
 - Arbitrum Sepolia detection;
 - network switching;
@@ -253,6 +317,10 @@ Required target network:
 
 - Arbitrum Sepolia;
 - chain id `421614`.
+
+The complete Privy configuration, supported-wallet scope, wrong-network
+recovery, mobile return, funding, and account-switch rules are defined in
+`docs/network-and-wallet-requirements.md`.
 
 Player-facing states:
 
@@ -362,6 +430,30 @@ Event handling rule:
 - never infer hidden state from event timing;
 - handle missed events by refetching on page focus and reconnect.
 
+Required event-to-read mapping:
+
+| Event | Required refresh | UI consequence |
+| --- | --- | --- |
+| `MatchCreated` | `getMatch`, creator match list | Route to `/match/:matchId` after receipt |
+| `MatchJoined` | `getMatch`, both player views | Resolve placement phase |
+| `FleetSubmitted` | submitting player view | Show submitted/waiting state |
+| `FleetValidationRequested` | player view, pending validation data if exposed | Show validation pending |
+| `FleetValidated` | both player views, `getMatch` | Show valid/invalid or ready state |
+| `MatchStarted` | `getMatch`, both player views | Build battle render model |
+| `TurnChanged` | `getMatch` | Update controls and turn banner |
+| `ShotSubmitted` | `getMatch`, `getPendingShot` | Lock targeting and show resolving |
+| `ShotResolutionRequested` | `getPendingShot` | Start allowed finalization flow |
+| `ShotResolved` | `getMatch`, move, move history, both public boards | Play one finalized result animation |
+| `MatchFinished` | `getMatch`, move history, both player views | Show contract-derived game over |
+| `MatchCancelled` | `getMatch` | Show cancelled state |
+| `MatchForfeited` | `getMatch` | Show forfeit result |
+| `TimeoutWinClaimed` | `getMatch` | Show timeout result |
+
+Event consumers must be idempotent. Dedupe logs by chain id, contract address,
+transaction hash, and log index. Visual effects should be keyed by finalized
+move id so reconnecting or receiving the same log twice does not play duplicate
+projectiles or result toasts.
+
 ## State Stores
 
 Recommended Zustand stores:
@@ -457,6 +549,79 @@ Tracks:
 - animation intensity.
 
 The scene store may receive match state, but it must not own match state.
+
+## Local-to-On-chain State Mapping
+
+The current `AppState` can remain authoritative only inside practice mode.
+
+| Current local field | Practice mode | On-chain replacement |
+| --- | --- | --- |
+| `screen` | Local screen enum | Pure route phase derived from wallet, network, asset, and contract reads |
+| `difficulty` | Local bot setting | Practice-only; absent from friend PvP |
+| `howItWorksOpen` | Local modal state | Shared UI state |
+| `placements` | Plaintext local fleet | Transient placement store; encrypt, submit, then clear |
+| `selectedSlot` | Placement UI state | Shared transient placement UI |
+| `placeOrientation` | Placement UI state | Shared transient placement UI |
+| `match` | Complete plaintext `MatchState` | Forbidden; replace with `MatchView`, player public views, moves, and pending-shot reads |
+| `match.boards.player.ships` | Full local fleet | Must not be retained after submission; exact owner-fleet rendering needs a separate authorized design |
+| `match.boards.bot.ships` | Full bot fleet | Must never exist in on-chain friend mode |
+| `match.boards.*.shots` | Local per-cell results | Decode contract `PublicBoard` attacked/miss/hit/sunk masks |
+| `match.turn` | Local `player`/`bot` enum | Compare `MatchView.currentTurn` with the active wallet address |
+| `match.moves` | Local move array | `getMoveHistory(matchId)` plus finalized move reads |
+| `match.winner` | Local side enum | `MatchView.winner` and terminal status |
+| `focus` | Camera state | Shared scene/UI state derived from phase and perspective |
+| `selectedCell` | Target selection | Local battle UI only; clear after submit, turn change, account change, or refetch conflict |
+| `busy` | Local animation lock | Derived transaction, receipt, CoFHE, and contract pending states |
+| `effects` | Local effect queue | Shared visual queue triggered only by finalized public results |
+| `projectiles` | Local projectile queue | Shared visual queue; on-chain launch timing must not imply a result |
+| `toast` | Local result message | Shared copy state created from finalized move data |
+| `forfeited` | Local boolean | Terminal contract status and `MatchForfeited` event |
+
+Current actions map as follows:
+
+| Current action | On-chain behavior |
+| --- | --- |
+| `startPlacement()` | Enter local placement UI after contract phase resolver allows it |
+| `placeAt()`, `pickUpAt()`, `rotateSelected()`, `autoPlace()`, `clearPlacement()` | Reuse pure local placement behavior before encryption |
+| `confirmFleet()` | Encrypt fleet, submit `submitFleet`, clear plaintext, wait for `FleetValidated` |
+| `selectCell()` | Remain local UI state, guarded by current public contract state |
+| `fire()` | Submit `attack`, recover pending shot, observe or submit finalization, then animate `ShotResolved` |
+| `forfeit()` | Submit contract `forfeit`; never set winner locally |
+| `rematch()` | Create a new match; never reuse terminal contract state |
+| `toHome()` | Route change only; it must not mutate contract state |
+| `resolveShot()` | Practice-only; forbidden in on-chain mode |
+| `chooseBotTarget()` | Practice-only; forbidden in friend PvP |
+
+## Public Scene Render Model
+
+The on-chain route should adapt contract reads into a render-only model instead
+of passing `MatchState` into `src/three/`.
+
+Minimum model:
+
+```ts
+interface PublicBattleRenderModel {
+  phase: 'waiting' | 'player-turn' | 'opponent-turn' | 'resolving' | 'finished'
+  perspective: 'creator' | 'opponent'
+  currentTurn: `0x${string}` | null
+  winner: `0x${string}` | null
+  playerBoard: PublicBoardRenderState
+  opponentBoard: PublicBoardRenderState
+  selectedCell: number | null
+  latestFinalizedMove: PublicMove | null
+}
+```
+
+`PublicBoardRenderState` may contain attacked, miss, hit, and sunk cells plus
+public ship-count metadata. It must not contain enemy placements, `shipAt`,
+encrypted fleet values, ciphertext-derived guesses, or unresolved shot
+results.
+
+After fleet submission, the first on-chain slice should hide exact owner fleet
+geometry unless an explicit authorized `decryptForView` flow is designed and
+reviewed. Keeping plaintext placement in memory for the whole match would
+violate the existing privacy-clearing requirement and would not survive mobile
+reloads consistently.
 
 ## Match Phase Resolution
 
@@ -694,8 +859,9 @@ Allowed local persistence:
 - onboarding completed flag;
 - graphics settings;
 - sound settings;
-- last used wallet connector if provided by the wallet library;
-- recently viewed match ids.
+- last used wallet preference only when Privy manages it;
+- recently viewed match ids;
+- intended route and match id during a mobile wallet handoff.
 
 Forbidden local persistence:
 
@@ -741,44 +907,47 @@ Detailed test planning belongs in `docs/testing-strategy.md`.
 
 Decisions still needed before implementation:
 
-- exact Vite project template;
 - exact router library;
-- exact Zustand store shape;
 - exact contract ABI generation workflow;
 - exact CoFHE SDK version;
 - exact encrypted fleet batching strategy;
 - whether PWA support is included in MVP;
 - whether a read-only indexer is deferred or included as optional convenience;
-- exact mobile performance budgets.
+- whether an authorized owner-only fleet view is added after the first on-chain
+  slice.
 
 ## Implementation Sequence
 
 Recommended frontend implementation order:
 
-1. Create the Vite React TypeScript app.
-2. Add routing and English copy foundation.
-3. Add wallet-aware entry gate and conditional onboarding.
-4. Add wallet connection and Arbitrum Sepolia guard.
-5. Add contract addresses, ABI, reads, and writes.
-6. Add Fhenix client provider.
-7. Build onboarding, menu, and opponent selection.
-8. Build match route and phase resolver.
-9. Build game field loading gate.
-10. Build friend match creation and invite link flow.
-11. Build fleet placement with local validation.
-12. Add Fhenix fleet encryption and `submitFleet`.
-13. Build event sync and match refetches.
-14. Build battle screen and attack flow.
-15. Add Fhenix shot finalization flow.
-16. Add 3D board models and effects.
-17. Add mobile performance tuning and QA.
+1. Preserve the current practice build and introduce an explicit
+   practice/on-chain mode boundary.
+2. Move shared English copy and error mappings into typed modules.
+3. Add routing, the on-chain route shell, and a pure phase resolver.
+4. Add Privy wallet-only login and the Arbitrum Sepolia guard.
+5. Add versioned contract addresses, ABI, typed reads, and typed writes.
+6. Add the CoFHE client bridge and account/chain invalidation.
+7. Build wallet-aware onboarding, menu, and opponent selection.
+8. Build friend match creation, invite links, and join flow.
+9. Reuse placement helpers in a transient on-chain placement store.
+10. Add fleet encryption, `submitFleet`, plaintext clearing, and validation
+    recovery.
+11. Build event sync, targeted refetches, and idempotent move processing.
+12. Adapt the existing 3D scene to `PublicBattleRenderModel`.
+13. Add attack, pending-shot recovery, and finalization flow.
+14. Add contract-derived game-over, forfeit, timeout, and rematch flows.
+15. Add mobile wallet return tests, performance tuning, and end-to-end QA.
 
 ## Related Documents
 
+- `docs/current-playable-build.md`
+- `docs/local-game-engine.md`
+- `docs/practice-mode-and-bot-ai.md`
 - `docs/project-description.md`
 - `docs/game-mechanics.md`
 - `docs/user-flows.md`
 - `docs/technical-architecture.md`
+- `docs/network-and-wallet-requirements.md`
 - `docs/fhenix-integration-plan.md`
 - `docs/contract-data-model.md`
 - `docs/contract-api.md`
