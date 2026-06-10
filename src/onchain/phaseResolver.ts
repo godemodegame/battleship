@@ -112,7 +112,7 @@ export function resolveMatchPhase(input: PhaseResolverInput): MatchPhase {
     }
 
     case 'WaitingForPlacement': {
-      // In the GAME-102 slice we return a simple actionable placement phase.
+      // In the initial on-chain shell (GAME-103) we return a simple actionable placement phase.
       // Later client code will map real per-player PlacementStatus here.
       return {
         kind: 'placement',

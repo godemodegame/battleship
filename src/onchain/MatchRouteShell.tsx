@@ -90,9 +90,9 @@ function PhasePanel({ phase }: { phase: ReturnType<typeof resolveMatchPhase> }) 
 export function MatchRouteShell() {
   const { deploymentId, matchId } = useParams()
 
-  // For the GAME-102 slice we synthesize a mock MatchView from the URL so the
-  // route can demonstrate phase rendering without a contract client and without
-  // ever importing the local plaintext attack engine.
+  // Demo-only: synthesize a mock MatchView from the URL so the route shell can
+  // demonstrate phase rendering without a contract client and without ever
+  // importing the local plaintext attack engine (GAME-103 empty shell).
   const demoMatch = makeDemoMatch(deploymentId ?? 'arb-sepolia-v1', matchId ?? 'demo')
 
   // Demo viewer/wallet context is also derived from matchId for broader phase coverage
@@ -136,7 +136,7 @@ export function MatchRouteShell() {
         <Link className="btn primary" to="/practice">
           Back to Practice
         </Link>
-        <p className="footnote">Mocked on-chain phases for GAME-102 (demo via URL matchId). Real contract wiring later.</p>
+        <p className="footnote">Mocked on-chain phases for GAME-103 (empty shell via URL matchId). Real contract wiring later.</p>
       </div>
     </div>
   )

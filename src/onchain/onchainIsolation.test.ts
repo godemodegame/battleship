@@ -10,7 +10,7 @@ async function readOnchainSource(rel: string): Promise<string> {
   return readFile(abs, 'utf8')
 }
 
-describe('on-chain module isolation (GAME-102)', () => {
+describe('on-chain module isolation (GAME-103 empty shell)', () => {
   it('phaseResolver source does not reference the local attack engine or bot', async () => {
     const src = await readOnchainSource('./phaseResolver.ts')
     // Only flag actual module imports, not prose in comments.
