@@ -43,7 +43,11 @@ production bundle; `npm run preview` serves that bundle.
 
 ## Documentation
 
-Read the documents in this order:
+Current build documentation:
+
+- [Current Playable Build](docs/current-playable-build.md) - what the game does today, how to run it, and how the prototype maps to the on-chain target.
+
+For the target on-chain product, read the documents in this order:
 
 1. [Project Description](docs/project-description.md) - high-level product direction.
 2. [Game Mechanics](docs/game-mechanics.md) - base Battleship rules and gameplay loop.
