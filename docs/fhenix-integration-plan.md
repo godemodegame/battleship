@@ -118,10 +118,15 @@ The app should connect wallets through the frontend web3 stack, then pass viem-c
 
 Recommended stack:
 
+- Privy React SDK for wallet-only login, external wallet connection, and
+  account/session state;
 - `viem` for low-level clients;
-- `wagmi` for React wallet state;
-- WalletConnect-compatible mobile wallet support;
+- Privy's wagmi integration if React contract hooks are used;
+- Privy-managed injected and WalletConnect-compatible mobile wallet support;
 - CoFHE client connected after the wallet and network are ready.
+
+Privy owns the connection UI. The application must not add a second wallet
+modal through wagmi, RainbowKit, Web3Modal, or WalletConnect directly.
 
 The CoFHE client must reconnect when:
 
