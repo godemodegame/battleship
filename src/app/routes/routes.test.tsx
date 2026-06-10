@@ -71,7 +71,7 @@ describe('application routes', () => {
     expect(screen.getByRole('button', { name: 'Practice vs Bot' })).toBeTruthy()
   })
 
-  it('resets practice state when leaving the practice route', () => {
+  it('resets practice state when leaving the practice route (e.g. client-side navigation to /match or 404)', () => {
     const { unmount } = render(<TestRouter initialEntries={['/practice']} />)
     useStore.getState().startPlacement()
     expect(useStore.getState().screen).toBe('placement')
@@ -85,32 +85,34 @@ describe('application routes', () => {
 
   it('aborts in-flight fire when leaving the practice route', async () => {
     vi.useFakeTimers()
-    const { createMatch } = await import('../../game/engine')
-    const twoCellShip = [{ slot: 3, row: 0, col: 0, orientation: 'h' as const }]
+    try {
+      const { createMatch } = await import('../../game/engine')
+      const twoCellShip = [{ slot: 3, row: 0, col: 0, orientation: 'h' as const }]
 
-    const { unmount } = render(<TestRouter initialEntries={['/practice']} />)
-    useStore.setState({
-      screen: 'battle',
-      match: createMatch(twoCellShip, twoCellShip),
-      focus: 'enemy',
-      selectedCell: 0,
-      busy: false,
-      effects: [],
-      projectiles: [],
-      toast: null,
-      forfeited: false,
-    })
+      const { unmount } = render(<TestRouter initialEntries={['/practice']} />)
+      useStore.setState({
+        screen: 'battle',
+        match: createMatch(twoCellShip, twoCellShip),
+        focus: 'enemy',
+        selectedCell: 0,
+        busy: false,
+        effects: [],
+        projectiles: [],
+        toast: null,
+        forfeited: false,
+      })
 
-    const firing = useStore.getState().fire()
-    await vi.advanceTimersByTimeAsync(100)
-    unmount()
-    await vi.runAllTimersAsync()
-    await firing
+      const firing = useStore.getState().fire()
+      await vi.advanceTimersByTimeAsync(100)
+      unmount()
+      await vi.runAllTimersAsync()
+      await firing
 
-    expect(useStore.getState().screen).toBe('home')
-    expect(useStore.getState().match).toBeNull()
-    expect(useStore.getState().busy).toBe(false)
-
-    vi.useRealTimers()
+      expect(useStore.getState().screen).toBe('home')
+      expect(useStore.getState().match).toBeNull()
+      expect(useStore.getState().busy).toBe(false)
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })
