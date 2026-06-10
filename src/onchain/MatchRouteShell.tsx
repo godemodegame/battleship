@@ -9,6 +9,7 @@ import {
 const DEMO_CREATOR = '0x1111111111111111111111111111111111111111' as const
 const DEMO_OPPONENT = '0x2222222222222222222222222222222222222222' as const
 const DEMO_INVITED = '0x3333333333333333333333333333333333333333' as const
+const DEMO_SPECTATOR = '0x4444444444444444444444444444444444444444' as const
 
 /**
  * Demo-only mock factory so the route can render different phases
@@ -31,6 +32,20 @@ function makeDemoMatch(deploymentId: string, matchId: string): MatchView {
   }
 
   const id = (matchId || '').toLowerCase()
+
+  // Only apply special demo phase synthesis when the matchId contains an explicit
+  // "demo" marker. This prevents a real future on-chain matchId (opaque, e.g. a uuid
+  // or on-chain id) that happens to contain substrings like "win", "place", "battle",
+  // "join", "resolv" etc. from accidentally activating a mocked phase or viewer.
+  // Supported URLs now use the "demo-*" convention (see routes tests and comments below).
+  // The entire makeDemoMatch factory is temporary and will be replaced by real
+  // MatchView loading from contract reads in later slices.
+  const hasDemoMarker = id.includes('demo')
+  if (!hasDemoMarker) {
+    // Plain ids (e.g. the restore-navigation test using "42") get the safe default
+    // creator + WaitingForOpponent view. No special patches.
+    return base
+  }
 
   // Rules are checked in declaration order. Put more specific matchers first.
   const rules: Array<{ key: string; patch: Partial<MatchView> & { status: MatchView['status'] } }> = [
@@ -97,31 +112,37 @@ export function MatchRouteShell() {
 
   // Demo viewer/wallet context is also derived from matchId for broader phase coverage
   // in the shell (e.g. "demo-join-invited" will render the 'join' phase for the invited wallet).
-  // Supported demo tokens (extendable):
-  //   - join / invited → invited wallet (exercises 'join')
-  //   - no-wallet → hasWallet:false (exercises 'wallet-required')
-  //   - wrong-chain → isCorrectChain:false (exercises 'wrong-network')
-  //   - (default) creator wallet for placement/battle/finished/etc.
+  // Supported demo tokens (extendable; require "demo" marker to avoid clashing with real IDs):
+  //   - demo-join / demo-invited → invited wallet (exercises 'join')
+  //   - demo-observer / demo-spectator → third-party non-participant wallet (exercises
+  //     the participant guard in resolveMatchPhase → waiting-for-opponent for active phases)
+  //   - demo-no-wallet → hasWallet:false (exercises 'wallet-required')
+  //   - demo-wrong-chain → isCorrectChain:false (exercises 'wrong-network')
+  //   - (default for demo- ids) creator wallet for placement/battle/finished/etc.
+  //   - plain ids (e.g. "42") → safe default creator + waiting-for-opponent view
   // NOTE: Full coverage of every MatchPhase kind through the route shell + PhasePanel
   // is intentionally limited in this slice; unit tests in phaseResolver.test.ts cover the
   // pure function exhaustively. Real implementation will source values from Privy + chain
   // guard and the match from on-chain reads (public MatchView shape only).
   const id = (matchId || '').toLowerCase()
-  const demoWallet = (id.includes('join') || id.includes('invited'))
+  const hasDemoMarker = id.includes('demo')
+  const demoWallet = hasDemoMarker && (id.includes('join') || id.includes('invited'))
     ? DEMO_INVITED
+    : hasDemoMarker && (id.includes('observer') || id.includes('spectator'))
+    ? DEMO_SPECTATOR
     : DEMO_CREATOR
 
   const demoInput = {
-    hasWallet: !id.includes('no-wallet'),
-    walletAddress: id.includes('no-wallet') ? null : demoWallet,
-    isCorrectChain: !id.includes('wrong-chain'),
+    hasWallet: !(hasDemoMarker && id.includes('no-wallet')),
+    walletAddress: (hasDemoMarker && id.includes('no-wallet')) ? null : demoWallet,
+    isCorrectChain: !(hasDemoMarker && id.includes('wrong-chain')),
     match: demoMatch,
   }
 
   const phase = resolveMatchPhase(demoInput)
 
   return (
-    <div className="overlay home">
+    <div className="overlay home" data-game-slice="onchain-shell-103" data-testid="match-route-shell">
       <div className="title-lockup">
         <span className="title-kicker">On-chain Match</span>
         <h1>Match Route</h1>
