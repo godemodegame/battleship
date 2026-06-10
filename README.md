@@ -8,6 +8,39 @@ The game must be fully on-chain for match state and rules, use Fhenix/CoFHE for 
 
 All project documentation, game UI text, player-facing copy, errors, labels, and prompts must be written in English.
 
+## Current Build Status
+
+The repository contains a playable local practice build. It is a complete
+player-versus-bot slice of the game running entirely in the browser with no
+backend, wallet, or chain interaction.
+
+Playable now:
+
+- mobile-first 3D scene (React Three Fiber and Three.js) with home, placement,
+  battle, and game-over screens;
+- manual and automatic fleet placement with the classic no-touch rule;
+- practice match against a local bot with `Easy`, `Normal`, and `Hard`
+  difficulties;
+- attack projectile, miss, hit, and sunk effects with synthesized sound.
+
+Future milestones (designed in the docs, not implemented):
+
+- wallet connection (Privy) and Arbitrum Sepolia network guard;
+- smart contract package and on-chain friend matches;
+- Fhenix/CoFHE encrypted fleet state;
+- automated tests and production deployment.
+
+### Run Locally
+
+```bash
+npm install
+npm run dev
+```
+
+Vite prints a local URL (the dev server also listens on the LAN so a phone on
+the same network can open it). `npm run build` type-checks and produces a
+production bundle; `npm run preview` serves that bundle.
+
 ## Documentation
 
 Read the documents in this order:
