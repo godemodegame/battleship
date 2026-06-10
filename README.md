@@ -51,6 +51,7 @@ Current build documentation:
 - [Runtime Asset Pipeline](docs/runtime-asset-pipeline.md) - how 3D assets flow from sources to the running game: locations, formats, normalization, preload, and replacement steps.
 - [VFX Forge Workflow](docs/vfx-forge-workflow.md) - producing the animated `vfx-*` GLB effects with the standalone studio in `vfx-app/`.
 - [Mobile Performance Budget](docs/mobile-performance-budget.md) - measured baseline plus frame-rate, load, asset, shadow, and lighting budgets new work must fit.
+- [Local Prototype Test Plan](docs/local-prototype-test-plan.md) - milestone 0 testing for the current build: engine units, deterministic bot tests, screen smoke, and Playwright flows.
 
 For the target on-chain product, read the documents in this order:
 
