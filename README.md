@@ -45,6 +45,7 @@ production bundle; `npm run preview` serves that bundle.
 
 Current build documentation:
 
+- [Game Implementation Roadmap](docs/game-implementation-roadmap.md) - active engineering sequence from the local practice build to the public Privy/CoFHE friend-match MVP.
 - [Current Playable Build](docs/current-playable-build.md) - what the game does today, how to run it, and how the prototype maps to the on-chain target.
 - [Local Game Engine](docs/local-game-engine.md) - exact rules implemented by the local engine: board indexing, fleet, placement, attacks, and turn passing.
 - [Practice Mode and Bot AI](docs/practice-mode-and-bot-ai.md) - the local practice bot: difficulty behavior, public-information targeting, and migration paths.
