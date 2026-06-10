@@ -55,7 +55,6 @@ export interface PhaseResolverInput {
 export type MatchPhase =
   | { kind: 'wallet-required' }
   | { kind: 'wrong-network' }
-  | { kind: 'loading' }
   | { kind: 'not-found' }
   | { kind: 'join' }
   | { kind: 'waiting-for-opponent' }
@@ -179,8 +178,6 @@ export function phaseLabel(phase: MatchPhase): string {
       return 'Connect wallet to continue'
     case 'wrong-network':
       return 'Switch to Arbitrum Sepolia'
-    case 'loading':
-      return 'Loading match'
     case 'not-found':
       return 'Match not found'
     case 'join':

@@ -120,7 +120,16 @@ describe('application routes', () => {
     render(<TestRouter initialEntries={['/match/arb-sepolia-v1/demo-place-123']} />)
     expect(screen.getByRole('heading', { name: 'Match Route' })).toBeTruthy()
     expect(screen.getByTestId('match-phase-kind').textContent).toContain('placement')
-    expect(screen.getByTestId('match-phase-label').textContent).toMatch(/Place your fleet|Waiting for opponent fleet/)
+    // demo-place-123 specifically produces the creator "Place your fleet" label
+    expect(screen.getByTestId('match-phase-label').textContent).toBe('Place your fleet')
+  })
+
+  it('renders mocked on-chain join phase for invited wallet via demo route', () => {
+    // Uses the demo viewer selection (invited wallet for ids containing "join")
+    // so that the route shell + resolver integration exercises the 'join' phase.
+    render(<TestRouter initialEntries={['/match/arb-sepolia-v1/demo-join-invited']} />)
+    expect(screen.getByTestId('match-phase-kind').textContent).toContain('join')
+    expect(screen.getByTestId('match-phase-label').textContent).toBe('Join this match')
   })
 
   it('renders mocked on-chain battle (your turn) phase', () => {
