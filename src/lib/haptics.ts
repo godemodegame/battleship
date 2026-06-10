@@ -2,12 +2,11 @@
  * Haptic feedback.
  *
  * - Native: uses navigator.vibrate where supported (Android Chrome etc.).
- * - iOS Safari fallback: synthesizes extremely short, quiet low-frequency audio bursts
- *   via the shared AudioContext. Modern iPhones map these to the Taptic Engine.
- *   The bursts are tuned to be felt more than heard (very low gain + short duration).
+ * - iOS Safari fallback: synthesizes short low-frequency audio bursts via the shared
+ *   AudioContext. Modern iPhones map suitable transients to the Taptic Engine.
  *
- * Persisted mute toggle independent of sound. Primes audio context via sfx helpers
- * so the first haptic on iOS works after a user gesture.
+ * Persisted mute toggle independent of sound. The sfx priming is now unconditional
+ * (see sfx.ts) so haptics get a working context even when sound is muted.
  */
 import { ensureAudio } from './sfx'
 
@@ -27,7 +26,8 @@ function vibrate(pattern: number | number[]) {
 
 /**
  * iOS Taptic / cross-platform audio haptic.
- * Very short, low-gain low-frequency transients. Keep gain tiny so it's primarily tactile.
+ * Short low-frequency bursts. Gains chosen to be strong enough to trigger
+ * Taptic Engine on iPhone Safari while remaining subtle.
  */
 function audioHaptic(
   style:
@@ -51,7 +51,14 @@ function audioHaptic(
   }
   if (!ac) return
 
-  const t0 = ac.currentTime
+  // On iOS Safari the context can auto-suspend between user gestures (e.g. during
+  // flight/impact delays). Nudge resume right before we emit the transient.
+  if (ac.state === 'suspended') {
+    void ac.resume().catch(() => {})
+  }
+
+  // Small lead time helps after a resume() call and gives the scheduler headroom.
+  const t0 = ac.currentTime + 0.005
 
   const play = (freq: number, dur: number, gain: number, delay = 0) => {
     try {
@@ -79,36 +86,36 @@ function audioHaptic(
   }
 
   // Tuned for tactile feel on iPhone Taptic (and subtle thump elsewhere).
-  // Gains are deliberately low (0.015–0.055).
+  // Gains are higher than before so the burst reliably engages the Taptic Engine.
   switch (style) {
     case 'light':
     case 'tap':
-      play(62, 0.014, 0.022)
+      play(62, 0.014, 0.07)
       break
     case 'medium':
     case 'select':
-      play(48, 0.026, 0.032)
+      play(48, 0.026, 0.1)
       break
     case 'heavy':
     case 'impact':
-      play(38, 0.038, 0.045)
+      play(38, 0.038, 0.14)
       break
     case 'double':
-      play(52, 0.018, 0.028)
-      play(44, 0.022, 0.026, 0.032)
+      play(52, 0.018, 0.08)
+      play(44, 0.022, 0.07, 0.032)
       break
     case 'error':
-      play(58, 0.012, 0.024)
-      play(52, 0.014, 0.022, 0.022)
+      play(58, 0.012, 0.07)
+      play(52, 0.014, 0.06, 0.022)
       break
     case 'win':
-      play(55, 0.016, 0.026)
-      play(62, 0.018, 0.028, 0.028)
-      play(48, 0.026, 0.032, 0.055)
+      play(55, 0.016, 0.08)
+      play(62, 0.018, 0.09, 0.028)
+      play(48, 0.026, 0.1, 0.055)
       break
     case 'lose':
-      play(36, 0.042, 0.048)
-      play(30, 0.028, 0.032, 0.055)
+      play(36, 0.042, 0.13)
+      play(30, 0.028, 0.09, 0.055)
       break
   }
 }
@@ -142,6 +149,15 @@ export const haptics = {
   setMuted(value: boolean) {
     muted = value
     localStorage.setItem('eb-haptics-muted', value ? '1' : '0')
+    if (!value) {
+      // Unmuting haptics: prime so the next haptic (possibly not on a fresh gesture)
+      // can use an already-unlocked AudioContext on iOS Safari.
+      try {
+        ensureAudio()
+      } catch {
+        // ignore
+      }
+    }
   },
 
   // Low-level primitives
