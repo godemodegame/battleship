@@ -8,8 +8,8 @@ export function NotFoundScreen() {
         <p className="tagline">This route is not available yet.</p>
       </div>
       <div className="home-actions">
-        <Link className="btn primary" to="/">
-          Back to Home
+        <Link className="btn primary" to="/practice">
+          Back to Practice
         </Link>
       </div>
     </div>

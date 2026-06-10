@@ -14,7 +14,7 @@ export function MatchRouteShell() {
       </div>
       <div className="home-actions">
         <p>On-chain match shell will be implemented in a later phase.</p>
-        <Link className="btn primary" to="/">
+        <Link className="btn primary" to="/practice">
           Back to Practice
         </Link>
       </div>

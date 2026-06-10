@@ -278,7 +278,10 @@ export const useStore = create<AppState>((set, get) => {
       set({ busy: true, selectedCell: null })
 
       const result = await resolveShot('player', selectedCell, sessionId)
-      if (result === 'aborted' || interrupted(sessionId)) return
+      if (result === 'aborted' || interrupted(sessionId)) {
+        set({ busy: false })
+        return
+      }
       if (result === 'won') {
         sfx.win()
         set({ screen: 'gameover', busy: false })
@@ -291,12 +294,18 @@ export const useStore = create<AppState>((set, get) => {
 
       set({ focus: 'player' })
       await delay(SWING_MS + 350 + randomSource() * 500)
-      if (interrupted(sessionId)) return
+      if (interrupted(sessionId)) {
+        set({ busy: false })
+        return
+      }
 
       while (get().match?.turn === 'bot') {
         const target = chooseBotTarget(get().match!.boards.player, difficulty, randomSource)
         const botResult = await resolveShot('bot', target, sessionId)
-        if (botResult === 'aborted' || interrupted(sessionId)) return
+        if (botResult === 'aborted' || interrupted(sessionId)) {
+          set({ busy: false })
+          return
+        }
         if (botResult === 'won') {
           sfx.lose()
           set({ screen: 'gameover', busy: false })
@@ -305,12 +314,18 @@ export const useStore = create<AppState>((set, get) => {
         if (botResult === 'miss') break
 
         await delay(350 + randomSource() * 350)
-        if (interrupted(sessionId)) return
+        if (interrupted(sessionId)) {
+          set({ busy: false })
+          return
+        }
       }
 
       set({ focus: 'enemy' })
       await delay(SWING_MS / 2)
-      if (interrupted(sessionId)) return
+      if (interrupted(sessionId)) {
+        set({ busy: false })
+        return
+      }
       set({ busy: false })
     },
 

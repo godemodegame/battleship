@@ -67,7 +67,7 @@ describe('application routes', () => {
     const user = userEvent.setup()
     render(<TestRouter initialEntries={['/unknown-route']} />)
     expect(screen.getByRole('heading', { name: 'Page Not Found' })).toBeTruthy()
-    await user.click(screen.getByRole('link', { name: 'Back to Home' }))
+    await user.click(screen.getByRole('link', { name: 'Back to Practice' }))
     expect(screen.getByRole('button', { name: 'Practice vs Bot' })).toBeTruthy()
   })
 
