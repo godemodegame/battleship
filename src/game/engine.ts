@@ -65,6 +65,11 @@ function applyShot(board: BoardState, cell: number): { board: BoardState; result
   if (sunk) {
     ship.sunk = true
     for (const c of ship.cells) shots[c] = 3
+    for (const c of ship.cells) {
+      for (const near of neighborhood(c)) {
+        if (board.shipAt[near] !== board.shipAt[c] && shots[near] === 0) shots[near] = 1
+      }
+    }
   } else {
     shots[cell] = 2
   }

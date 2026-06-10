@@ -56,6 +56,7 @@ describe('applyAttack', () => {
 
     expect(resolved.move).toMatchObject({ result: 'sunk', shipSlot: 3 })
     expect(resolved.match.boards.bot.shots.slice(0, 2)).toEqual([3, 3])
+    expect(resolved.match.boards.bot.shots[11]).toBe(1)
     expect(resolved.match.winner).toBeNull()
     expect(resolved.match.turn).toBe('player')
   })
@@ -101,6 +102,7 @@ describe('sunkHalo', () => {
 
     expect(sunkHalo(sunkBoard)).toEqual(new Set([1, 10, 11]))
     expect(sunkHalo(sunkBoard).has(0)).toBe(false)
+    for (const cell of [1, 10, 11]) expect(sunkBoard.shots[cell]).toBe(1)
   })
 
   it('never contains another ship cell in a valid no-touch fleet', () => {

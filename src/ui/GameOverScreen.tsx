@@ -34,7 +34,7 @@ export function GameOverScreen() {
           </div>
           <div className="stat">
             <span className="stat-value">{s.botAccuracy}%</span>
-            <span className="stat-label">Bot accuracy</span>
+            <span className="stat-label">Точность противника</span>
           </div>
           <div className="stat">
             <span className="stat-value">
