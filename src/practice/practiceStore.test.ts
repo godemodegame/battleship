@@ -26,7 +26,7 @@ vi.mock('../lib/sfx', () => ({
   },
 }))
 
-import { matchSummary, setPracticeRandomSource, useStore } from './store'
+import { matchSummary, resetPracticeState, setPracticeRandomSource, useStore } from './practiceStore'
 
 const twoCellShip: Placement[] = [
   { slot: 3, row: 0, col: 0, orientation: 'h' },
@@ -34,25 +34,6 @@ const twoCellShip: Placement[] = [
 const oneCellShip: Placement[] = [
   { slot: 6, row: 0, col: 0, orientation: 'h' },
 ]
-
-function resetStore() {
-  useStore.setState({
-    screen: 'home',
-    difficulty: 'normal',
-    howItWorksOpen: false,
-    placements: new Array(10).fill(null),
-    selectedSlot: null,
-    placeOrientation: 'h',
-    match: null,
-    focus: 'enemy',
-    selectedCell: null,
-    busy: false,
-    effects: [],
-    projectiles: [],
-    toast: null,
-    forfeited: false,
-  })
-}
 
 function startBattle(
   selectedCell: number | null,
@@ -78,7 +59,7 @@ describe('battle turn orchestration', () => {
     vi.useFakeTimers()
     mocks.chooseBotTarget.mockReset()
     setPracticeRandomSource(seededRandom(1))
-    resetStore()
+    resetPracticeState()
   })
 
   afterEach(() => {
@@ -189,9 +170,57 @@ describe('battle turn orchestration', () => {
   })
 })
 
+describe('resetPracticeState', () => {
+  beforeEach(() => {
+    vi.useFakeTimers()
+    setPracticeRandomSource(seededRandom(3))
+    resetPracticeState()
+  })
+
+  afterEach(() => {
+    setPracticeRandomSource()
+    vi.useRealTimers()
+  })
+
+  it('resets all practice fields to their baseline', () => {
+    useStore.getState().startPlacement()
+    useStore.setState({ difficulty: 'hard', howItWorksOpen: true, busy: true })
+
+    resetPracticeState()
+
+    expect(useStore.getState()).toMatchObject({
+      screen: 'home',
+      difficulty: 'normal',
+      howItWorksOpen: false,
+      selectedSlot: null,
+      match: null,
+      busy: false,
+      effects: [],
+      projectiles: [],
+      toast: null,
+      forfeited: false,
+    })
+    expect(useStore.getState().placements).toEqual(new Array(10).fill(null))
+  })
+
+  it('aborts in-flight fire when the practice session is reset', async () => {
+    startBattle(0)
+
+    const firing = useStore.getState().fire()
+    await vi.advanceTimersByTimeAsync(100)
+    resetPracticeState()
+    await vi.runAllTimersAsync()
+    await firing
+
+    expect(useStore.getState().screen).toBe('home')
+    expect(useStore.getState().match).toBeNull()
+    expect(useStore.getState().busy).toBe(false)
+  })
+})
+
 describe('placement and match lifecycle', () => {
   beforeEach(() => {
-    resetStore()
+    resetPracticeState()
     setPracticeRandomSource(seededRandom(7))
   })
 

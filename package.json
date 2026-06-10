@@ -2,6 +2,9 @@
   "name": "encrypted-battleship",
   "private": true,
   "version": "0.1.0",
+  "engines": {
+    "node": "20.x"
+  },
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -9,8 +12,8 @@
     "preview": "vite preview",
     "test": "vitest run --passWithNoTests",
     "test:watch": "vitest",
-    "test:unit": "vitest run src/game src/state --passWithNoTests",
-    "test:screen": "vitest run src/ui src/test --passWithNoTests",
+    "test:unit": "vitest run src/game src/practice src/onchain src/render src/copy --passWithNoTests",
+    "test:screen": "vitest run src/ui src/app src/test --passWithNoTests",
     "test:ci": "npm run build && npm run test:unit && npm run test:screen",
     "test:e2e": "playwright test --pass-with-no-tests",
     "test:e2e:install": "playwright install chromium"
@@ -20,6 +23,7 @@
     "@react-three/fiber": "^8.18.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
+    "react-router-dom": "^7.17.0",
     "three": "^0.160.1",
     "zustand": "^4.5.7"
   },
@@ -27,6 +31,7 @@
     "@playwright/test": "^1.60.0",
     "@testing-library/react": "^16.3.2",
     "@testing-library/user-event": "^14.6.1",
+    "@types/node": "^20.19.42",
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
     "@types/three": "^0.160.0",

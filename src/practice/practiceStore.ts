@@ -5,6 +5,7 @@ import { applyAttack, createMatch, sunkHalo } from '../game/engine'
 import { chooseBotTarget } from '../game/bot'
 import type { Difficulty, MatchState, Orientation, Placement, Side } from '../game/types'
 import { sfx } from '../lib/sfx'
+import { resultCopy } from '../copy/en'
 
 export type Screen = 'home' | 'placement' | 'battle' | 'gameover'
 
@@ -78,35 +79,82 @@ const SWING_MS = 750
 let nextId = 1
 const delay = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms))
 let randomSource = Math.random
+let practiceSessionId = 0
 
 /** Allows deterministic practice orchestration in tests without patching globals. */
 export function setPracticeRandomSource(rnd: () => number = Math.random) {
   randomSource = rnd
 }
 
+/** Resets practice flow state when leaving the practice route. */
+export function resetPracticeState() {
+  practiceSessionId++
+  useStore.setState({
+    screen: 'home',
+    difficulty: 'normal',
+    howItWorksOpen: false,
+    placements: FLEET.map(() => null),
+    selectedSlot: null,
+    placeOrientation: 'h',
+    match: null,
+    focus: 'enemy',
+    selectedCell: null,
+    busy: false,
+    effects: [],
+    projectiles: [],
+    toast: null,
+    forfeited: false,
+  })
+}
+
 function shotToast(result: 'miss' | 'hit' | 'sunk', by: Side, label: string | undefined): Toast {
   const yours = by === 'player'
-  if (result === 'miss') return { id: nextId++, text: 'Miss', tone: 'cyan' }
-  if (result === 'hit') return { id: nextId++, text: 'Hit', tone: yours ? 'amber' : 'red' }
+  if (result === 'miss') return { id: nextId++, text: resultCopy.miss, tone: 'cyan' }
+  if (result === 'hit') return { id: nextId++, text: resultCopy.hit, tone: yours ? 'amber' : 'red' }
+  const ship = label ?? 'ship'
   return {
     id: nextId++,
-    text: yours ? `Sunk — enemy ${label} destroyed` : `Sunk — your ${label} is lost`,
+    text: yours ? resultCopy.sunkEnemy(ship) : resultCopy.sunkYours(ship),
     tone: yours ? 'amber' : 'red',
   }
 }
 
 export const useStore = create<AppState>((set, get) => {
-  /** True when the battle this shot belongs to is no longer running (forfeit, rematch). */
-  const interrupted = () => get().screen !== 'battle' || !get().match || get().match!.winner !== null
+  const sessionAborted = (sessionId: number) => practiceSessionId !== sessionId
+
+  /**
+   * True when the battle this shot belongs to is no longer running (forfeit, rematch).
+   * We intentionally do NOT test match.winner here: a winning shot sets the winner
+   * inside resolveShot, and the post-impact interrupted() check must still let that
+   * shot resolve as 'won' rather than 'aborted'. Every winner-setting path also leaves
+   * the 'battle' screen, so the screen check already covers finished matches.
+   */
+  const battleLeft = () => get().screen !== 'battle' || !get().match
+
+  const interrupted = (sessionId: number) => sessionAborted(sessionId) || battleLeft()
+
+  /**
+   * Clears busy after an interrupted shot — but only while this session is still
+   * active. resetPracticeState() bumps practiceSessionId; if a newer practice session
+   * has already started its own fire() (busy:true), clearing busy here would clobber it
+   * and allow a concurrent fire(). Skip the reset when the session is stale.
+   */
+  const releaseBusy = (sessionId: number) => {
+    if (!sessionAborted(sessionId)) set({ busy: false })
+  }
 
   /** Plays one shot's full visual sequence and applies it to the match. */
-  async function resolveShot(by: Side, cell: number): Promise<'miss' | 'hit' | 'sunk' | 'won' | 'aborted'> {
+  async function resolveShot(
+    by: Side,
+    cell: number,
+    sessionId: number,
+  ): Promise<'miss' | 'hit' | 'sunk' | 'won' | 'aborted'> {
     const projectile: ProjectileSpec = { id: nextId++, from: by, cell }
     set((s) => ({ projectiles: [...s.projectiles, projectile] }))
     sfx.fire()
     await delay(FLIGHT_MS)
     set((s) => ({ projectiles: s.projectiles.filter((p) => p.id !== projectile.id) }))
-    if (interrupted()) return 'aborted'
+    if (interrupted(sessionId)) return 'aborted'
 
     const { match, move } = applyAttack(get().match!, by, cell)
     const defender: Side = by === 'player' ? 'bot' : 'player'
@@ -120,6 +168,7 @@ export const useStore = create<AppState>((set, get) => {
     sfx[move.result]()
 
     await delay(move.result === 'sunk' ? SUNK_MS : IMPACT_MS)
+    if (interrupted(sessionId)) return 'aborted'
     return match.winner ? 'won' : move.result
   }
 
@@ -240,13 +289,17 @@ export const useStore = create<AppState>((set, get) => {
     },
 
     fire: async () => {
+      const sessionId = practiceSessionId
       const { match, busy, selectedCell, difficulty } = get()
       if (!match || match.winner || busy || match.turn !== 'player') return
       if (selectedCell === null || match.boards.bot.shots[selectedCell] !== 0) return
       set({ busy: true, selectedCell: null })
 
-      const result = await resolveShot('player', selectedCell)
-      if (result === 'aborted') return
+      const result = await resolveShot('player', selectedCell, sessionId)
+      if (result === 'aborted' || interrupted(sessionId)) {
+        releaseBusy(sessionId)
+        return
+      }
       if (result === 'won') {
         sfx.win()
         set({ screen: 'gameover', busy: false })
@@ -259,12 +312,18 @@ export const useStore = create<AppState>((set, get) => {
 
       set({ focus: 'player' })
       await delay(SWING_MS + 350 + randomSource() * 500)
-      if (interrupted()) return
+      if (interrupted(sessionId)) {
+        releaseBusy(sessionId)
+        return
+      }
 
       while (get().match?.turn === 'bot') {
         const target = chooseBotTarget(get().match!.boards.player, difficulty, randomSource)
-        const botResult = await resolveShot('bot', target)
-        if (botResult === 'aborted') return
+        const botResult = await resolveShot('bot', target, sessionId)
+        if (botResult === 'aborted' || interrupted(sessionId)) {
+          releaseBusy(sessionId)
+          return
+        }
         if (botResult === 'won') {
           sfx.lose()
           set({ screen: 'gameover', busy: false })
@@ -273,11 +332,18 @@ export const useStore = create<AppState>((set, get) => {
         if (botResult === 'miss') break
 
         await delay(350 + randomSource() * 350)
-        if (interrupted()) return
+        if (interrupted(sessionId)) {
+          releaseBusy(sessionId)
+          return
+        }
       }
 
       set({ focus: 'enemy' })
       await delay(SWING_MS / 2)
+      if (interrupted(sessionId)) {
+        releaseBusy(sessionId)
+        return
+      }
       set({ busy: false })
     },
 

@@ -2,11 +2,12 @@ import * as THREE from 'three'
 import { Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { easing } from 'maath'
-import { useStore } from '../state/store'
+import { useStore } from '../practice/practiceStore'
+import { practiceBattleModel } from '../practice/practiceRenderModel'
 import { FLEET } from '../game/constants'
 import { canPlace, shipCells } from '../game/board'
-import { sunkHalo } from '../game/engine'
 import type { Placement } from '../game/types'
+import type { BattleRenderModel, BoardRenderData, RenderShip } from '../render/model'
 import { Ocean } from './Ocean'
 import { Board, BoardBase, SelectionFrame } from './Board'
 import { Ship } from './Ships'
@@ -133,17 +134,33 @@ function PlacementGhost({ hover }: { hover: number | null }) {
   )
 }
 
-function PlayerBoard() {
+/** Draws hull instances for a board's render data (live and/or sunk). */
+function ShipHulls({ ships }: { ships: ReadonlyArray<RenderShip> }) {
+  return (
+    <>
+      {ships.map((ship) => (
+        <Ship
+          key={ship.key}
+          classId={ship.classId}
+          length={ship.length}
+          row={ship.row}
+          col={ship.col}
+          orientation={ship.orientation}
+          variant={ship.sunk ? 'sunk' : 'fleet'}
+        />
+      ))}
+    </>
+  )
+}
+
+function PlayerBoard({ data }: { data: BoardRenderData }) {
   const screen = useStore((s) => s.screen)
   const placements = useStore((s) => s.placements)
-  const match = useStore((s) => s.match)
   const placeAt = useStore((s) => s.placeAt)
   const pickUpAt = useStore((s) => s.pickUpAt)
   const [hover, setHover] = useState<number | null>(null)
 
   const placing = screen === 'placement'
-  const board = match?.boards.player
-  const shots = board?.shots ?? EMPTY_SHOTS
 
   const occupied = useMemo(() => {
     if (!placing) return null
@@ -159,7 +176,7 @@ function PlayerBoard() {
   return (
     <Board
       position={[PLAYER_CENTER.x, 0, PLAYER_CENTER.z]}
-      shots={shots}
+      shots={data.shots}
       interactive={placing}
       onCellTap={(cell) => {
         if (!placing) return
@@ -184,59 +201,34 @@ function PlayerBoard() {
             ),
         )}
       {placing && <PlacementGhost hover={hover} />}
-      {board?.ships.map((ship) => (
-        <Ship
-          key={ship.slot}
-          classId={ship.classId}
-          length={ship.length}
-          row={ship.row}
-          col={ship.col}
-          orientation={ship.orientation}
-          variant={ship.sunk ? 'sunk' : 'fleet'}
-        />
-      ))}
+      {!placing && <ShipHulls ships={data.ships} />}
     </Board>
   )
 }
 
-const EMPTY_SHOTS = new Array(100).fill(0)
-
-function EnemyBoard() {
-  const match = useStore((s) => s.match)
+function EnemyBoard({ data }: { data: BoardRenderData }) {
   const screen = useStore((s) => s.screen)
   const selectedCell = useStore((s) => s.selectedCell)
   const selectCell = useStore((s) => s.selectCell)
   const busy = useStore((s) => s.busy)
+  const turn = useStore((s) => s.match?.turn)
+  const hasWinner = useStore((s) => Boolean(s.match?.winner))
 
-  const board = match?.boards.bot
-  const dimmed = useMemo(() => (board ? sunkHalo(board) : undefined), [board])
   if (screen === 'placement') return null
 
-  const canAim = screen === 'battle' && !busy && match?.turn === 'player' && !match.winner
+  const canAim = screen === 'battle' && !busy && turn === 'player' && !hasWinner
 
   return (
     <Board
       position={[ENEMY_CENTER.x, 0, ENEMY_CENTER.z]}
-      shots={board?.shots ?? EMPTY_SHOTS}
+      shots={data.shots}
       sealed
-      dimmed={dimmed}
+      dimmed={data.dimmed}
       interactive={canAim}
       onCellTap={(cell) => selectCell(cell)}
     >
       {selectedCell !== null && canAim && <SelectionFrame cell={selectedCell} />}
-      {board?.ships
-        .filter((s) => s.sunk)
-        .map((ship) => (
-          <Ship
-            key={ship.slot}
-            classId={ship.classId}
-            length={ship.length}
-            row={ship.row}
-            col={ship.col}
-            orientation={ship.orientation}
-            variant="sunk"
-          />
-        ))}
+      <ShipHulls ships={data.ships} />
     </Board>
   )
 }
@@ -250,17 +242,23 @@ function HeroBase({ z }: { z: number }) {
   )
 }
 
-function BattleScene() {
+function BattleScene({ model }: { model: BattleRenderModel }) {
   return (
     <group>
       <HeroBase z={PLAYER_CENTER.z} />
       <HeroBase z={ENEMY_CENTER.z} />
-      <PlayerBoard />
-      <EnemyBoard />
+      <PlayerBoard data={model.player} />
+      <EnemyBoard data={model.enemy} />
       <TurnToken />
       <FxLayer boardCenters={BOARD_CENTERS} />
     </group>
   )
+}
+
+/** Builds the shared scene model for the practice match (mode-specific data). */
+function usePracticeBattleModel(): BattleRenderModel {
+  const match = useStore((s) => s.match)
+  return useMemo(() => practiceBattleModel(match), [match])
 }
 
 /** Menu backdrop: drifting hero ships around the glowing encrypted core. */
@@ -301,6 +299,7 @@ function HomeScene() {
 
 export function GameCanvas() {
   const screen = useStore((s) => s.screen)
+  const model = usePracticeBattleModel()
   return (
     <Canvas
       shadows
@@ -315,7 +314,7 @@ export function GameCanvas() {
       <Lights />
       <Suspense fallback={null}>
         <Ocean />
-        {screen === 'home' ? <HomeScene /> : <BattleScene />}
+        {screen === 'home' ? <HomeScene /> : <BattleScene model={model} />}
       </Suspense>
     </Canvas>
   )

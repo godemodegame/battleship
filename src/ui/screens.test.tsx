@@ -42,30 +42,11 @@ vi.mock('../lib/sfx', () => ({
 
 import App from '../App'
 import { LoadingOverlay, MuteButton } from './common'
-import { setPracticeRandomSource, useStore } from '../state/store'
+import { resetPracticeState, setPracticeRandomSource, useStore } from '../practice/practiceStore'
 
 const twoCellShip: Placement[] = [
   { slot: 3, row: 0, col: 0, orientation: 'h' },
 ]
-
-function resetStore() {
-  useStore.setState({
-    screen: 'home',
-    difficulty: 'normal',
-    howItWorksOpen: false,
-    placements: new Array(10).fill(null),
-    selectedSlot: null,
-    placeOrientation: 'h',
-    match: null,
-    focus: 'enemy',
-    selectedCell: null,
-    busy: false,
-    effects: [],
-    projectiles: [],
-    toast: null,
-    forfeited: false,
-  })
-}
 
 function startBattle() {
   useStore.setState({
@@ -82,7 +63,7 @@ function startBattle() {
 }
 
 beforeEach(() => {
-  resetStore()
+  resetPracticeState()
   setPracticeRandomSource(seededRandom(11))
   mocks.progress.active = false
   mocks.progress.progress = 100
