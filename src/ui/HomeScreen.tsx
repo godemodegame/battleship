@@ -17,13 +17,15 @@ const DIFFICULTIES: { id: Difficulty; label: string }[] = [
  * the on-chain/viem bundle out of the practice chunk. Replace this handler when
  * GAME-505 (`Play Against Friend` address input) is built.
  */
-function onchainLobbyPath(): string {
+function _onchainLobbyPath(): string {
   const deploymentId = import.meta.env.VITE_ACTIVE_DEPLOYMENT_ID || 'arb-sepolia-v1'
   return `/match/${deploymentId}/lobby`
 }
+void _onchainLobbyPath;
 
 export function HomeScreen() {
-  const navigate = useNavigate()
+  const _navigate = useNavigate()
+  void _navigate;
   const difficulty = useStore((s) => s.difficulty)
   const setDifficulty = useStore((s) => s.setDifficulty)
   const startPlacement = useStore((s) => s.startPlacement)
