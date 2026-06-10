@@ -78,6 +78,7 @@ const SWING_MS = 750
 let nextId = 1
 const delay = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms))
 let randomSource = Math.random
+let practiceSessionId = 0
 
 /** Allows deterministic practice orchestration in tests without patching globals. */
 export function setPracticeRandomSource(rnd: () => number = Math.random) {
@@ -86,6 +87,7 @@ export function setPracticeRandomSource(rnd: () => number = Math.random) {
 
 /** Resets practice flow state when leaving the practice route. */
 export function resetPracticeState() {
+  practiceSessionId++
   useStore.setState({
     screen: 'home',
     difficulty: 'normal',
@@ -116,17 +118,25 @@ function shotToast(result: 'miss' | 'hit' | 'sunk', by: Side, label: string | un
 }
 
 export const useStore = create<AppState>((set, get) => {
+  const sessionAborted = (sessionId: number) => practiceSessionId !== sessionId
+
   /** True when the battle this shot belongs to is no longer running (forfeit, rematch). */
-  const interrupted = () => get().screen !== 'battle' || !get().match || get().match!.winner !== null
+  const battleLeft = () => get().screen !== 'battle' || !get().match
+
+  const interrupted = (sessionId: number) => sessionAborted(sessionId) || battleLeft()
 
   /** Plays one shot's full visual sequence and applies it to the match. */
-  async function resolveShot(by: Side, cell: number): Promise<'miss' | 'hit' | 'sunk' | 'won' | 'aborted'> {
+  async function resolveShot(
+    by: Side,
+    cell: number,
+    sessionId: number,
+  ): Promise<'miss' | 'hit' | 'sunk' | 'won' | 'aborted'> {
     const projectile: ProjectileSpec = { id: nextId++, from: by, cell }
     set((s) => ({ projectiles: [...s.projectiles, projectile] }))
     sfx.fire()
     await delay(FLIGHT_MS)
     set((s) => ({ projectiles: s.projectiles.filter((p) => p.id !== projectile.id) }))
-    if (interrupted()) return 'aborted'
+    if (interrupted(sessionId)) return 'aborted'
 
     const { match, move } = applyAttack(get().match!, by, cell)
     const defender: Side = by === 'player' ? 'bot' : 'player'
@@ -140,6 +150,7 @@ export const useStore = create<AppState>((set, get) => {
     sfx[move.result]()
 
     await delay(move.result === 'sunk' ? SUNK_MS : IMPACT_MS)
+    if (interrupted(sessionId)) return 'aborted'
     return match.winner ? 'won' : move.result
   }
 
@@ -260,13 +271,14 @@ export const useStore = create<AppState>((set, get) => {
     },
 
     fire: async () => {
+      const sessionId = practiceSessionId
       const { match, busy, selectedCell, difficulty } = get()
       if (!match || match.winner || busy || match.turn !== 'player') return
       if (selectedCell === null || match.boards.bot.shots[selectedCell] !== 0) return
       set({ busy: true, selectedCell: null })
 
-      const result = await resolveShot('player', selectedCell)
-      if (result === 'aborted') return
+      const result = await resolveShot('player', selectedCell, sessionId)
+      if (result === 'aborted' || interrupted(sessionId)) return
       if (result === 'won') {
         sfx.win()
         set({ screen: 'gameover', busy: false })
@@ -279,12 +291,12 @@ export const useStore = create<AppState>((set, get) => {
 
       set({ focus: 'player' })
       await delay(SWING_MS + 350 + randomSource() * 500)
-      if (interrupted()) return
+      if (interrupted(sessionId)) return
 
       while (get().match?.turn === 'bot') {
         const target = chooseBotTarget(get().match!.boards.player, difficulty, randomSource)
-        const botResult = await resolveShot('bot', target)
-        if (botResult === 'aborted') return
+        const botResult = await resolveShot('bot', target, sessionId)
+        if (botResult === 'aborted' || interrupted(sessionId)) return
         if (botResult === 'won') {
           sfx.lose()
           set({ screen: 'gameover', busy: false })
@@ -293,11 +305,12 @@ export const useStore = create<AppState>((set, get) => {
         if (botResult === 'miss') break
 
         await delay(350 + randomSource() * 350)
-        if (interrupted()) return
+        if (interrupted(sessionId)) return
       }
 
       set({ focus: 'enemy' })
       await delay(SWING_MS / 2)
+      if (interrupted(sessionId)) return
       set({ busy: false })
     },
 
