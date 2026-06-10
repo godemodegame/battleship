@@ -71,6 +71,9 @@ export function BattleHUD() {
         <button
           className="btn fire wide"
           onClick={() => {
+            // Prime audio context early from the actual click handler for reliable
+            // iOS Safari haptic unlock before the async fire() + later result haptics.
+            haptics.prime()
             void fire()
             if (canFire) haptics.fire()
           }}

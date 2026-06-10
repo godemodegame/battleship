@@ -72,6 +72,7 @@ export function HomeScreen() {
         <button
           className="btn primary"
           onClick={() => {
+            haptics.prime()
             startPlacement()
             haptics.confirm()
           }}

@@ -46,21 +46,25 @@ function primeAudio() {
 function installGestureUnlock() {
   if (typeof window === 'undefined' || primed) return
 
-  const events = ['touchstart', 'touchend', 'pointerdown', 'click'] as const
-  const opts: AddEventListenerOptions = { once: true, capture: true, passive: true }
+  const events = ['touchstart', 'touchend', 'pointerdown', 'click', 'mousedown'] as const
+  // Use minimal options for reliable add/remove matching across browsers (esp. Safari).
+  // Capture is critical so we run before r3f/canvas handlers.
+  const addOpts: AddEventListenerOptions = { capture: true, passive: true }
+  const removeOpts: AddEventListenerOptions = { capture: true }
 
   const handler = () => {
+    // Always try to prime on any of these; the primed flag prevents repeated work.
     primeAudio()
-    // Remove all listeners (the 'once' helps, but be explicit)
-    for (const ev of events) {
+    // Remove listeners for all event types so we don't keep them around.
+    for (const type of events) {
       try {
-        window.removeEventListener(ev, handler, opts)
+        window.removeEventListener(type, handler, removeOpts)
       } catch {}
     }
   }
 
   for (const ev of events) {
-    window.addEventListener(ev, handler, opts)
+    window.addEventListener(ev, handler, addOpts)
   }
 }
 
