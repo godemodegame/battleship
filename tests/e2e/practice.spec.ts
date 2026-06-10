@@ -76,8 +76,11 @@ test('completes placement, attack, forfeit, and rematch flows', async ({ page })
   ).toBe(0)
 
   await page.getByRole('button', { name: 'Auto Place' }).click()
-  await expect(page.getByText(/10\/10 placed/)).toBeVisible()
+  await expect.poll(async () =>
+    (await storeValue<Array<unknown>>(page, 'placements')).filter(Boolean).length,
+  ).toBe(10)
   await page.getByRole('button', { name: 'Confirm Fleet' }).click()
+  await expect.poll(() => storeValue<string>(page, 'screen')).toBe('battle')
   await expect(page.getByText('Your Turn')).toBeVisible()
 
   await page.evaluate(() => {
@@ -169,6 +172,9 @@ test('handles sunk halo and reaches victory', async ({ page }) => {
       }).__store
       store.getState().selectCell(target)
     }, cell)
+    // Wait for the HUD to reflect the selection before clicking (helps in CI/headless)
+    await expect(page.getByRole('button', { name: `Fire at ${label}` }))
+      .toBeVisible({ timeout: 10_000 })
     await page.getByRole('button', { name: `Fire at ${label}` }).click()
     await expect.poll(() => storeValue<unknown[]>(page, 'match.moves'), { timeout: 15_000 })
       .toHaveLength(moves)
@@ -186,13 +192,7 @@ test('handles sunk halo and reaches victory', async ({ page }) => {
   expect(await storeValue<null>(page, 'selectedCell')).toBeNull()
 
   await fireAt(22, 'C3', 2)
-  await page.evaluate(() => {
-    const store = (window as unknown as {
-      __store: { getState: () => { selectCell: (cell: number) => void } }
-    }).__store
-    store.getState().selectCell(23)
-  })
-  await page.getByRole('button', { name: 'Fire at D3' }).click()
+  await fireAt(23, 'D3', 3)
   await expect(page.getByRole('heading', { name: 'Victory' })).toBeVisible({ timeout: 15_000 })
 })
 

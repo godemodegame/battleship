@@ -1,19 +1,80 @@
 /**
- * Tiny synthesized sound effects — no audio assets needed. Every call is
- * safe before user interaction (the context lazily resumes) and respects
- * the persisted mute toggle.
+ * Tiny synthesized sound effects — no audio assets needed.
+ * On iOS Safari the AudioContext must be created + resumed from a user gesture.
+ * We prime a context + silent buffer on first touch/click anywhere, and also
+ * attempt resume on any play attempt. Respects the persisted mute toggle.
  */
 let ctx: AudioContext | null = null
 let muted = localStorage.getItem('eb-muted') === '1'
+let primed = false
+
+function createCtx(): AudioContext | null {
+  const Ctor = window.AudioContext ?? (window as any).webkitAudioContext
+  if (!Ctor) return null
+  return new Ctor()
+}
+
+function primeAudio() {
+  if (primed || muted) return
+  if (!ctx) ctx = createCtx()
+  if (!ctx) return
+
+  const resumeAndUnlock = () => {
+    if (ctx!.state === 'suspended') {
+      void ctx!.resume().catch(() => {})
+    }
+    // Play a silent buffer during the gesture — this is required to fully
+    // unlock Web Audio on iOS Safari for subsequent async plays.
+    try {
+      const buf = ctx!.createBuffer(1, 1, 22050)
+      const src = ctx!.createBufferSource()
+      src.buffer = buf
+      src.connect(ctx!.destination)
+      src.start(0)
+    } catch {
+      // ignore
+    }
+    primed = true
+  }
+
+  resumeAndUnlock()
+}
+
+function installGestureUnlock() {
+  if (typeof window === 'undefined' || primed) return
+
+  const events = ['touchstart', 'touchend', 'pointerdown', 'click'] as const
+  const opts: AddEventListenerOptions = { once: true, capture: true, passive: true }
+
+  const handler = () => {
+    primeAudio()
+    // Remove all listeners (the 'once' helps, but be explicit)
+    for (const ev of events) {
+      try {
+        window.removeEventListener(ev, handler, opts)
+      } catch {}
+    }
+  }
+
+  for (const ev of events) {
+    window.addEventListener(ev, handler, opts)
+  }
+}
+
+// Install as early as possible (module eval time in browser)
+installGestureUnlock()
 
 function audio(): AudioContext | null {
   if (muted) return null
   if (!ctx) {
-    const Ctor = window.AudioContext ?? (window as any).webkitAudioContext
-    if (!Ctor) return null
-    ctx = new Ctor()
+    ctx = createCtx()
+    if (!ctx) return null
+    // If we created it here (late), still try to resume — may work on desktop
+    // but on iOS this usually only succeeds if a gesture already happened.
+    if (ctx.state === 'suspended') void ctx.resume().catch(() => {})
+  } else if (ctx.state === 'suspended') {
+    void ctx.resume().catch(() => {})
   }
-  if (ctx.state === 'suspended') void ctx.resume()
   return ctx
 }
 
@@ -27,6 +88,7 @@ function tone(
     delay?: number
   } = {},
 ) {
+  primeAudio() // ensure we are unlocked if this call is the first gesture
   const ac = audio()
   if (!ac) return
   const { to = freq, type = 'sine', duration = 0.18, gain = 0.12, delay = 0 } = opts
@@ -45,6 +107,7 @@ function tone(
 }
 
 function noise(opts: { duration?: number; gain?: number; from?: number; to?: number; delay?: number } = {}) {
+  primeAudio() // ensure we are unlocked if this call is the first gesture
   const ac = audio()
   if (!ac) return
   const { duration = 0.3, gain = 0.1, from = 2400, to = 300, delay = 0 } = opts
@@ -73,6 +136,10 @@ export const sfx = {
   setMuted(value: boolean) {
     muted = value
     localStorage.setItem('eb-muted', value ? '1' : '0')
+    if (!value) {
+      // Unmuting happens on a click — prime immediately so next sounds work.
+      primeAudio()
+    }
   },
   ui: () => tone(880, { to: 1320, duration: 0.07, gain: 0.05, type: 'triangle' }),
   deny: () => tone(220, { to: 160, duration: 0.12, gain: 0.07, type: 'square' }),

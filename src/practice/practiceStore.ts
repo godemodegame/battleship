@@ -370,9 +370,10 @@ export const useStore = create<AppState>((set, get) => {
   }
 })
 
-if (import.meta.env.DEV) {
-  ;(window as unknown as { __store: typeof useStore }).__store = useStore
-}
+// Expose the practice store globally for E2E tests (which run against the production
+// preview build in CI) and for manual debugging in dev tools. This is safe: it only
+// provides access to in-memory game state for the local practice mode.
+;(window as unknown as { __store: typeof useStore }).__store = useStore
 
 /** Battle summary per docs/game-mechanics.md game-over screen. */
 export function matchSummary(match: MatchState, forfeited: boolean) {
