@@ -1,5 +1,21 @@
 # Backendless Computer Opponent Design
 
+## Status: Future Design - Not the Current Bot
+
+This document specifies a future backendless on-chain bot for bot matches
+that carry on-chain results. It is not implemented.
+
+The bot that exists in the repository today is a different thing: a local
+frontend practice bot (`src/game/bot.ts`) with `Easy`, `Normal`, and `Hard`
+difficulties, documented in `docs/practice-mode-and-bot-ai.md`. That bot
+runs entirely in the browser, plays from public shot information only, and
+is practice-only - its results are never authoritative.
+
+The "no frontend-only bot logic" requirement below applies to on-chain bot
+matches, where every move must be a transaction. The local practice bot does
+not violate it because practice mode is local, stake-free, and labeled as
+such.
+
 ## Purpose
 
 This document describes how to support a computer opponent without using a centralized gameplay backend.
