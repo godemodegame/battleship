@@ -2,112 +2,476 @@
 
 ## Purpose
 
-This document audits the current documentation set and defines what should be added next before implementation begins.
+This document describes what is missing from the project documentation now that
+the repository has moved beyond planning and contains a playable local practice
+build.
 
-The current documentation already covers the project idea, gameplay mechanics, smart contract behavior, frontend architecture, security model, testing strategy, copy deck, visual style, interface structure, and 3D asset prompts. The next step is to complete the user-owned asset production pipeline and then move toward implementation.
+The documentation should keep two realities clear:
 
-## Current Documentation Coverage
+- the current implementation is a local browser practice game against a bot;
+- the product direction is still mobile-first 3D on-chain PvP with Fhenix/CoFHE
+  privacy on Arbitrum Sepolia.
 
-Existing project documents:
+## Current Implementation Snapshot
 
-- `README.md` - project entry point and documentation index.
-- `docs/project-description.md` - high-level product requirements.
-- `docs/game-mechanics.md` - base gameplay rules.
-- `docs/smart-contract-design.md` - contract responsibilities and PvP on-chain flow.
-- `docs/fhenix-integration-plan.md` - concrete SDK, encryption, permit, and decrypt flows.
-- `docs/technical-architecture.md` - full system shape and implementation boundaries.
-- `docs/contract-data-model.md` - storage structures, enums, public fields, and encrypted fields.
-- `docs/contract-api.md` - functions, events, errors, access rules, and frontend expectations.
-- `docs/frontend-architecture.md` - mobile web app layers, routes, stores, wallet, Fhenix, and 3D boundaries.
-- `docs/security-and-fair-play.md` - hidden-state threat model, trust boundaries, and fair-play controls.
-- `docs/testing-strategy.md` - contract, Fhenix, frontend, mobile, and end-to-end test plan.
-- `docs/copy-deck.md` - centralized English UI labels, states, errors, and accessibility copy.
-- `docs/computer-opponent-design.md` - backendless on-chain bot mode design.
-- `docs/visual-style-guide.md` - art direction and rendering language.
-- `docs/interface-and-buttons-guide.md` - menu, opponent selection, HUD, and button system.
-- `docs/user-flows.md` - player journeys for the friend-match MVP.
-- `docs/documentation-audit.md` - current coverage and missing implementation docs.
-- `assets/3d-models/README.md` - 3D model catalog.
-- `assets/3d-models/prompts/*.md` - per-model generation prompts.
+Implemented in the repository now:
 
-The documentation is now aligned around these core decisions:
+- Vite React TypeScript app;
+- React Three Fiber and Three.js 3D scene;
+- local Zustand game state;
+- home, placement, battle, and game-over screens;
+- manual and automatic fleet placement;
+- classic no-touch placement rule;
+- local player-versus-bot practice loop;
+- bot difficulties: `Easy`, `Normal`, and `Hard`;
+- attack projectile, miss, hit, and sunk visual effects;
+- runtime FBX and GLB model loading;
+- sound effects and mute persistence;
+- standalone `vfx-app` used to generate the three `vfx-*` GLB assets.
 
-- English-only documentation and game UI.
-- Mobile browser as the required first platform.
-- PvP as the main game mode.
-- Friend invite matches as the priority PvP flow.
-- Backendless bot mode as an optional practice mode, not the primary MVP mode.
-- Fully on-chain state and rules.
-- Fhenix/CoFHE under the hood for encrypted game state.
-- Arbitrum Sepolia as the MVP blockchain network.
-- Stylized neo-noir graphic 3D visual direction.
-- Vite React as the recommended first frontend implementation path.
-- Explicit hidden-state trust boundaries.
-- Test coverage expectations before MVP implementation.
-- Centralized English-only player-facing copy.
+Not implemented yet:
 
-## Consistency Fixes Already Applied
+- wallet connection;
+- Arbitrum Sepolia network guard;
+- smart contract package;
+- Fhenix/CoFHE client layer;
+- encrypted fleet submission;
+- on-chain friend match lifecycle;
+- contract event sync;
+- test suite;
+- production deployment workflow.
 
-The early mechanics document previously mentioned a simple computer opponent for local prototyping. That has been adjusted so the first product version is clearly human versus human PvP. Development-only simulation tools can still exist later, but they should not be presented as the core MVP mode.
+## Existing Documentation Coverage
 
-## User-owned Document to Add
+The current documentation covers the original product and architecture well:
 
-The user plans to create this document manually:
+- product vision and scope;
+- mobile browser target;
+- English-only project rule;
+- base Battleship rules;
+- smart contract design;
+- Fhenix integration plan;
+- contract data model;
+- contract API;
+- frontend architecture;
+- security and fair play;
+- testing strategy;
+- copy deck;
+- user flows;
+- visual style;
+- interface and button language;
+- computer opponent concept;
+- 3D model prompts and catalog.
 
-- `docs/asset-production-pipeline.md`
+That coverage is still useful, but much of it describes the target on-chain MVP
+rather than the playable local prototype that exists today.
 
-The visual style and prompt files describe what to make. This file should define how assets move into the game:
+## Main Documentation Gaps
 
-- generation;
-- review;
-- cleanup;
-- retopology if needed;
-- material setup;
-- `.glb` export;
-- texture compression;
-- LOD creation;
+## 1. Current Playable Build README
+
+Recommended file:
+
+- `docs/current-playable-build.md`
+
+Why it matters:
+
+The repository now has a real playable slice, but there is no single document
+that explains what the current game actually does.
+
+This document should cover:
+
+- how to run the app locally;
+- current screen flow;
+- practice-versus-bot scope;
+- what is simulated locally;
+- what is intentionally disabled;
+- key controls;
+- known limitations;
+- how this prototype maps to the future on-chain version.
+
+Priority:
+
+- P0.
+
+## 2. Local Game Engine Specification
+
+Recommended file:
+
+- `docs/local-game-engine.md`
+
+Why it matters:
+
+The local engine now contains concrete rule decisions that should be documented
+before they drift from the on-chain design.
+
+This document should cover:
+
+- board indexing and coordinate labels;
+- fleet definition and model mapping;
+- placement validation;
+- no-touch rule;
+- attack resolution;
+- turn passing after every valid attack;
+- sunk-ship halo deduction;
+- game-over summary calculations;
+- which logic is production game logic and which logic is prototype-only.
+
+Priority:
+
+- P0.
+
+## 3. Bot Difficulty and Practice Mode
+
+Recommended file:
+
+- `docs/practice-mode-and-bot-ai.md`
+
+Why it matters:
+
+The current game already has bot difficulties, but the existing
+`docs/computer-opponent-design.md` focuses on a future backendless on-chain bot.
+The current frontend bot is a local practice feature and must be documented as
+such.
+
+This document should cover:
+
+- practice mode status and limitations;
+- `Easy`, `Normal`, and `Hard` behavior;
+- public-information-only targeting rule;
+- why the local bot is not production-authoritative;
+- migration options toward an on-chain bot or pure PvP MVP.
+
+Priority:
+
+- P0.
+
+## 4. Runtime Asset Pipeline
+
+Recommended file:
+
+- `docs/runtime-asset-pipeline.md`
+
+Why it matters:
+
+The asset docs still speak mostly in terms of prompts and future GLB output, but
+runtime assets now exist in `public/models`, `public/textures`,
+`assets/3d-models/fbx`, `assets/3d-models/glb`, and `vfx-app`.
+
+This document should cover:
+
+- source asset locations;
+- runtime asset locations;
+- FBX versus GLB usage;
 - naming rules;
-- import validation;
-- mobile performance budgets.
+- texture pairing;
+- normalization and scale expectations;
+- asset preload strategy;
+- where VFX assets come from;
+- how to replace or regenerate a model safely;
+- mobile budget checks before adding heavier assets.
 
-## Medium Priority Documents
+Priority:
 
-Add these after the implementation scaffold starts, or when a specific implementation risk needs more detail:
+- P0.
 
-- `docs/mobile-performance-budget.md` - FPS target, polygon budgets, texture budgets, loading budget.
-- `docs/network-and-wallet-requirements.md` - Arbitrum Sepolia, wallet support, WalletConnect behavior, network switching.
-- `docs/indexer-read-model.md` - optional read-only indexing and what it is allowed to cache.
-- `docs/deployment-plan.md` - local, testnet, preview, and production deployment flows.
-- `docs/game-economy-placeholder.md` - explicitly states that wagers, NFT ships, and marketplace are out of MVP.
-- `docs/accessibility-checklist.md` - mobile readability, touch targets, color contrast, non-color state indicators.
+## 5. VFX Forge Workflow
 
-## Low Priority Documents
+Recommended file:
 
-These can wait until after a playable prototype:
+- `docs/vfx-forge-workflow.md`
 
-- ranking design;
-- tournament design;
-- native mobile app plan;
-- NFT ship design;
-- marketplace design;
-- social sharing design;
-- animation timing bible;
-- sound and music direction.
+Why it matters:
+
+`vfx-app/README.md` explains the standalone VFX studio, but the main docs do not
+yet connect that tool to the game asset pipeline.
+
+This document should cover:
+
+- how to run `vfx-app`;
+- what assets it owns;
+- export steps;
+- expected GLB animation clips;
+- runtime opacity fade limitation;
+- how exported files move into `public/models`;
+- verification checklist after export.
+
+Priority:
+
+- P1.
+
+## 6. Mobile Performance Budget
+
+Recommended file:
+
+- `docs/mobile-performance-budget.md`
+
+Why it matters:
+
+The game is mobile-first and uses WebGL, model loading, shadows, ocean effects,
+animated VFX, and later wallet/Fhenix flows. The docs need explicit budgets
+before more visuals are added.
+
+This document should define:
+
+- FPS targets;
+- initial load target;
+- total model and texture budget;
+- per-model triangle targets;
+- texture size limits;
+- shadow and lighting budget;
+- low/medium/high graphics modes;
+- battery and thermal expectations;
+- Playwright or manual mobile verification procedure.
+
+Priority:
+
+- P1.
+
+## 7. Test Plan for the Current Prototype
+
+Recommended file:
+
+- `docs/local-prototype-test-plan.md`
+
+Why it matters:
+
+`docs/testing-strategy.md` is oriented toward the future on-chain MVP. The
+current local game has no focused test plan for the code that exists now.
+
+This document should cover:
+
+- unit tests for `src/game/board.ts`;
+- unit tests for `src/game/engine.ts`;
+- deterministic bot tests for `src/game/bot.ts`;
+- smoke tests for React screens;
+- 3D canvas non-blank checks;
+- mobile viewport checks;
+- local regression scripts for placement, attack, sunk, win, forfeit, and
+  rematch flows.
+
+Priority:
+
+- P1.
+
+## 8. Copy and UI Implementation Sync
+
+Recommended file:
+
+- `docs/copy-implementation-sync.md`
+
+Why it matters:
+
+The copy deck describes the target on-chain UI, while the current app contains
+practice-mode labels such as `Practice vs Bot`, disabled PvP actions, and local
+build helper copy.
+
+This document should cover:
+
+- which current strings intentionally differ from the on-chain copy deck;
+- temporary practice-mode copy;
+- disabled-mode copy;
+- labels that need to move into a future copy module;
+- English-only checks for UI and docs.
+
+Priority:
+
+- P2.
+
+## 9. Network and Wallet Requirements
+
+Recommended file:
+
+- `docs/network-and-wallet-requirements.md`
+
+Why it matters:
+
+Wallet and chain behavior are required for the on-chain milestone and should be
+settled before web3 packages are added.
+
+This document should cover:
+
+- Arbitrum Sepolia chain id `421614`;
+- supported wallet types;
+- WalletConnect/mobile wallet behavior;
+- wrong-network recovery;
+- funded test wallet expectations;
+- transaction rejection and retry behavior;
+- account-switch recovery.
+
+Priority:
+
+- P2.
+
+## 10. Deployment Plan
+
+Recommended file:
+
+- `docs/deployment-plan.md`
+
+Why it matters:
+
+The repository needs a clean path from local playable prototype to public
+testnet demo.
+
+This document should cover:
+
+- local development commands;
+- preview build workflow;
+- static hosting plan;
+- contract deployment workflow;
+- ABI and contract address versioning;
+- environment variables;
+- Arbitrum Sepolia deployment checklist;
+- rollback and redeploy rules.
+
+Priority:
+
+- P2.
+
+## Stale Documentation to Update
+
+These existing files should be revised so they do not imply that implementation
+has not started:
+
+- `README.md` - add a short current-build status section and run commands.
+- `docs/documentation-audit.md` - update from pre-implementation audit to
+  current implementation audit.
+- `docs/game-mechanics.md` - note that manual placement now exists in the local
+  build.
+- `docs/frontend-architecture.md` - separate current prototype structure from
+  target on-chain structure.
+- `docs/interface-and-buttons-guide.md` - document current practice-mode entry
+  screen and disabled on-chain actions.
+- `assets/3d-models/README.md` - reflect actual generated FBX/GLB/runtime
+  assets, not only planned prompt outputs.
+- `docs/computer-opponent-design.md` - explicitly distinguish local frontend bot
+  from future backendless on-chain bot.
+- `docs/testing-strategy.md` - add current local prototype testing as the first
+  milestone before contract/Fhenix testing.
+
+## Roadmap
+
+## Phase 0: Documentation Reality Check
+
+Goal:
+
+- make the docs match the current repository state.
+
+Tasks:
+
+- update `docs/documentation-audit.md`;
+- add a current status section to `README.md`;
+- clarify that the current build is local practice versus bot;
+- mark wallet, Fhenix, contracts, and on-chain PvP as future milestones.
+
+Exit criteria:
+
+- a new developer can tell what is playable now within five minutes.
+
+## Phase 1: Local Prototype Documentation
+
+Goal:
+
+- document the implemented game loop before expanding it.
+
+Tasks:
+
+- write `docs/current-playable-build.md`;
+- write `docs/local-game-engine.md`;
+- write `docs/practice-mode-and-bot-ai.md`;
+- update `docs/game-mechanics.md` with implemented manual placement and bot
+  practice notes.
+
+Exit criteria:
+
+- the local rules, bot behavior, and prototype limitations are explicit.
+
+## Phase 2: Asset and VFX Documentation
+
+Goal:
+
+- make the 3D asset workflow repeatable.
+
+Tasks:
+
+- write `docs/runtime-asset-pipeline.md`;
+- write `docs/vfx-forge-workflow.md`;
+- update `assets/3d-models/README.md` with current asset inventory;
+- define replacement and verification steps for runtime models.
+
+Exit criteria:
+
+- another contributor can regenerate or replace an asset without guessing where
+  it belongs.
+
+## Phase 3: Quality and Mobile Readiness
+
+Goal:
+
+- add the documentation needed to stabilize the playable prototype.
+
+Tasks:
+
+- write `docs/mobile-performance-budget.md`;
+- write `docs/local-prototype-test-plan.md`;
+- add browser/mobile smoke-test expectations;
+- define graphics quality levels before more effects are added.
+
+Exit criteria:
+
+- performance and regression expectations are measurable.
+
+## Phase 4: On-chain Integration Preparation
+
+Goal:
+
+- prepare docs for wallet, contract, and Fhenix implementation.
+
+Tasks:
+
+- write `docs/network-and-wallet-requirements.md`;
+- write `docs/deployment-plan.md`;
+- update `docs/frontend-architecture.md` with a migration plan from local store
+  to contract-derived state;
+- define how local prototype state maps to contract state and events.
+
+Exit criteria:
+
+- web3 implementation can start without re-litigating network, wallet, ABI,
+  deploy, and recovery basics.
+
+## Phase 5: On-chain MVP Documentation Refresh
+
+Goal:
+
+- update the target MVP docs after the first wallet/contract/Fhenix slice is
+  implemented.
+
+Tasks:
+
+- revise `docs/smart-contract-design.md` against actual contract code;
+- revise `docs/contract-api.md` against generated ABI;
+- revise `docs/contract-data-model.md` against real storage structures;
+- revise `docs/fhenix-integration-plan.md` against the actual SDK version and
+  integration code;
+- revise `docs/testing-strategy.md` with contract and testnet results.
+
+Exit criteria:
+
+- docs describe the implemented on-chain system, not only the intended one.
 
 ## Recommended Next Step
 
-The next documentation task is user-owned:
+Start with Phase 0 and Phase 1.
 
-- `docs/asset-production-pipeline.md`
+The highest-value next document is:
 
-Reason: the engineering-side planning documents now cover product, mechanics, contract behavior, Fhenix, frontend architecture, security, testing, copy, UI, and user flow. The remaining high-value documentation gap is the asset production workflow.
+- `docs/current-playable-build.md`
 
-Engineering can proceed in parallel with:
+Reason:
 
-1. frontend and contract scaffold planning;
-2. package and toolchain setup;
-3. Fhenix package version confirmation;
-4. contract prototype for match creation and joining;
-5. frontend prototype for wallet connection and route flow.
-
-If more documentation is needed before implementation, write `docs/mobile-performance-budget.md` next.
+The project has crossed from concept into implementation. Before adding more
+features, the docs need one clear source of truth for what the game does today,
+what is still simulated locally, and how the current practice build connects to
+the planned on-chain PvP version.
