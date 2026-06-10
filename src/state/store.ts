@@ -120,10 +120,26 @@ function shotToast(result: 'miss' | 'hit' | 'sunk', by: Side, label: string | un
 export const useStore = create<AppState>((set, get) => {
   const sessionAborted = (sessionId: number) => practiceSessionId !== sessionId
 
-  /** True when the battle this shot belongs to is no longer running (forfeit, rematch). */
+  /**
+   * True when the battle this shot belongs to is no longer running (forfeit, rematch).
+   * We intentionally do NOT test match.winner here: a winning shot sets the winner
+   * inside resolveShot, and the post-impact interrupted() check must still let that
+   * shot resolve as 'won' rather than 'aborted'. Every winner-setting path also leaves
+   * the 'battle' screen, so the screen check already covers finished matches.
+   */
   const battleLeft = () => get().screen !== 'battle' || !get().match
 
   const interrupted = (sessionId: number) => sessionAborted(sessionId) || battleLeft()
+
+  /**
+   * Clears busy after an interrupted shot — but only while this session is still
+   * active. resetPracticeState() bumps practiceSessionId; if a newer practice session
+   * has already started its own fire() (busy:true), clearing busy here would clobber it
+   * and allow a concurrent fire(). Skip the reset when the session is stale.
+   */
+  const releaseBusy = (sessionId: number) => {
+    if (!sessionAborted(sessionId)) set({ busy: false })
+  }
 
   /** Plays one shot's full visual sequence and applies it to the match. */
   async function resolveShot(
@@ -279,7 +295,7 @@ export const useStore = create<AppState>((set, get) => {
 
       const result = await resolveShot('player', selectedCell, sessionId)
       if (result === 'aborted' || interrupted(sessionId)) {
-        set({ busy: false })
+        releaseBusy(sessionId)
         return
       }
       if (result === 'won') {
@@ -295,7 +311,7 @@ export const useStore = create<AppState>((set, get) => {
       set({ focus: 'player' })
       await delay(SWING_MS + 350 + randomSource() * 500)
       if (interrupted(sessionId)) {
-        set({ busy: false })
+        releaseBusy(sessionId)
         return
       }
 
@@ -303,7 +319,7 @@ export const useStore = create<AppState>((set, get) => {
         const target = chooseBotTarget(get().match!.boards.player, difficulty, randomSource)
         const botResult = await resolveShot('bot', target, sessionId)
         if (botResult === 'aborted' || interrupted(sessionId)) {
-          set({ busy: false })
+          releaseBusy(sessionId)
           return
         }
         if (botResult === 'won') {
@@ -315,7 +331,7 @@ export const useStore = create<AppState>((set, get) => {
 
         await delay(350 + randomSource() * 350)
         if (interrupted(sessionId)) {
-          set({ busy: false })
+          releaseBusy(sessionId)
           return
         }
       }
@@ -323,7 +339,7 @@ export const useStore = create<AppState>((set, get) => {
       set({ focus: 'enemy' })
       await delay(SWING_MS / 2)
       if (interrupted(sessionId)) {
-        set({ busy: false })
+        releaseBusy(sessionId)
         return
       }
       set({ busy: false })

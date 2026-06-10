@@ -12,7 +12,7 @@
     "preview": "vite preview",
     "test": "vitest run --passWithNoTests",
     "test:watch": "vitest",
-    "test:unit": "vitest run src/game src/state --passWithNoTests",
+    "test:unit": "vitest run src/game src/state src/onchain --passWithNoTests",
     "test:screen": "vitest run src/ui src/app src/test --passWithNoTests",
     "test:ci": "npm run build && npm run test:unit && npm run test:screen",
     "test:e2e": "playwright test --pass-with-no-tests",

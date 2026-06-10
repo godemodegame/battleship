@@ -147,7 +147,7 @@ export function MatchRouteShell() {
         <span className="title-kicker">On-chain Match</span>
         <h1>Match Route</h1>
         <p className="tagline">
-          Deployment {deploymentId ?? 'unknown'} · Match {matchId ?? 'unknown'}
+          Deployment {deploymentId ?? 'arb-sepolia-v1'} · Match {matchId ?? 'demo'}
         </p>
       </div>
 
