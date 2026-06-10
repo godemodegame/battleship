@@ -42,6 +42,8 @@ describe('on-chain module isolation (GAME-103 empty shell)', () => {
       './wallet/WalletProvider.tsx',
       './wallet/WalletSessionBar.tsx',
       './wallet/WrongNetworkPanel.tsx',
+      './wallet/handoff.ts',
+      './wallet/LowBalanceNotice.tsx',
     ]
     for (const file of files) {
       expect(await readOnchainSource(file)).not.toMatch(bad)

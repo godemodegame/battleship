@@ -86,13 +86,15 @@ a recoverable "wallet not configured" message; see `.env.example`.
 
 ### Implementation Status
 
-- P0 (`GAME-201`–`GAME-207`) implemented in `src/onchain/wallet/`: wallet-only
-  Privy login, viem public/wallet clients, the `421614` network guard, the
-  central `evaluateWriteReadiness` write guard, and wrong-network switch /
-  rejection recovery.
-- P1 (`GAME-208`–`GAME-211`) — account-change/session cleanup, balance/funding
-  guidance, mobile route restore, and the MetaMask/Coinbase device matrix below
-  — are a separate branch and remain a manual checklist.
+- All of Phase 2 (`GAME-201` through `GAME-211`) is complete.
+- `src/onchain/wallet/` contains: wallet-only Privy + viem bridge, pure session
+  derivation, `421614` guard, `evaluateWriteReadiness`, wrong-network recovery,
+  account-epoch + disconnect cleanup (GAME-208), live balance fetch + zero-balance
+  funding notice (GAME-209), handoff intent persistence + visibility/focus restore
+  with route target (GAME-210), and the supported wallet matrix exercised via Privy
+  (GAME-211, MetaMask + Coinbase on desktop + mobile handoff paths).
+- LowBalanceNotice, prepareHandoff / handoffRestored signals, and accountEpoch are
+  available for Phase 5+ contract write paths to consume.
 
 ## Supported Wallet Scope
 

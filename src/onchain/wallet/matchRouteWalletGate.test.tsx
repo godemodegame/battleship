@@ -18,7 +18,13 @@ import type { WalletSession } from './session'
 function makeValue(over: Partial<WalletContextValue> = {}): WalletContextValue {
   return {
     ...DISCONNECTED_CONTEXT,
-    actions: { connect: vi.fn(), disconnect: vi.fn(), switchToArbitrumSepolia: vi.fn() },
+    actions: {
+      connect: vi.fn(),
+      disconnect: vi.fn(),
+      switchToArbitrumSepolia: vi.fn(),
+      prepareHandoff: vi.fn(),
+      clearHandoffRestore: vi.fn(),
+    },
     ...over,
   }
 }
@@ -56,7 +62,13 @@ describe('MatchRouteShell wallet gate (non-demo)', () => {
   it('requires a wallet and offers connect when disconnected', async () => {
     const connect = vi.fn()
     const value = makeValue({
-      actions: { connect, disconnect: vi.fn(), switchToArbitrumSepolia: vi.fn() },
+      actions: {
+        connect,
+        disconnect: vi.fn(),
+        switchToArbitrumSepolia: vi.fn(),
+        prepareHandoff: vi.fn(),
+        clearHandoffRestore: vi.fn(),
+      },
     })
     renderShell(value)
 
@@ -71,7 +83,13 @@ describe('MatchRouteShell wallet gate (non-demo)', () => {
     const value = makeValue({
       session: WRONG_SESSION,
       writeBlockedReason: 'wrong-network',
-      actions: { connect: vi.fn(), disconnect: vi.fn(), switchToArbitrumSepolia },
+      actions: {
+        connect: vi.fn(),
+        disconnect: vi.fn(),
+        switchToArbitrumSepolia,
+        prepareHandoff: vi.fn(),
+        clearHandoffRestore: vi.fn(),
+      },
     })
     renderShell(value)
 
