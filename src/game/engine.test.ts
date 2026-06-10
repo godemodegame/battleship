@@ -56,6 +56,7 @@ describe('applyAttack', () => {
 
     expect(resolved.move).toMatchObject({ result: 'sunk', shipSlot: 3 })
     expect(resolved.match.boards.bot.shots.slice(0, 2)).toEqual([3, 3])
+    expect(resolved.match.boards.bot.shots[11]).toBe(1)
     expect(resolved.match.winner).toBeNull()
     expect(resolved.match.turn).toBe('player')
   })
@@ -101,6 +102,7 @@ describe('sunkHalo', () => {
 
     expect(sunkHalo(sunkBoard)).toEqual(new Set([1, 10, 11]))
     expect(sunkHalo(sunkBoard).has(0)).toBe(false)
+    for (const cell of [1, 10, 11]) expect(sunkBoard.shots[cell]).toBe(1)
   })
 
   it('never contains another ship cell in a valid no-touch fleet', () => {
@@ -110,5 +112,42 @@ describe('sunkHalo', () => {
 
     const halo = sunkHalo(match.boards.bot)
     for (const cell of halo) expect(match.boards.bot.shipAt[cell]).toBe(-1)
+  })
+
+  it('marks the full perimeter when a four-cell ship sinks', () => {
+    const carrierOnly: Placement[] = [
+      { slot: 0, row: 4, col: 3, orientation: 'h' },
+    ]
+    let match = createMatch(twoCellShip, carrierOnly)
+    for (const cell of [43, 44, 45, 46]) {
+      match = applyAttack(match, 'player', cell).match
+    }
+
+    const board = match.boards.bot
+    const halo = sunkHalo(board)
+    expect(halo.size).toBeGreaterThan(0)
+    for (const cell of halo) expect(board.shots[cell]).toBe(1)
+    for (const cell of [43, 44, 45, 46]) expect(board.shots[cell]).toBe(3)
+  })
+
+  it('does not overwrite a halo cell already marked miss before the sink', () => {
+    const defenderFleet: Placement[] = [
+      { slot: 3, row: 0, col: 0, orientation: 'h' },
+    ]
+    const afterHit = applyAttack(createMatch(twoCellShip, defenderFleet), 'player', 0).match
+    const withPriorMiss = {
+      ...afterHit,
+      boards: {
+        ...afterHit.boards,
+        bot: {
+          ...afterHit.boards.bot,
+          shots: afterHit.boards.bot.shots.map((shot, cell) => (cell === 11 ? 1 : shot)),
+        },
+      },
+    }
+    const resolved = applyAttack(withPriorMiss, 'player', 1)
+
+    expect(resolved.match.boards.bot.shots[11]).toBe(1)
+    expect(sunkHalo(resolved.match.boards.bot).has(11)).toBe(true)
   })
 })

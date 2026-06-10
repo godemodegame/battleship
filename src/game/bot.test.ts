@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { COMPLETE_FLEET, seededRandom } from '../test/gameFixtures'
 import { autoPlaceFleet } from './board'
 import { chooseBotTarget } from './bot'
-import { applyAttack, buildBoard, createMatch, sunkHalo } from './engine'
+import { applyAttack, buildBoard, createMatch, markSunkHaloMisses, sunkHalo } from './engine'
 import type { BoardState, CellShot, Difficulty, Placement } from './types'
 
 const DIFFICULTIES: Difficulty[] = ['easy', 'normal', 'hard']
@@ -26,10 +26,12 @@ function markShots(
 
 function sinkSlot(board: BoardState, slot: number): BoardState {
   const next = cloneBoard(board)
-  const ship = next.ships.find((candidate) => candidate.slot === slot)!
+  const shipIndex = next.ships.findIndex((candidate) => candidate.slot === slot)!
+  const ship = next.ships[shipIndex]
   ship.sunk = true
   ship.hitMask = (1 << ship.length) - 1
   for (const cell of ship.cells) next.shots[cell] = 3
+  markSunkHaloMisses(next.shots, next, shipIndex)
   return next
 }
 
