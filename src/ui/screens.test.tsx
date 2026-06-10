@@ -21,6 +21,7 @@ const mocks = vi.hoisted(() => {
     sunk: vi.fn(),
     win: vi.fn(),
     lose: vi.fn(),
+    ensureAudio: vi.fn(),
   }
   return {
     progress: { active: false, progress: 100, errors: [] as string[] },
@@ -38,6 +39,27 @@ vi.mock('@react-three/drei', () => ({
 
 vi.mock('../lib/sfx', () => ({
   sfx: mocks.sfx,
+}))
+
+vi.mock('../lib/haptics', () => ({
+  haptics: {
+    tap: vi.fn(),
+    select: vi.fn(),
+    confirm: vi.fn(),
+    place: vi.fn(),
+    deny: vi.fn(),
+    fire: vi.fn(),
+    light: vi.fn(),
+    medium: vi.fn(),
+    heavy: vi.fn(),
+    success: vi.fn(),
+    error: vi.fn(),
+    miss: vi.fn(),
+    hit: vi.fn(),
+    sunk: vi.fn(),
+    win: vi.fn(),
+    lose: vi.fn(),
+  },
 }))
 
 import App from '../App'

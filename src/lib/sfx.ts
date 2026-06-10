@@ -78,6 +78,12 @@ function audio(): AudioContext | null {
   return ctx
 }
 
+/** Returns a primed AudioContext (or null). Used by haptics for iOS Safari Taptic fallback. */
+export function ensureAudio(): AudioContext | null {
+  primeAudio()
+  return audio()
+}
+
 function tone(
   freq: number,
   opts: {

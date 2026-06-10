@@ -1,20 +1,137 @@
 /**
- * Haptic feedback via the Vibration API.
- * Works on Android (Chrome, etc). Safe no-op on iOS Safari and unsupported browsers.
- * Persisted mute toggle independent of sound (users often want haptics even with SFX off).
- * Follows the same priming/ergonomics spirit as sfx.ts but vibration needs no unlock gesture.
+ * Haptic feedback.
+ *
+ * - Native: uses navigator.vibrate where supported (Android Chrome etc.).
+ * - iOS Safari fallback: synthesizes extremely short, quiet low-frequency audio bursts
+ *   via the shared AudioContext. Modern iPhones map these to the Taptic Engine.
+ *   The bursts are tuned to be felt more than heard (very low gain + short duration).
+ *
+ * Persisted mute toggle independent of sound. Primes audio context via sfx helpers
+ * so the first haptic on iOS works after a user gesture.
  */
+import { ensureAudio } from './sfx'
+
 let muted = localStorage.getItem('eb-haptics-muted') === '1'
 
+const hasVibrate =
+  typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function'
+
 function vibrate(pattern: number | number[]) {
-  if (muted) return
-  if (typeof navigator === 'undefined' || typeof navigator.vibrate !== 'function') return
+  if (muted || !hasVibrate) return
   try {
-    // Some implementations return boolean; we ignore the result.
-    // Arrays produce rhythmic feedback where supported; single number is widely supported.
     navigator.vibrate(pattern as any)
   } catch {
     // ignore
+  }
+}
+
+/**
+ * iOS Taptic / cross-platform audio haptic.
+ * Very short, low-gain low-frequency transients. Keep gain tiny so it's primarily tactile.
+ */
+function audioHaptic(
+  style:
+    | 'light'
+    | 'medium'
+    | 'heavy'
+    | 'tap'
+    | 'select'
+    | 'impact'
+    | 'double'
+    | 'error'
+    | 'win'
+    | 'lose',
+) {
+  if (muted) return
+  let ac: AudioContext | null = null
+  try {
+    ac = ensureAudio()
+  } catch {
+    return
+  }
+  if (!ac) return
+
+  const t0 = ac.currentTime
+
+  const play = (freq: number, dur: number, gain: number, delay = 0) => {
+    try {
+      const osc = ac!.createOscillator()
+      const g = ac!.createGain()
+      const lp = ac!.createBiquadFilter()
+
+      osc.type = 'sine'
+      osc.frequency.value = freq
+
+      lp.type = 'lowpass'
+      lp.frequency.value = 160
+
+      const start = t0 + delay
+      g.gain.value = 0
+      g.gain.linearRampToValueAtTime(gain, start + 0.002)
+      g.gain.linearRampToValueAtTime(0.00001, start + dur)
+
+      osc.connect(lp).connect(g).connect(ac!.destination)
+      osc.start(start)
+      osc.stop(start + dur + 0.008)
+    } catch {
+      // jsdom or broken AudioContext in test env — silently ignore
+    }
+  }
+
+  // Tuned for tactile feel on iPhone Taptic (and subtle thump elsewhere).
+  // Gains are deliberately low (0.015–0.055).
+  switch (style) {
+    case 'light':
+    case 'tap':
+      play(62, 0.014, 0.022)
+      break
+    case 'medium':
+    case 'select':
+      play(48, 0.026, 0.032)
+      break
+    case 'heavy':
+    case 'impact':
+      play(38, 0.038, 0.045)
+      break
+    case 'double':
+      play(52, 0.018, 0.028)
+      play(44, 0.022, 0.026, 0.032)
+      break
+    case 'error':
+      play(58, 0.012, 0.024)
+      play(52, 0.014, 0.022, 0.022)
+      break
+    case 'win':
+      play(55, 0.016, 0.026)
+      play(62, 0.018, 0.028, 0.028)
+      play(48, 0.026, 0.032, 0.055)
+      break
+    case 'lose':
+      play(36, 0.042, 0.048)
+      play(30, 0.028, 0.032, 0.055)
+      break
+  }
+}
+
+function haptic(
+  style:
+    | 'light'
+    | 'medium'
+    | 'heavy'
+    | 'tap'
+    | 'select'
+    | 'impact'
+    | 'double'
+    | 'error'
+    | 'win'
+    | 'lose',
+  vibPattern?: number | number[],
+) {
+  if (muted) return
+  if (hasVibrate && vibPattern != null) {
+    vibrate(vibPattern)
+  } else {
+    audioHaptic(style)
   }
 }
 
@@ -27,29 +144,29 @@ export const haptics = {
     localStorage.setItem('eb-haptics-muted', value ? '1' : '0')
   },
 
-  // Low-level primitives (use semantic methods below in most cases)
-  light: () => vibrate(12),
-  medium: () => vibrate(28),
-  heavy: () => vibrate(55),
+  // Low-level primitives
+  light: () => haptic('light', 12),
+  medium: () => haptic('medium', 28),
+  heavy: () => haptic('heavy', 55),
 
-  // Semantic actions — tuned for touch gameplay feel
-  tap: () => vibrate(10), // very light selection / hover feedback
-  select: () => vibrate(20), // deliberate cell/option pick
-  confirm: () => vibrate(38), // commit action (confirm fleet, etc)
-  place: () => vibrate(24), // successful ship placement
-  deny: () => vibrate([10, 32, 10]), // invalid action / error wiggle
-  fire: () => vibrate(30), // initiating a shot
+  // Semantic actions
+  tap: () => haptic('tap', 10),
+  select: () => haptic('select', 20),
+  confirm: () => haptic('impact', 38),
+  place: () => haptic('medium', 24),
+  deny: () => haptic('error', [10, 32, 10]),
+  fire: () => haptic('medium', 30),
 
-  // Shot results — mirror the distinct sfx personalities
-  miss: () => vibrate(8), // subtle, almost a tick
-  hit: () => vibrate(30),
-  sunk: () => vibrate([42, 18, 78]), // heavier, double-pulse "impact + crunch"
+  // Shot results
+  miss: () => haptic('light', 8),
+  hit: () => haptic('medium', 30),
+  sunk: () => haptic('impact', [42, 18, 78]),
 
   // End states
-  win: () => vibrate([22, 48, 22, 85]), // rising celebratory
-  lose: () => vibrate([65, 30, 105]), // heavy, descending
+  win: () => haptic('win', [22, 48, 22, 85]),
+  lose: () => haptic('lose', [65, 30, 105]),
 
-  // Generic positive/negative for UI
-  success: () => vibrate([16, 42, 16]),
-  error: () => vibrate([10, 28, 10]),
+  // UI
+  success: () => haptic('win', [16, 42, 16]),
+  error: () => haptic('error', [10, 28, 10]),
 }
