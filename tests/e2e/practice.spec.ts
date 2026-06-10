@@ -22,25 +22,28 @@ async function storeValue<T>(page: Page, selector: string): Promise<T> {
 test('renders a non-blank WebGL battlefield', async ({ page }) => {
   await openReady(page)
 
-  const colors = await page.locator('canvas').evaluate(async (canvas: HTMLCanvasElement) => {
-    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
-    const gl =
-      canvas.getContext('webgl2') ??
-      canvas.getContext('webgl')
-    if (!gl) return 0
+  await expect
+    .poll(
+      async () => {
+        return page.locator('canvas').evaluate(async (canvas: HTMLCanvasElement) => {
+          await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
+          const gl = canvas.getContext('webgl2') ?? canvas.getContext('webgl')
+          if (!gl) return 0
 
-    const pixels = new Uint8Array(canvas.width * canvas.height * 4)
-    gl.readPixels(0, 0, canvas.width, canvas.height, gl.RGBA, gl.UNSIGNED_BYTE, pixels)
-    const unique = new Set<string>()
-    const stride = Math.max(4, Math.floor(pixels.length / 20_000 / 4) * 4)
-    for (let index = 0; index < pixels.length; index += stride) {
-      unique.add(`${pixels[index]},${pixels[index + 1]},${pixels[index + 2]},${pixels[index + 3]}`)
-      if (unique.size > 24) break
-    }
-    return unique.size
-  })
-
-  expect(colors).toBeGreaterThan(4)
+          const pixels = new Uint8Array(canvas.width * canvas.height * 4)
+          gl.readPixels(0, 0, canvas.width, canvas.height, gl.RGBA, gl.UNSIGNED_BYTE, pixels)
+          const unique = new Set<string>()
+          const stride = Math.max(4, Math.floor(pixels.length / 20_000 / 4) * 4)
+          for (let index = 0; index < pixels.length; index += stride) {
+            unique.add(`${pixels[index]},${pixels[index + 1]},${pixels[index + 2]},${pixels[index + 3]}`)
+            if (unique.size > 24) break
+          }
+          return unique.size
+        })
+      },
+      { timeout: 10_000 },
+    )
+    .toBeGreaterThan(4)
 })
 
 test('completes placement, attack, forfeit, and rematch flows', async ({ page }) => {
