@@ -2,289 +2,200 @@
 
 ## Purpose
 
-This document summarizes the current documentation state after the repository
-has moved from planning into an implemented local practice build.
+This document summarizes documentation coverage after the local practice build
+was implemented and the documentation roadmap through on-chain integration
+preparation was completed.
 
-## Current Repository State
+Audit date:
 
-The game currently includes:
+- June 10, 2026.
+
+## Repository Reality
+
+Playable now:
 
 - Vite React TypeScript frontend;
 - React Three Fiber and Three.js scene;
-- local state management with Zustand;
+- local Zustand state;
 - home, placement, battle, and game-over screens;
 - manual and automatic fleet placement;
-- classic no-touch fleet validation;
+- classic no-touch placement validation;
 - local player-versus-bot practice match;
-- bot difficulties: `Easy`, `Normal`, and `Hard`;
+- `Easy`, `Normal`, and `Hard` bot difficulties;
 - projectile, miss, hit, and sunk effects;
-- runtime FBX/GLB model loading;
-- sound effects and mute persistence;
-- standalone `vfx-app` for generating VFX GLB assets.
+- runtime FBX/GLB models and JPG textures;
+- synthesized sound and persisted mute state;
+- standalone `vfx-app` for generating the runtime VFX GLBs.
 
-The game does not yet include:
+Not implemented:
 
-- wallet connection;
-- Arbitrum Sepolia network switching;
-- smart contracts;
+- Privy wallet connection;
+- Arbitrum Sepolia network guard;
+- smart contract package;
 - Fhenix/CoFHE client integration;
 - encrypted fleet submission;
 - on-chain friend-match flow;
 - contract event sync;
 - automated tests;
-- deployment pipeline.
+- Vercel project and public deployment.
+
+The docs distinguish these two states. Target architecture must not be read as
+implemented behavior.
+
+## Completed Current-Build Documentation
+
+| Area | Document | Status |
+| --- | --- | --- |
+| Playable scope | `docs/current-playable-build.md` | Current |
+| Local rules | `docs/local-game-engine.md` | Current |
+| Practice bot | `docs/practice-mode-and-bot-ai.md` | Current |
+| Runtime assets | `docs/runtime-asset-pipeline.md` | Current |
+| VFX production | `docs/vfx-forge-workflow.md` | Current |
+| Mobile budget | `docs/mobile-performance-budget.md` | Current |
+| Prototype tests | `docs/local-prototype-test-plan.md` | Plan complete; tests not implemented |
+| Shipped UI copy | `docs/copy-implementation-sync.md` | Current |
+
+The README links these documents before the target on-chain design set.
+
+## Updated Existing Documents
+
+The following stale areas were revised:
+
+- `README.md` now states what is playable and how to run it.
+- `docs/game-mechanics.md` identifies manual placement and local bot practice as
+  implemented.
+- `docs/frontend-architecture.md` describes the current monolithic practice
+  store and maps it to contract-derived state and events.
+- `docs/interface-and-buttons-guide.md` documents the current practice-first
+  entry before the target wallet-first flow.
+- `assets/3d-models/README.md` records the generated source and runtime assets.
+- `docs/computer-opponent-design.md` separates the local frontend bot from the
+  future on-chain bot concept.
+- `docs/testing-strategy.md` starts with the local prototype milestone.
+- `docs/copy-deck.md` points to the current implementation copy map.
+- `docs/technical-architecture.md`, `docs/fhenix-integration-plan.md`, and
+  `docs/project-description.md` record Privy as the wallet connection layer.
+
+## On-chain Preparation Coverage
+
+| Area | Document | Decision captured |
+| --- | --- | --- |
+| Wallet and chain | `docs/network-and-wallet-requirements.md` | Privy wallet-only external wallets; Arbitrum Sepolia `421614`; recovery rules |
+| Frontend migration | `docs/frontend-architecture.md` | Practice/on-chain separation; state and event mapping; public render model |
+| Deployment | `docs/deployment-plan.md` | Vercel static host; Privy origins; immutable deployment records; rollback |
+| Contract storage | `docs/contract-data-model.md` | Public and encrypted state model |
+| Contract API | `docs/contract-api.md` | Writes, reads, events, errors, and finalization |
+| Fhenix | `docs/fhenix-integration-plan.md` | CoFHE client and encrypted operation plan |
+| Security | `docs/security-and-fair-play.md` | Hidden-state and trust boundaries |
+| End-to-end flows | `docs/user-flows.md` | Friend match player journeys |
+
+## Important Decisions Now Explicit
+
+- Privy is the only wallet login and connection UI.
+- The first wallet slice is wallet-only and uses external EVM wallets.
+- Privy embedded wallets, social login, and smart wallets are deferred.
+- Arbitrum Sepolia is the only MVP chain.
+- The wallet address is the on-chain identity; the Privy user id is not a
+  contract authorization identity.
+- Local practice remains wallet-free and locally authoritative.
+- On-chain friend matches must never use the local plaintext `MatchState` as
+  authority.
+- Contract events trigger refetches; contract reads remain the source of truth.
+- Plaintext fleet state is cleared after encrypted submission.
+- Exact owner-fleet rendering after submission is deferred until an authorized
+  view design exists.
+- Contract deployments are immutable and versioned by `deploymentId`.
+- Match links include the deployment id to avoid address and match-id
+  ambiguity.
+- Vercel hosts the static frontend but does not own gameplay authority.
+
+## Documentation Readiness
+
+Current readiness:
+
+- local practice onboarding for developers: strong;
+- implemented game-rule reference: strong;
+- current bot behavior: strong;
+- asset and VFX workflow: strong;
+- measurable mobile budget: strong;
+- current test plan: strong, implementation pending;
+- target product and contract design: strong but still hypothetical;
+- Privy and network requirements: ready for implementation;
+- frontend migration boundary: ready for implementation;
+- deployment and rollback plan: ready for implementation;
+- actual ABI and deployed-address documentation: blocked on contract code;
+- actual Fhenix SDK integration notes: blocked on implementation;
+- public testnet runbook evidence: blocked on deployment.
+
+## Remaining Documentation Risks
+
+## 1. Design-Code Drift
+
+The contract, Fhenix, and on-chain frontend documents are pre-implementation
+designs. Once code exists, generated ABI, storage, package versions, and SDK
+behavior may differ.
+
+Required response:
+
+- update the design documents in the same pull request as implementation
+  changes;
+- cite generated artifacts and deployment records;
+- do not preserve obsolete API names for historical consistency.
 
-## Current Documentation Strengths
+## 2. Test Plan Without Tests
 
-The documentation set already covers the intended on-chain product well:
+`docs/local-prototype-test-plan.md` is complete, but the repository still has no
+automated test suite.
 
-- high-level project direction;
-- English-only rule;
-- mobile-first browser requirement;
-- PvP-first product scope;
-- Arbitrum Sepolia target;
-- Fhenix/CoFHE privacy direction;
-- smart contract behavior outline;
-- Fhenix SDK and decrypt-flow plan;
-- contract data model;
-- contract API;
-- frontend architecture;
-- security and fair-play model;
-- testing strategy;
-- copy deck;
-- friend-match user flows;
-- visual style direction;
-- interface and button guide;
-- 3D model catalog and generation prompts;
-- backendless on-chain computer opponent concept.
+Required response:
 
-This is still valuable as target architecture, but the documentation no longer
-fully describes what exists in the playable build today.
+- implement engine and bot unit tests first;
+- add store orchestration tests;
+- add mobile and 3D browser smoke tests;
+- record actual commands and results after the test tooling exists.
 
-## Main Missing Layer
+## 3. Owner Fleet Display
 
-The biggest missing layer is current implementation documentation.
+The local build renders the player's plaintext fleet for the whole match. The
+on-chain privacy model clears plaintext placement after submission.
 
-Earlier docs describe where the project is going. They do not yet explain the
-implemented local practice game: its screens, rules, bot behavior, asset runtime
-pipeline, VFX generation workflow, current limitations, and immediate test
-needs.
+Required response:
 
-## Critical Gaps
+- hide exact owner fleet geometry in the first on-chain slice; or
+- design and review an authorized `decryptForView` flow before rendering it.
 
-## 1. Current Playable Build
+Do not retain plaintext merely to preserve the current visual behavior.
 
-Missing file:
+## 4. Provider and SDK Churn
 
-- `docs/current-playable-build.md`
+Privy, Vercel, Arbitrum, and CoFHE documentation can change.
 
-Why it matters:
+Required response:
 
-A contributor needs one document that explains the game as it exists now:
+- recheck official documentation before installing packages or deploying;
+- pin compatible versions;
+- record versions in deployment artifacts;
+- update dated source references when behavior changes.
 
-- local run command;
-- current screen flow;
-- practice-versus-bot scope;
-- disabled PvP actions;
-- what is simulated locally;
-- known limitations;
-- how the prototype maps to the future on-chain version.
+## 5. Documentation Navigation Growth
 
-Priority:
+The documentation set is now large.
 
-- P0.
+Required response:
 
-## 2. Local Game Engine
+- keep README ordering current;
+- add links from implementation PRs to the owning specification;
+- prefer updating an existing source of truth over creating overlapping notes.
 
-Missing file:
+## Next Audit Trigger
 
-- `docs/local-game-engine.md`
+Run the next full documentation audit when any of these occurs:
 
-Why it matters:
+- the automated test suite is added;
+- Privy is integrated;
+- the contract package is created;
+- the first encrypted fleet reaches Arbitrum Sepolia;
+- a contract ABI or storage layout is finalized;
+- the first public Vercel deployment is released.
 
-The local engine now contains concrete decisions that should be kept aligned
-with contract design:
-
-- board indexing;
-- fleet definition;
-- placement validation;
-- no-touch rule;
-- attack resolution;
-- turn passing;
-- sunk-ship halo deduction;
-- game-over summary logic.
-
-Priority:
-
-- P0.
-
-## 3. Practice Mode and Bot AI
-
-Missing file:
-
-- `docs/practice-mode-and-bot-ai.md`
-
-Why it matters:
-
-The current bot is implemented in the frontend for local practice. The existing
-computer-opponent doc describes a future backendless on-chain bot, which is a
-different design.
-
-The docs should distinguish:
-
-- current local practice bot;
-- future on-chain bot;
-- PvP MVP path;
-- difficulty behavior and limitations.
-
-Priority:
-
-- P0.
-
-## 4. Runtime Asset Pipeline
-
-Missing file:
-
-- `docs/runtime-asset-pipeline.md`
-
-Why it matters:
-
-The repo now contains real runtime assets, but the docs mostly describe prompts
-and planned outputs.
-
-The docs should define:
-
-- source asset folders;
-- runtime asset folders;
-- FBX versus GLB usage;
-- texture pairing;
-- model normalization and scale assumptions;
-- preload behavior;
-- replacement workflow;
-- asset verification checklist.
-
-Priority:
-
-- P0.
-
-## 5. VFX Forge Workflow
-
-Missing file:
-
-- `docs/vfx-forge-workflow.md`
-
-Why it matters:
-
-`vfx-app` is now part of the asset production workflow, but the main docs do not
-explain how it connects to the game.
-
-The docs should cover:
-
-- running `vfx-app`;
-- exporting the three VFX GLBs;
-- runtime animation expectations;
-- opacity fade limitation;
-- copying assets into `public/models`;
-- verification after export.
-
-Priority:
-
-- P1.
-
-## 6. Mobile Performance Budget
-
-Missing file:
-
-- `docs/mobile-performance-budget.md`
-
-Why it matters:
-
-The game is mobile-first and already uses WebGL, shadows, ocean rendering,
-model loading, and effects. A performance budget should be defined before
-visual complexity grows.
-
-Priority:
-
-- P1.
-
-## 7. Local Prototype Test Plan
-
-Missing file:
-
-- `docs/local-prototype-test-plan.md`
-
-Why it matters:
-
-The existing test strategy targets the future on-chain MVP. The current local
-build needs its own focused test plan for board rules, engine behavior, bot
-targeting, UI flows, and 3D smoke checks.
-
-Priority:
-
-- P1.
-
-## Important Stale Areas
-
-These existing documents need updates:
-
-- `README.md` should mention the current local practice build and run commands.
-- `docs/game-mechanics.md` still says automatic placement is enough for the
-  first working version, but manual placement now exists.
-- `docs/frontend-architecture.md` describes target architecture, not the current
-  implementation structure.
-- `docs/interface-and-buttons-guide.md` does not document the current
-  practice-mode home screen and disabled PvP actions.
-- `assets/3d-models/README.md` still reads like an asset planning document even
-  though runtime assets now exist.
-- `docs/computer-opponent-design.md` should clearly separate local frontend bot
-  behavior from future backendless on-chain bot behavior.
-- `docs/testing-strategy.md` needs a local prototype milestone before the
-  contract/Fhenix milestones.
-
-## Lower Priority Gaps
-
-These remain useful but can wait until the local prototype docs are current:
-
-- `docs/network-and-wallet-requirements.md`;
-- `docs/deployment-plan.md`;
-- `docs/copy-implementation-sync.md`;
-- accessibility checklist;
-- sound and music direction;
-- animation timing guide;
-- PWA plan;
-- public website or landing page copy.
-
-## Recommended Documentation Order
-
-1. `docs/current-playable-build.md`
-2. `docs/local-game-engine.md`
-3. `docs/practice-mode-and-bot-ai.md`
-4. `docs/runtime-asset-pipeline.md`
-5. `docs/vfx-forge-workflow.md`
-6. `docs/mobile-performance-budget.md`
-7. `docs/local-prototype-test-plan.md`
-8. `docs/network-and-wallet-requirements.md`
-9. `docs/deployment-plan.md`
-
-## Readiness Assessment
-
-Current documentation readiness:
-
-- product vision: strong;
-- target on-chain architecture: strong;
-- contract planning: good;
-- Fhenix planning: good;
-- frontend target architecture: good but stale against implementation;
-- security model: good for target MVP;
-- testing strategy: good for target MVP, missing local prototype tests;
-- copy deck: good for target MVP, missing practice-build sync;
-- visual style: strong;
-- asset prompts: good;
-- runtime asset workflow: missing;
-- VFX workflow integration: missing;
-- current playable build documentation: missing;
-- local bot documentation: missing.
-
-The project is ready to continue implementation, but the docs should now catch
-up with the playable local build before major wallet, contract, or Fhenix work
-starts.
+At that point, Phase 5 of `docs/documentation-roadmap.md` becomes active.
