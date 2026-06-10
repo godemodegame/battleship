@@ -1,4 +1,4 @@
-import { matchSummary, useStore } from '../state/store'
+import { matchSummary, useStore } from '../practice/practiceStore'
 
 export function GameOverScreen() {
   const match = useStore((s) => s.match)

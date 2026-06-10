@@ -1,4 +1,4 @@
-import { useStore } from '../state/store'
+import { useStore } from '../practice/practiceStore'
 import { FLEET } from '../game/constants'
 import { isFleetComplete } from '../game/board'
 import { MuteButton } from './common'

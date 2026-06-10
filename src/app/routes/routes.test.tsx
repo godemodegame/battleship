@@ -2,7 +2,7 @@ import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Routes } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { resetPracticeState, useStore } from '../../state/store'
+import { resetPracticeState, useStore } from '../../practice/practiceStore'
 import { appRoutes } from './appRoutes'
 
 vi.mock('../../three/Scene', () => ({
@@ -61,6 +61,29 @@ describe('application routes', () => {
     render(<TestRouter initialEntries={['/match/arb-sepolia-v1/42']} />)
     expect(screen.getByRole('heading', { name: 'Match Route' })).toBeTruthy()
     expect(screen.getByText(/Deployment arb-sepolia-v1 · Match 42/)).toBeTruthy()
+  })
+
+  it('resolves a known deployment on a deep refresh link (GAME-110)', () => {
+    // A fresh MemoryRouter entry models a browser refresh straight onto the deep
+    // match URL: the route reconstructs deployment + match identity with no prior
+    // client-side navigation.
+    render(<TestRouter initialEntries={['/match/arb-sepolia-v1/match-7f3a9c']} />)
+    expect(screen.getByRole('heading', { name: 'Match Route' })).toBeTruthy()
+    expect(screen.getByText(/Deployment arb-sepolia-v1 · Match match-7f3a9c/)).toBeTruthy()
+    // A reserved-but-undeployed deployment surfaces the pending note, not a phantom contract.
+    expect(screen.getByTestId('deployment-pending')).toBeTruthy()
+  })
+
+  it('shows a recoverable unavailable state for an unknown deployment id (GAME-110)', async () => {
+    const user = userEvent.setup()
+    render(<TestRouter initialEntries={['/match/retired-v0/42']} />)
+    expect(screen.getByTestId('deployment-unavailable')).toBeTruthy()
+    expect(screen.getByText(/unknown deployment \(retired-v0\)/i)).toBeTruthy()
+    // No phantom match phase is rendered for an unknown deployment.
+    expect(screen.queryByTestId('match-phase-kind')).toBeNull()
+    // The player can recover back to practice.
+    await user.click(screen.getByRole('link', { name: 'Back to Practice' }))
+    expect(screen.getByRole('button', { name: 'Practice vs Bot' })).toBeTruthy()
   })
 
   it('shows not found for unknown routes', async () => {

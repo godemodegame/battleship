@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
 import { GameCanvas } from '../three/Scene'
-import { resetPracticeState, useStore } from '../state/store'
+import { resetPracticeState, useStore } from './practiceStore'
 import { HomeScreen } from '../ui/HomeScreen'
 import { PlacementScreen } from '../ui/PlacementScreen'
 import { BattleHUD } from '../ui/BattleHUD'

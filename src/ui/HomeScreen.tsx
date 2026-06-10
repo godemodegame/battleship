@@ -1,4 +1,4 @@
-import { useStore } from '../state/store'
+import { useStore } from '../practice/practiceStore'
 import type { Difficulty } from '../game/types'
 import { MuteButton } from './common'
 

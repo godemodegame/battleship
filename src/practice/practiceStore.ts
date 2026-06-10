@@ -5,6 +5,7 @@ import { applyAttack, createMatch, sunkHalo } from '../game/engine'
 import { chooseBotTarget } from '../game/bot'
 import type { Difficulty, MatchState, Orientation, Placement, Side } from '../game/types'
 import { sfx } from '../lib/sfx'
+import { resultCopy } from '../copy/en'
 
 export type Screen = 'home' | 'placement' | 'battle' | 'gameover'
 
@@ -108,11 +109,12 @@ export function resetPracticeState() {
 
 function shotToast(result: 'miss' | 'hit' | 'sunk', by: Side, label: string | undefined): Toast {
   const yours = by === 'player'
-  if (result === 'miss') return { id: nextId++, text: 'Miss', tone: 'cyan' }
-  if (result === 'hit') return { id: nextId++, text: 'Hit', tone: yours ? 'amber' : 'red' }
+  if (result === 'miss') return { id: nextId++, text: resultCopy.miss, tone: 'cyan' }
+  if (result === 'hit') return { id: nextId++, text: resultCopy.hit, tone: yours ? 'amber' : 'red' }
+  const ship = label ?? 'ship'
   return {
     id: nextId++,
-    text: yours ? `Sunk — enemy ${label} destroyed` : `Sunk — your ${label} is lost`,
+    text: yours ? resultCopy.sunkEnemy(ship) : resultCopy.sunkYours(ship),
     tone: yours ? 'amber' : 'red',
   }
 }

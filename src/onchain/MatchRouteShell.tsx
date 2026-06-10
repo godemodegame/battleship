@@ -4,6 +4,8 @@ import {
   phaseLabel,
   type MatchView,
 } from './phaseResolver'
+import { getActiveDeploymentId, getDeployment, isDeploymentReady } from './deployments'
+import { deploymentCopy, matchRouteCopy } from '../copy/en'
 
 /** Demo addresses (match the ones used in phaseResolver.test.ts for consistency). */
 const DEMO_CREATOR = '0x1111111111111111111111111111111111111111' as const
@@ -102,13 +104,48 @@ function PhasePanel({ phase }: { phase: ReturnType<typeof resolveMatchPhase> }) 
   )
 }
 
+/** Shown when an invite link references a deployment id not in the manifest. */
+function DeploymentUnavailable({ deploymentId }: { deploymentId: string }) {
+  return (
+    <div
+      className="overlay home"
+      data-game-slice="onchain-shell-103"
+      data-testid="match-route-shell"
+    >
+      <div className="title-lockup">
+        <span className="title-kicker">{matchRouteCopy.kicker}</span>
+        <h1>{matchRouteCopy.heading}</h1>
+        <p className="tagline" data-testid="deployment-unavailable">
+          {deploymentCopy.unknownTitle}
+        </p>
+      </div>
+      <div className="home-actions">
+        <p className="footnote">{deploymentCopy.unknownBody(deploymentId)}</p>
+        <Link className="btn primary" to="/practice">
+          {matchRouteCopy.backToPractice}
+        </Link>
+      </div>
+    </div>
+  )
+}
+
 export function MatchRouteShell() {
-  const { deploymentId, matchId } = useParams()
+  const params = useParams()
+  const deploymentId = params.deploymentId ?? getActiveDeploymentId()
+  const matchId = params.matchId ?? 'demo'
+
+  // GAME-110: resolve the versioned deployment before rendering any match phase.
+  // Old invite links must keep pointing at their original deployment; an unknown
+  // id resolves to a recoverable "unavailable" state instead of a phantom match.
+  const deployment = getDeployment(deploymentId)
+  if (!deployment) {
+    return <DeploymentUnavailable deploymentId={deploymentId} />
+  }
 
   // Demo-only: synthesize a mock MatchView from the URL so the route shell can
   // demonstrate phase rendering without a contract client and without ever
   // importing the local plaintext attack engine (GAME-103 empty shell).
-  const demoMatch = makeDemoMatch(deploymentId ?? 'arb-sepolia-v1', matchId ?? 'demo')
+  const demoMatch = makeDemoMatch(deploymentId, matchId)
 
   // Demo viewer/wallet context is also derived from matchId for broader phase coverage
   // in the shell (e.g. "demo-join-invited" will render the 'join' phase for the invited wallet).
@@ -124,7 +161,7 @@ export function MatchRouteShell() {
   // is intentionally limited in this slice; unit tests in phaseResolver.test.ts cover the
   // pure function exhaustively. Real implementation will source values from Privy + chain
   // guard and the match from on-chain reads (public MatchView shape only).
-  const id = (matchId || '').toLowerCase()
+  const id = matchId.toLowerCase()
   const hasDemoMarker = id.includes('demo')
   const demoWallet = hasDemoMarker && (id.includes('join') || id.includes('invited'))
     ? DEMO_INVITED
@@ -140,26 +177,29 @@ export function MatchRouteShell() {
   }
 
   const phase = resolveMatchPhase(demoInput)
+  const ready = isDeploymentReady(deployment)
 
   return (
     <div className="overlay home" data-game-slice="onchain-shell-103" data-testid="match-route-shell">
       <div className="title-lockup">
-        <span className="title-kicker">On-chain Match</span>
-        <h1>Match Route</h1>
-        <p className="tagline">
-          Deployment {deploymentId ?? 'arb-sepolia-v1'} · Match {matchId ?? 'demo'}
-        </p>
+        <span className="title-kicker">{matchRouteCopy.kicker}</span>
+        <h1>{matchRouteCopy.heading}</h1>
+        <p className="tagline">{matchRouteCopy.tagline(deploymentId, matchId)}</p>
       </div>
 
       <PhasePanel phase={phase} />
 
       <div className="home-actions">
         <Link className="btn primary" to="/practice">
-          Back to Practice
+          {matchRouteCopy.backToPractice}
         </Link>
-        <p className="footnote">Mocked on-chain phases for GAME-103 (empty shell via URL matchId). Real contract wiring later.</p>
+        {!ready && (
+          <p className="footnote" data-testid="deployment-pending">
+            {deploymentCopy.pendingNote}
+          </p>
+        )}
+        <p className="footnote">{matchRouteCopy.shellFootnote}</p>
       </div>
     </div>
   )
 }
-

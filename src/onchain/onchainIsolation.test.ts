@@ -25,6 +25,29 @@ describe('on-chain module isolation (GAME-103 empty shell)', () => {
     expect(src).not.toMatch(bad)
   })
 
+  it('renderModel source does not reference the local attack engine or bot', async () => {
+    const src = await readOnchainSource('./renderModel.ts')
+    const bad = /(?:from\s+['"]|import\s*\(\s*['"]|require\s*\(\s*['"]|export[^;]+from\s+['"])[^'"]*\b(engine|bot)\b/i
+    expect(src).not.toMatch(bad)
+  })
+
+  it('the public render adapter never exposes hull geometry', async () => {
+    const { decodePublicBoard, publicBattleToRenderModel } = await import('./renderModel')
+    const board = decodePublicBoard({ misses: [], hits: [], sunk: [3], shipsRemaining: 1 })
+    const scene = publicBattleToRenderModel({
+      phase: 'finished',
+      perspective: 'creator',
+      currentTurn: null,
+      winner: null,
+      playerBoard: board,
+      opponentBoard: board,
+      selectedCell: null,
+      latestFinalizedMove: null,
+    })
+    expect(scene.player.ships).toEqual([])
+    expect(scene.enemy.ships).toEqual([])
+  })
+
   it('loading the on-chain modules at runtime does not transitively require engine or bot for their public exports', async () => {
     // Dynamic import of the resolver and shell should succeed without the practice engine being a hard dep.
     // If engine were imported at top level in the onchain subtree, this would still load (because tests load everything),

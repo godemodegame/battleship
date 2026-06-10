@@ -12,6 +12,8 @@
  * client layer lands it can be re-exported from a shared viem-compatible type.
  */
 
+import { phaseCopy } from '../copy/en'
+
 export type Address = `0x${string}`
 
 export type HexAddress = Address
@@ -188,32 +190,36 @@ export function resolveMatchPhase(input: PhaseResolverInput): MatchPhase {
 export function phaseLabel(phase: MatchPhase): string {
   switch (phase.kind) {
     case 'wallet-required':
-      return 'Connect wallet to continue'
+      return phaseCopy.walletRequired
     case 'wrong-network':
-      return 'Switch to Arbitrum Sepolia'
+      return phaseCopy.wrongNetwork
     case 'not-found':
-      return 'Match not found'
+      return phaseCopy.notFound
     case 'join':
-      return 'Join this match'
+      return phaseCopy.join
     case 'waiting-for-opponent':
-      return 'Waiting for opponent to join'
+      return phaseCopy.waitingForOpponent
     case 'placement':
-      if (phase.validating) return 'Validating fleets'
-      if (phase.waitingForOpponent) return 'Waiting for opponent fleet'
-      if (phase.submitted) return 'Fleet submitted'
-      return 'Place your fleet'
+      if (phase.validating) return phaseCopy.placementValidating
+      if (phase.waitingForOpponent) return phaseCopy.placementWaitingForFleet
+      if (phase.submitted) return phaseCopy.placementSubmitted
+      return phaseCopy.placementPlace
     case 'battle':
-      return phase.isMyTurn ? 'Your turn' : "Opponent's turn"
+      return phase.isMyTurn ? phaseCopy.battleYourTurn : phaseCopy.battleOpponentTurn
     case 'resolving':
-      return 'Resolving shot'
+      return phaseCopy.resolving
     case 'finished':
-      return phase.youWon === true ? 'You won' : phase.youWon === false ? 'You lost' : 'Match finished'
+      return phase.youWon === true
+        ? phaseCopy.finishedWon
+        : phase.youWon === false
+          ? phaseCopy.finishedLost
+          : phaseCopy.finishedComplete
     case 'cancelled':
-      return 'Match cancelled'
+      return phaseCopy.cancelled
     case 'forfeited':
-      return 'Match forfeited'
+      return phaseCopy.forfeited
     case 'unavailable':
     default:
-      return 'Match unavailable'
+      return phaseCopy.unavailable
   }
 }
