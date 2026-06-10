@@ -14,6 +14,34 @@ It builds on:
 
 This is a near-ABI-level specification. It should guide both Solidity implementation and frontend integration.
 
+## Implementation Status
+
+Phase 3 (GAME-301..311) implemented the public lifecycle slice of this API in
+`contracts/contracts/BattleshipGame.sol`: `createMatch`, `joinMatch`,
+`cancelMatch`, `forfeit`, `claimTimeoutWin`, the reads `getMatch`,
+`getPlayers`, `getPlayerMatches`, `getPlayerMatchCount`, and the lifecycle
+events and errors those functions use. Decisions taken by the implementation:
+
+- `forfeit` reverts with `InvalidMatchStatus` while the match is still
+  `WaitingForOpponent`: there is no opponent to win, so the creator exits with
+  `cancelMatch` (this resolves the open cancel-after-join question in favor of
+  allowing cancel until `ReadyToStart`);
+- a missed join deadline is a cancellation path, not a `claimTimeoutWin` case;
+- `claimTimeoutWin` supports placement and turn deadlines with reason codes
+  `1` (placement) and `2` (turn); the `ResolvingShot` recovery rule is
+  deferred to the Phase 4 CoFHE prototype and currently reverts with
+  `NoTimeoutAvailable`;
+- `MatchView` additionally exposes the `TimeoutState` deadlines so the
+  frontend can render timeout UI without extra reads;
+- `getPlayerMatchCount(player)` exists alongside `getPlayerMatches` for
+  pagination; the pagination cap is `50`;
+- match ids are sequential starting at `1`; id `0` always means no match.
+
+`submitFleet`, `finalizeFleetValidation`, `startMatch`, `attack`,
+`finalizeAttack`, `getMove`, `getMoveHistory`, and `getPendingShot` are not
+implemented yet: the fleet and attack ABI is frozen only after the Phase 4
+feasibility results (GAME-401..405).
+
 ## Scope
 
 The MVP API focuses on:
