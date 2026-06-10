@@ -41,6 +41,16 @@ body,
   inset: 0;
 }
 
+.app-shell {
+  position: fixed;
+  inset: 0;
+}
+
+.app-shell > div:first-child {
+  position: absolute !important;
+  inset: 0;
+}
+
 /* ---------- shared overlay / hud ---------- */
 
 .overlay {

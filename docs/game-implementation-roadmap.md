@@ -164,18 +164,18 @@ Goal:
 
 Tasks:
 
-| ID | Priority | Work |
-| --- | --- | --- |
-| GAME-101 | P0 | Add a router and route-level application shell |
-| GAME-102 | P0 | Keep local practice under an explicit practice route or mode boundary |
-| GAME-103 | P0 | Create an empty on-chain application shell and match route |
-| GAME-104 | P0 | Split practice orchestration from shared UI and scene state |
-| GAME-105 | P0 | Add a pure on-chain match phase resolver with tests |
-| GAME-106 | P0 | Introduce `PublicBattleRenderModel` and public board adapters |
-| GAME-107 | P0 | Refactor the 3D scene to consume mode-specific render data |
-| GAME-108 | P1 | Move shared English copy and error mappings into typed modules |
-| GAME-109 | P1 | Add a versioned deployment manifest reader |
-| GAME-110 | P1 | Support `/match/:deploymentId/:matchId` direct navigation and refresh |
+| ID | Priority | Status | Work |
+| --- | --- | --- | --- |
+| GAME-101 | P0 | Complete | Add a router and route-level application shell |
+| GAME-102 | P0 | Complete | Keep local practice under an explicit practice route or mode boundary |
+| GAME-103 | P0 | Complete | Create an empty on-chain application shell and match route |
+| GAME-104 | P0 | | Split practice orchestration from shared UI and scene state |
+| GAME-105 | P0 | | Add a pure on-chain match phase resolver with tests |
+| GAME-106 | P0 | | Introduce `PublicBattleRenderModel` and public board adapters |
+| GAME-107 | P0 | | Refactor the 3D scene to consume mode-specific render data |
+| GAME-108 | P1 | | Move shared English copy and error mappings into typed modules |
+| GAME-109 | P1 | | Add a versioned deployment manifest reader |
+| GAME-110 | P1 | | Support `/match/:deploymentId/:matchId` direct navigation and refresh |
 
 Implementation rules:
 
@@ -582,12 +582,12 @@ A roadmap task is complete only when:
 
 ## Status Tracking
 
-Phase status at roadmap creation:
+Phase status:
 
 | Phase | Status |
 | --- | --- |
-| 0. Stabilize local practice | Not started |
-| 1. Separate modes | Not started |
+| 0. Stabilize local practice | Complete (June 10, 2026) |
+| 1. Separate modes | In progress (GAME-101, GAME-102, GAME-103 complete) |
 | 2. Privy and network | Not started |
 | 3. Contract public lifecycle | Not started |
 | 4. CoFHE encrypted rules | Not started |
