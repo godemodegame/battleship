@@ -530,3 +530,6 @@ The immediate engineering work enabled by this roadmap is:
 4. build and test the contract package with CoFHE mocks;
 5. replace design assumptions with measured implementation notes as each slice
    lands.
+
+The task-level implementation sequence, dependencies, priorities, and release
+criteria are tracked in `docs/game-implementation-roadmap.md`.
