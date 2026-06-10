@@ -2,15 +2,37 @@
 
 ## Purpose
 
-This document describes what is missing from the project documentation now that
-the repository has moved beyond planning and contains a playable local practice
-build.
+This document records the documentation work created after the repository moved
+beyond planning into a playable local practice build, plus the implementation
+triggers for the next refresh.
 
 The documentation should keep two realities clear:
 
 - the current implementation is a local browser practice game against a bot;
 - the product direction is still mobile-first 3D on-chain PvP with Fhenix/CoFHE
   privacy on Arbitrum Sepolia.
+
+## Completion Status
+
+Status as of June 10, 2026:
+
+| Task | Status | Result |
+| --- | --- | --- |
+| Phase 0 reality check | Complete | README and audit match the playable repository |
+| Current playable build | Complete | `docs/current-playable-build.md` |
+| Local game engine | Complete | `docs/local-game-engine.md` |
+| Practice mode and bot AI | Complete | `docs/practice-mode-and-bot-ai.md` |
+| Runtime asset pipeline | Complete | `docs/runtime-asset-pipeline.md` |
+| VFX Forge workflow | Complete | `docs/vfx-forge-workflow.md` |
+| Mobile performance budget | Complete | `docs/mobile-performance-budget.md` |
+| Local prototype test plan | Complete | `docs/local-prototype-test-plan.md` |
+| Copy and UI sync | Complete | `docs/copy-implementation-sync.md` |
+| Network and wallet requirements | Complete | `docs/network-and-wallet-requirements.md` |
+| Frontend contract-state migration | Complete | `docs/frontend-architecture.md` |
+| Deployment plan | Complete | `docs/deployment-plan.md` |
+
+The detailed sections below are retained as the specifications that guided each
+completed task. Phase 5 remains pending until on-chain code exists.
 
 ## Current Implementation Snapshot
 
@@ -41,7 +63,7 @@ Not implemented yet:
 - test suite;
 - production deployment workflow.
 
-## Existing Documentation Coverage
+## Documentation Coverage
 
 The current documentation covers the original product and architecture well:
 
@@ -63,10 +85,11 @@ The current documentation covers the original product and architecture well:
 - computer opponent concept;
 - 3D model prompts and catalog.
 
-That coverage is still useful, but much of it describes the target on-chain MVP
-rather than the playable local prototype that exists today.
+The implementation-specific layer now also covers the playable build, local
+rules, bot, assets, VFX, performance, tests, copy, Privy requirements,
+frontend migration, and deployment.
 
-## Main Documentation Gaps
+## Completed Documentation Task Specifications
 
 ## 1. Current Playable Build README
 
@@ -329,10 +352,10 @@ Priority:
 
 - P2.
 
-## Stale Documentation to Update
+## Updated Existing Documentation
 
-These existing files should be revised so they do not imply that implementation
-has not started:
+These files were revised so they no longer imply that implementation has not
+started:
 
 - `README.md` - add a short current-build status section and run commands.
 - `docs/documentation-audit.md` - update from pre-implementation audit to
@@ -354,6 +377,10 @@ has not started:
 
 ## Phase 0: Documentation Reality Check
 
+Status:
+
+- complete.
+
 Goal:
 
 - make the docs match the current repository state.
@@ -370,6 +397,10 @@ Exit criteria:
 - a new developer can tell what is playable now within five minutes.
 
 ## Phase 1: Local Prototype Documentation
+
+Status:
+
+- complete.
 
 Goal:
 
@@ -389,6 +420,10 @@ Exit criteria:
 
 ## Phase 2: Asset and VFX Documentation
 
+Status:
+
+- complete.
+
 Goal:
 
 - make the 3D asset workflow repeatable.
@@ -407,6 +442,11 @@ Exit criteria:
 
 ## Phase 3: Quality and Mobile Readiness
 
+Status:
+
+- documentation complete;
+- automated test implementation remains pending.
+
 Goal:
 
 - add the documentation needed to stabilize the playable prototype.
@@ -423,6 +463,11 @@ Exit criteria:
 - performance and regression expectations are measurable.
 
 ## Phase 4: On-chain Integration Preparation
+
+Status:
+
+- documentation complete;
+- implementation has not started.
 
 Goal:
 
@@ -443,6 +488,10 @@ Exit criteria:
 
 ## Phase 5: On-chain MVP Documentation Refresh
 
+Status:
+
+- pending on-chain implementation.
+
 Goal:
 
 - update the target MVP docs after the first wallet/contract/Fhenix slice is
@@ -461,17 +510,23 @@ Exit criteria:
 
 - docs describe the implemented on-chain system, not only the intended one.
 
-## Recommended Next Step
+## Next Documentation Trigger
 
-Start with Phase 0 and Phase 1.
+Do not start Phase 5 as speculative rewriting. Refresh the on-chain documents
+against real artifacts when implementation produces:
 
-The highest-value next document is:
+- a contract package and storage layout;
+- generated ABI and TypeScript types;
+- pinned Privy and CoFHE package versions;
+- the first encrypted fleet submission;
+- a versioned Arbitrum Sepolia deployment record;
+- test and deployment results.
 
-- `docs/current-playable-build.md`
+The immediate engineering work enabled by this roadmap is:
 
-Reason:
-
-The project has crossed from concept into implementation. Before adding more
-features, the docs need one clear source of truth for what the game does today,
-what is still simulated locally, and how the current practice build connects to
-the planned on-chain PvP version.
+1. implement the local automated test milestone;
+2. introduce the explicit practice/on-chain frontend boundary;
+3. integrate Privy and the Arbitrum Sepolia guard;
+4. build and test the contract package with CoFHE mocks;
+5. replace design assumptions with measured implementation notes as each slice
+   lands.

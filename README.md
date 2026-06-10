@@ -73,8 +73,8 @@ For the target on-chain product, read the documents in this order:
 15. [Visual Style Guide](docs/visual-style-guide.md) - overall art direction and rendering language.
 16. [Interface and Buttons Guide](docs/interface-and-buttons-guide.md) - menu, opponent selection, HUD, and button system.
 17. [User Flows](docs/user-flows.md) - player journeys for the friend-match MVP.
-18. [Documentation Audit](docs/documentation-audit.md) - current coverage and missing implementation docs.
-19. [Documentation Roadmap](docs/documentation-roadmap.md) - what should be documented next.
+18. [Documentation Audit](docs/documentation-audit.md) - current coverage, readiness, and remaining drift risks.
+19. [Documentation Roadmap](docs/documentation-roadmap.md) - completed documentation phases and the triggers for the implementation refresh.
 
 ## Asset Planning
 
