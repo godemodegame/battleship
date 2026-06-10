@@ -115,4 +115,38 @@ describe('application routes', () => {
       vi.useRealTimers()
     }
   })
+
+  it('renders mocked on-chain placement phase at a demo match route', () => {
+    render(<TestRouter initialEntries={['/match/arb-sepolia-v1/demo-place-123']} />)
+    expect(screen.getByRole('heading', { name: 'Match Route' })).toBeTruthy()
+    expect(screen.getByTestId('match-phase-kind').textContent).toContain('placement')
+    // demo-place-123 specifically produces the creator "Place your fleet" label
+    expect(screen.getByTestId('match-phase-label').textContent).toBe('Place your fleet')
+  })
+
+  it('renders mocked on-chain join phase for invited wallet via demo route', () => {
+    // Uses the demo viewer selection (invited wallet for ids containing "join")
+    // so that the route shell + resolver integration exercises the 'join' phase.
+    render(<TestRouter initialEntries={['/match/arb-sepolia-v1/demo-join-invited']} />)
+    expect(screen.getByTestId('match-phase-kind').textContent).toContain('join')
+    expect(screen.getByTestId('match-phase-label').textContent).toBe('Join this match')
+  })
+
+  it('renders mocked on-chain battle (your turn) phase', () => {
+    render(<TestRouter initialEntries={['/match/arb-sepolia-v1/demo-battle-mine']} />)
+    expect(screen.getByTestId('match-phase-kind').textContent).toContain('battle')
+    expect(screen.getByTestId('match-phase-label').textContent).toBe('Your turn')
+    expect(screen.getByTestId('battle-detail').textContent).toMatch(/You may fire/)
+  })
+
+  it('renders mocked finished (win) phase', () => {
+    render(<TestRouter initialEntries={['/match/arb-sepolia-v1/demo-win']} />)
+    expect(screen.getByTestId('match-phase-kind').textContent).toContain('finished')
+    expect(screen.getByTestId('match-phase-label').textContent).toBe('You won')
+  })
+
+  it('renders mocked cancelled phase', () => {
+    render(<TestRouter initialEntries={['/match/arb-sepolia-v1/demo-cancel']} />)
+    expect(screen.getByTestId('match-phase-kind').textContent).toContain('cancelled')
+  })
 })
