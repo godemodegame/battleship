@@ -3,6 +3,7 @@ import { useStore } from '../practice/practiceStore'
 import { cellLabel } from '../game/constants'
 import type { BoardState, Side } from '../game/types'
 import { MuteButton } from './common'
+import { haptics } from '../lib/haptics'
 
 function FleetStrip({ board, label, enemy }: { board: BoardState; label: string; enemy?: boolean }) {
   return (
@@ -67,7 +68,16 @@ export function BattleHUD() {
       )}
 
       <div className="bottom-stack battle">
-        <button className="btn fire wide" onClick={() => void fire()} disabled={!canFire}>
+        <button
+          className="btn fire wide"
+          onClick={() => {
+            // Prime audio context early from the actual click handler for reliable
+            // iOS Safari haptic unlock before the async fire() + later result haptics.
+            haptics.prime()
+            void fire()
+          }}
+          disabled={!canFire}
+        >
           {canFire ? `Fire at ${cellLabel(selectedCell)}` : yourTurn ? 'Select a target cell' : status.text}
         </button>
       </div>

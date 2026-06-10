@@ -3,6 +3,7 @@ import { memo, useEffect, useMemo, useRef } from 'react'
 import { useFrame, type ThreeEvent } from '@react-three/fiber'
 import { useFBX } from '@react-three/drei'
 import { BOARD_SIZE, cellIndex } from '../game/constants'
+import { haptics } from '../lib/haptics'
 import type { CellShot } from '../game/types'
 import { CELL, cellPosition } from './models'
 
@@ -304,6 +305,12 @@ export const Board = memo(function Board({
           position-y={0.1}
           visible={false}
           onPointerDown={(e) => {
+            // Prime audio/haptics as early as possible in the handler that came
+            // from a real user pointer event on the 3D board. This is critical
+            // for iOS Safari Web Audio unlock + Taptic to work reliably, because
+            // r3f synthetic events can be slightly removed from the original
+            // trusted gesture context.
+            haptics.prime()
             e.stopPropagation()
             const cell = toCell(e)
             if (cell !== null) onCellTap?.(cell)
