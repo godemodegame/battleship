@@ -42,7 +42,30 @@ Recommended colors:
 - disabled action: low-contrast blue-gray;
 - confirmed action: cyan-white flash.
 
+## Current Local Practice Entry
+
+The playable build does not use the wallet-first entry flow below yet. It opens
+directly on a local practice menu with:
+
+- title and tagline;
+- `Easy`, `Normal`, and `Hard` bot difficulty selector;
+- primary `Practice vs Bot` action;
+- disabled `Play Against Friend` and `Open Match` actions;
+- `How It Works` overlay;
+- sound mute control;
+- explicit local-build and on-chain-coming-soon note.
+
+This is intentional. Do not show `Connect Wallet`, wallet status, or network
+status before Privy and the Arbitrum Sepolia guard are implemented. Disabled
+on-chain actions must remain visibly unavailable and must not navigate to
+placeholder transaction screens.
+
+The exact current strings and their relationship to the target copy deck are
+documented in `docs/copy-implementation-sync.md`.
+
 ## App Entry Flow
+
+The following section describes the target on-chain entry flow.
 
 The first screen should immediately look like the game, not a marketing page.
 
