@@ -6,6 +6,21 @@ This document defines the testing strategy for the mobile-first 3D fully on-chai
 
 The project combines smart contracts, Fhenix/CoFHE, wallet flows, mobile browser UI, and 3D rendering. Testing must prove that the core friend-match flow works and that hidden information stays protected.
 
+## Milestone 0: Local Prototype Tests (First)
+
+The repository already contains a playable local practice build with no
+automated tests. Before any contract or Fhenix testing, the first milestone
+is to test that build - the board rules, attack engine, and bot in
+`src/game/` are the same rules the contract must later mirror, so locking
+them down first protects the on-chain design.
+
+The concrete plan is `docs/local-prototype-test-plan.md`: unit tests for
+`board.ts`/`engine.ts`, deterministic seeded bot tests, store orchestration
+tests, React screen smoke tests, and Playwright canvas/regression runs.
+
+Everything below this section describes the on-chain MVP milestones that
+follow.
+
 ## Testing Goals
 
 The test strategy must verify:
