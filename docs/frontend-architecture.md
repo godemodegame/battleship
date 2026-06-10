@@ -233,14 +233,15 @@ Recommended routes:
 - `/menu` - main menu after wallet connection.
 - `/play` - opponent selection.
 - `/match/new` - create a friend match.
-- `/match/:matchId` - shared match route for join, placement, waiting, battle, resolving, and game over.
+- `/match/:deploymentId/:matchId` - versioned shared match route for join,
+  placement, waiting, battle, resolving, and game over.
 - `/history` - local and on-chain match history.
 - `/settings` - graphics, sound, wallet, and network settings.
 
 The invite link should point to:
 
 ```txt
-/match/:matchId
+/match/:deploymentId/:matchId
 ```
 
 The match route should inspect contract state and route the player to the right phase inside the same screen shell.
@@ -277,7 +278,8 @@ Rules:
 - onboarding should contain no more than three screens;
 - if a wallet is already connected, skip onboarding;
 - if a connected wallet opens `/`, route to `/menu`;
-- if a connected wallet opens `/match/:matchId`, skip onboarding and resolve the match phase directly;
+- if a connected wallet opens `/match/:deploymentId/:matchId`, skip onboarding
+  and resolve the match phase directly;
 - if the wallet disconnects later, return to the wallet-required state without replaying unnecessary onboarding.
 
 The onboarding completion flag may be stored locally, but wallet connection state takes priority. A connected wallet should not be forced through onboarding.
@@ -434,7 +436,7 @@ Required event-to-read mapping:
 
 | Event | Required refresh | UI consequence |
 | --- | --- | --- |
-| `MatchCreated` | `getMatch`, creator match list | Route to `/match/:matchId` after receipt |
+| `MatchCreated` | `getMatch`, creator match list | Route to `/match/:deploymentId/:matchId` after receipt |
 | `MatchJoined` | `getMatch`, both player views | Resolve placement phase |
 | `FleetSubmitted` | submitting player view | Show submitted/waiting state |
 | `FleetValidationRequested` | player view, pending validation data if exposed | Show validation pending |
@@ -625,7 +627,8 @@ reloads consistently.
 
 ## Match Phase Resolution
 
-The `/match/:matchId` route should derive a screen phase from contract reads.
+The `/match/:deploymentId/:matchId` route should derive a screen phase from
+the selected deployment record and contract reads.
 
 Suggested phase resolver:
 
@@ -847,7 +850,7 @@ Forbidden:
 Example:
 
 ```txt
-https://game.example/match/123
+https://game.example/match/arb-sepolia-v1/123
 ```
 
 Strict friend invite remains the MVP default. The contract should enforce the invited opponent address.
@@ -948,6 +951,7 @@ Recommended frontend implementation order:
 - `docs/user-flows.md`
 - `docs/technical-architecture.md`
 - `docs/network-and-wallet-requirements.md`
+- `docs/deployment-plan.md`
 - `docs/fhenix-integration-plan.md`
 - `docs/contract-data-model.md`
 - `docs/contract-api.md`
