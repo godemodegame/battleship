@@ -15,13 +15,22 @@ import type { WalletSession } from './session'
 
 export interface LowBalanceNoticeProps {
   session: WalletSession
-  /** Called when the user taps the primary "get testnet ETH" action. */
+  /** Called when the user taps the primary "get testnet ETH" action.
+   * When provided, the caller is responsible for the full funding action
+   * (e.g. prepareHandoff + opening the faucet). If omitted, the component
+   * opens the default faucet in a new tab.
+   */
   onFund?: () => void
-  /** Optional: the raw balance in wei (for title/tooltip). */
+  /**
+   * Optional raw balance in wei. When non-null/undefined, a visible suffix
+   * " · <value> wei" is appended to the address line (used by the zero-balance
+   * funding notice to confirm the reported balance).
+   */
   balanceWei?: bigint | null
 }
 
-const FAUCET_URL = 'https://sepoliafaucet.com/' // public reference; real demo may use a curated list
+/** Recommended public faucet for Arbitrum Sepolia testnet ETH. */
+export const FAUCET_URL = 'https://sepoliafaucet.com/'
 
 export function LowBalanceNotice({ session, onFund, balanceWei }: LowBalanceNoticeProps) {
   const handleFund = () => {
@@ -46,7 +55,7 @@ export function LowBalanceNotice({ session, onFund, balanceWei }: LowBalanceNoti
         <p className="footnote" data-testid="low-balance-address" title={session.address}>
           {walletCopy.walletLabel}: {walletCopy.shortAddress(session.address)}
           {balanceWei !== undefined && balanceWei !== null && (
-            <span data-testid="low-balance-wei"> · 0 wei</span>
+            <span data-testid="low-balance-wei"> · {balanceWei.toString()} wei</span>
           )}
         </p>
       )}

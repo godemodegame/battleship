@@ -10,7 +10,7 @@ import { deploymentCopy, matchRouteCopy, walletCopy } from '../copy/en'
 import { useWalletSession } from './wallet/WalletSessionContext'
 import { WalletSessionBar } from './wallet/WalletSessionBar'
 import { WrongNetworkPanel } from './wallet/WrongNetworkPanel'
-import { LowBalanceNotice } from './wallet/LowBalanceNotice'
+import { LowBalanceNotice, FAUCET_URL } from './wallet/LowBalanceNotice'
 
 /** Demo addresses (match the ones used in phaseResolver.test.ts for consistency). */
 const DEMO_CREATOR = '0x1111111111111111111111111111111111111111' as const
@@ -251,8 +251,13 @@ export function MatchRouteShell() {
             session={wallet.session}
             balanceWei={wallet.balance}
             onFund={() => {
-              // In a real flow this could also call prepareHandoff before opening external tab.
+              // GAME-209 + GAME-210: record handoff intent (so visibility/focus resume
+              // can restore the /match/* route after the user returns from the faucet tab
+              // or a wallet interaction on mobile), then perform the actual funding action.
               wallet.actions.prepareHandoff()
+              if (typeof window !== 'undefined') {
+                window.open(FAUCET_URL, '_blank', 'noopener,noreferrer')
+              }
             }}
           />
         )}

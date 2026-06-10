@@ -28,9 +28,15 @@ describe('LowBalanceNotice (GAME-209)', () => {
     expect(onFund).toHaveBeenCalledOnce()
   })
 
-  it('exposes the address for copy-paste workflows', () => {
+  it('exposes the address for copy-paste workflows and renders provided balanceWei', () => {
     render(<LowBalanceNotice session={ZERO_BALANCE_SESSION} balanceWei={0n} />)
     const addr = screen.getByTestId('low-balance-address')
     expect(addr.getAttribute('title')).toBe(ZERO_BALANCE_SESSION.address)
+    expect(screen.getByTestId('low-balance-wei').textContent).toBe(' · 0 wei')
+  })
+
+  it('renders the actual balanceWei value when non-zero (for visibility in notice)', () => {
+    render(<LowBalanceNotice session={ZERO_BALANCE_SESSION} balanceWei={12345678901234567890n} />)
+    expect(screen.getByTestId('low-balance-wei').textContent).toBe(' · 12345678901234567890 wei')
   })
 })
