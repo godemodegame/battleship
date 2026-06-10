@@ -9,6 +9,9 @@
     "preview": "vite preview",
     "test": "vitest run --passWithNoTests",
     "test:watch": "vitest",
+    "test:unit": "vitest run src/game src/state --passWithNoTests",
+    "test:screen": "vitest run src/ui src/test --passWithNoTests",
+    "test:ci": "npm run build && npm run test:unit && npm run test:screen",
     "test:e2e": "playwright test --pass-with-no-tests",
     "test:e2e:install": "playwright install chromium"
   },

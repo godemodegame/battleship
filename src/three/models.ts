@@ -14,6 +14,15 @@ export const BOARD_SPAN = 10 * CELL
 
 const MODEL = (name: string) => `/models/${name}.fbx`
 const TEXTURE = (name: string) => `/textures/${name}-texture.jpg`
+const TRANSPARENT_PIXEL =
+  'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw=='
+
+// Exported FBX files reference source-tool texture folders that are not part
+// of the runtime bundle. Their materials are replaced below, so satisfy those
+// redundant loader requests without reporting false asset failures.
+THREE.DefaultLoadingManager.setURLModifier((url) =>
+  url.includes('.fbm/') || url.includes('.fbm\\') ? TRANSPARENT_PIXEL : url,
+)
 
 export function useStyledFBX(name: string): THREE.Group {
   const fbx = useFBX(MODEL(name))
@@ -91,6 +100,8 @@ export function preloadAll() {
     'tactical-ocean-board',
     'attack-projectile',
     'hidden-enemy-grid-cell',
+    'prop-encrypted-core',
+    'prop-turn-token',
   ]) {
     useFBX.preload(MODEL(name))
     useTexture.preload(TEXTURE(name))

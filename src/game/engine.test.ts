@@ -1,51 +1,114 @@
 import { describe, expect, it } from 'vitest'
-import { applyAttack, createMatch } from './engine'
+import { COMPLETE_FLEET, cloneMatch } from '../test/gameFixtures'
+import { applyAttack, buildBoard, createMatch, sunkHalo } from './engine'
 import type { Placement } from './types'
 
 const twoCellShip: Placement[] = [
   { slot: 3, row: 0, col: 0, orientation: 'h' },
 ]
+const oneCellShip: Placement[] = [
+  { slot: 6, row: 0, col: 0, orientation: 'h' },
+]
 
-describe('applyAttack turn rules', () => {
-  it('passes the turn after a miss', () => {
-    const match = createMatch(twoCellShip, twoCellShip)
+describe('buildBoard', () => {
+  it('builds mutually consistent cells, ship lookup, and shots', () => {
+    const board = buildBoard(COMPLETE_FLEET)
 
-    const resolved = applyAttack(match, 'player', 10)
+    expect(board.shots).toEqual(new Array(100).fill(0))
+    for (const [shipIndex, ship] of board.ships.entries()) {
+      for (const cell of ship.cells) expect(board.shipAt[cell]).toBe(shipIndex)
+    }
+    for (const [cell, shipIndex] of board.shipAt.entries()) {
+      if (shipIndex >= 0) expect(board.ships[shipIndex].cells).toContain(cell)
+    }
+  })
 
-    expect(resolved.move.result).toBe('miss')
+  it('throws for an off-board placement', () => {
+    expect(() => buildBoard([{ slot: 0, row: 9, col: 9, orientation: 'h' }]))
+      .toThrow('Invalid placement')
+  })
+})
+
+describe('applyAttack', () => {
+  it('marks a miss and passes the turn', () => {
+    const resolved = applyAttack(createMatch(twoCellShip, twoCellShip), 'player', 10)
+
+    expect(resolved.move).toMatchObject({ result: 'miss', shipSlot: null })
+    expect(resolved.match.boards.bot.shots[10]).toBe(1)
     expect(resolved.match.turn).toBe('bot')
   })
 
-  it('keeps the turn after a hit', () => {
-    const match = createMatch(twoCellShip, twoCellShip)
+  it('marks a hit and keeps the turn', () => {
+    const resolved = applyAttack(createMatch(twoCellShip, twoCellShip), 'player', 0)
 
-    const resolved = applyAttack(match, 'player', 0)
-
-    expect(resolved.move.result).toBe('hit')
+    expect(resolved.move).toMatchObject({ result: 'hit', shipSlot: 3 })
+    expect(resolved.match.boards.bot.shots[0]).toBe(2)
     expect(resolved.match.turn).toBe('player')
   })
 
-  it('keeps the turn after sinking a ship when the match continues', () => {
+  it('marks every cell sunk and keeps the turn while ships remain', () => {
     const defenderFleet: Placement[] = [
       { slot: 3, row: 0, col: 0, orientation: 'h' },
       { slot: 6, row: 2, col: 0, orientation: 'h' },
     ]
-    const match = createMatch(twoCellShip, defenderFleet)
-    const afterFirstHit = applyAttack(match, 'player', 0).match
-    const afterSunk = applyAttack(afterFirstHit, 'player', 1)
+    const afterHit = applyAttack(createMatch(twoCellShip, defenderFleet), 'player', 0).match
+    const resolved = applyAttack(afterHit, 'player', 1)
 
-    expect(afterSunk.move.result).toBe('sunk')
-    expect(afterSunk.match.winner).toBeNull()
-    expect(afterSunk.match.turn).toBe('player')
+    expect(resolved.move).toMatchObject({ result: 'sunk', shipSlot: 3 })
+    expect(resolved.match.boards.bot.shots.slice(0, 2)).toEqual([3, 3])
+    expect(resolved.match.winner).toBeNull()
+    expect(resolved.match.turn).toBe('player')
   })
 
-  it('ends the match on the winning hit', () => {
-    const match = createMatch(twoCellShip, twoCellShip)
-    const afterFirstHit = applyAttack(match, 'player', 0).match
-    const afterWinningHit = applyAttack(afterFirstHit, 'player', 1)
+  it('sets the winner after sinking the last ship', () => {
+    const afterHit = applyAttack(createMatch(twoCellShip, twoCellShip), 'player', 0).match
+    const resolved = applyAttack(afterHit, 'player', 1)
 
-    expect(afterWinningHit.move.result).toBe('sunk')
-    expect(afterWinningHit.match.winner).toBe('player')
-    expect(afterWinningHit.match.turn).toBe('player')
+    expect(resolved.move.result).toBe('sunk')
+    expect(resolved.match.winner).toBe('player')
+  })
+
+  it('rejects wrong-turn, repeated, and post-win attacks', () => {
+    const initial = createMatch(twoCellShip, twoCellShip)
+    expect(() => applyAttack(initial, 'bot', 10)).toThrow('Invalid attack')
+
+    const afterMiss = applyAttack(initial, 'player', 10).match
+    expect(() => applyAttack({ ...afterMiss, turn: 'player' }, 'player', 10))
+      .toThrow('Invalid attack')
+
+    const won = applyAttack(createMatch(oneCellShip, oneCellShip), 'player', 0).match
+    expect(() => applyAttack(won, 'player', 1)).toThrow('Invalid attack')
+  })
+
+  it('does not mutate the input match', () => {
+    const match = createMatch(twoCellShip, twoCellShip)
+    const snapshot = cloneMatch(match)
+
+    applyAttack(match, 'player', 0)
+
+    expect(match).toEqual(snapshot)
+  })
+})
+
+describe('sunkHalo', () => {
+  it('is empty before a ship sinks', () => {
+    expect(sunkHalo(buildBoard(oneCellShip))).toEqual(new Set())
+  })
+
+  it('clips corner neighbors and excludes the sunk ship cell', () => {
+    const sunkBoard = applyAttack(createMatch(oneCellShip, oneCellShip), 'player', 0)
+      .match.boards.bot
+
+    expect(sunkHalo(sunkBoard)).toEqual(new Set([1, 10, 11]))
+    expect(sunkHalo(sunkBoard).has(0)).toBe(false)
+  })
+
+  it('never contains another ship cell in a valid no-touch fleet', () => {
+    let match = createMatch(COMPLETE_FLEET, COMPLETE_FLEET)
+    const target = match.boards.bot.ships.find((ship) => ship.slot === 6)!
+    for (const cell of target.cells) match = applyAttack(match, 'player', cell).match
+
+    const halo = sunkHalo(match.boards.bot)
+    for (const cell of halo) expect(match.boards.bot.shipAt[cell]).toBe(-1)
   })
 })

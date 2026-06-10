@@ -696,3 +696,8 @@ body,
   color: rgba(232, 247, 255, 0.5);
   text-transform: uppercase;
 }
+
+.loading-error .loading-title {
+  color: #ffb4ae;
+  text-shadow: 0 0 12px rgba(255, 59, 48, 0.55);
+}

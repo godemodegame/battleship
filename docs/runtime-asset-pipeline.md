@@ -74,6 +74,12 @@ space, anisotropy 4, shadows on). Consequences:
   in-game look comes from the texture plus scene lighting;
 - all current textures are 2048x2048 JPGs (see the budget note below).
 
+The source FBX files also retain Tripo export-time references to
+`*.fbm/tripo_image_*.jpg`. Those materials are never used. The default Three
+loading manager redirects only those stale embedded references to a
+transparent pixel so they cannot create false loading failures or duplicate
+texture downloads.
+
 Two models bypass texture pairing entirely:
 
 - `hidden-enemy-grid-cell.fbx` - only its geometry is used; the sealed
@@ -123,7 +129,9 @@ All assets load up front; there is no lazy loading:
 - both run at module import in `src/three/Scene.tsx`;
 - `LoadingOverlay` (`src/ui/common.tsx`) blocks the UI with a progress bar
   until `useProgress` reports everything loaded, per the rule that the field
-  is not shown until required models exist.
+  is not shown until required models exist;
+- loader errors replace the progress view with `Battlefield Unavailable` and
+  a reload instruction.
 
 Adding a model without adding it to a preload list makes it load lazily on
 first render, which causes a visible pop-in — always extend the preload list.

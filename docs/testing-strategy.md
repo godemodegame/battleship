@@ -8,15 +8,15 @@ The project combines smart contracts, Fhenix/CoFHE, wallet flows, mobile browser
 
 ## Milestone 0: Local Prototype Tests (First)
 
-The repository already contains a playable local practice build with no
-automated tests. Before any contract or Fhenix testing, the first milestone
-is to test that build - the board rules, attack engine, and bot in
-`src/game/` are the same rules the contract must later mirror, so locking
-them down first protects the on-chain design.
+The repository contains a playable local practice build with completed
+automated coverage. Phase 0 locks down the board rules, attack engine, bot,
+Zustand orchestration, screens, and desktop/mobile browser flows before
+contract or Fhenix testing begins.
 
 The concrete plan is `docs/local-prototype-test-plan.md`: unit tests for
 `board.ts`/`engine.ts`, deterministic seeded bot tests, store orchestration
 tests, React screen smoke tests, and Playwright canvas/regression runs.
+The milestone completed on June 10, 2026.
 
 Everything below this section describes the on-chain MVP milestones that
 follow.

@@ -23,11 +23,12 @@ Implemented:
 - mobile-first React Three Fiber scene;
 - attack, miss, hit, sunk, win, and forfeit presentation;
 - runtime model, texture, VFX, and sound pipelines;
+- deterministic unit, store, screen, and browser test suites;
+- desktop and mobile Chromium practice-flow coverage;
 - production Vite build.
 
 Not implemented:
 
-- automated tests;
 - explicit practice/on-chain application boundary;
 - routing;
 - Privy wallet connection;
@@ -109,28 +110,32 @@ Goal:
 
 Progress:
 
-- `GAME-001` complete on June 10, 2026.
+- Phase 0 completed on June 10, 2026.
+- `GAME-001` through `GAME-010` complete.
 
 Tasks:
 
-| ID | Priority | Work |
-| --- | --- | --- |
-| GAME-001 | P0 | Add Vitest, React Testing Library, jsdom, and Playwright |
-| GAME-002 | P0 | Add deterministic RNG injection and shared seeded test utilities |
-| GAME-003 | P0 | Test `board.ts`: bounds, overlap, no-touch rule, completion, auto placement |
-| GAME-004 | P0 | Test `engine.ts`: miss, hit, sunk, win, turn passing, immutability |
-| GAME-005 | P0 | Test bot difficulties and the public-information invariant |
-| GAME-006 | P0 | Test Zustand orchestration, interrupted shots, forfeit, and rematch |
-| GAME-007 | P0 | Add screen smoke tests with the 3D canvas mocked |
-| GAME-008 | P1 | Add desktop and mobile Playwright practice-flow smoke tests |
-| GAME-009 | P1 | Add a non-blank WebGL canvas check and loading failure test |
-| GAME-010 | P1 | Add CI commands for build, unit, screen, and browser tests |
+| ID | Priority | Status | Work |
+| --- | --- | --- | --- |
+| GAME-001 | P0 | Complete | Add Vitest, React Testing Library, jsdom, and Playwright |
+| GAME-002 | P0 | Complete | Add deterministic RNG injection and shared seeded test utilities |
+| GAME-003 | P0 | Complete | Test `board.ts`: bounds, overlap, no-touch rule, completion, auto placement |
+| GAME-004 | P0 | Complete | Test `engine.ts`: miss, hit, sunk, win, turn passing, immutability |
+| GAME-005 | P0 | Complete | Test bot difficulties and the public-information invariant |
+| GAME-006 | P0 | Complete | Test Zustand orchestration, interrupted shots, forfeit, and rematch |
+| GAME-007 | P0 | Complete | Add screen smoke tests with the 3D canvas mocked |
+| GAME-008 | P1 | Complete | Add desktop and mobile Playwright practice-flow smoke tests |
+| GAME-009 | P1 | Complete | Add a non-blank WebGL canvas check and loading failure test |
+| GAME-010 | P1 | Complete | Add CI commands for build, unit, screen, and browser tests |
 
 Required scripts:
 
 ```txt
 npm test
 npm run test:watch
+npm run test:unit
+npm run test:screen
+npm run test:ci
 npm run test:e2e
 npm run test:e2e:install
 ```
@@ -141,6 +146,10 @@ Exit criteria:
 - practice placement, attack, win, forfeit, rematch, and mute flows pass;
 - `npm run build` and the automated test suite pass in a clean checkout;
 - no behavior change is required to begin Phase 1.
+
+Exit status:
+
+- met on June 10, 2026.
 
 Specification:
 

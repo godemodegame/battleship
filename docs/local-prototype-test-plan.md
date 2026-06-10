@@ -6,9 +6,9 @@
 the code that exists now - the local practice build - so the rules the
 contract will later mirror are locked down by tests before web3 work starts.
 
-Before `GAME-001`, the repository had no automated tests. The test runner
-foundation is now present; the behavior coverage in this plan is the remaining
-milestone 0 work referenced by the testing strategy.
+Before `GAME-001`, the repository had no automated tests. Phase 0 completed
+this plan on June 10, 2026: deterministic game, store, screen, desktop
+Chromium, and mobile Chromium coverage is now implemented.
 
 ## Implemented Stack and Setup
 
@@ -25,16 +25,19 @@ The foundation is implemented by `GAME-001` with `vitest`,
 ```txt
 npm test
 npm run test:watch
+npm run test:unit
+npm run test:screen
+npm run test:ci
 npm run test:e2e
 npm run test:e2e:install
 ```
 
 Playwright is configured for the required desktop `1280x800` and mobile
-`390x844` Chromium viewports. Feature-level unit, screen, and browser tests
-remain assigned to `GAME-002` through `GAME-009`.
+`390x844` Chromium viewports. `GAME-002` through `GAME-010` implement the
+feature-level unit, screen, browser, and CI coverage below.
 
-A tiny seeded RNG (for example mulberry32) belongs in a shared test util;
-every `rnd` parameter in the game layer accepts it.
+The shared `seededRandom` utility uses mulberry32; game-layer and practice
+orchestration randomness accepts an injected source.
 
 ## Unit Tests: `src/game/board.ts`
 
@@ -168,7 +171,8 @@ Mock `GameCanvas` (the WebGL scene) and drive the Zustand store directly:
   one; forfeit modal confirm and cancel paths;
 - GameOverScreen: `Victory` and `Defeat` variants, forfeit kicker, stats
   grid values from a scripted match;
-- LoadingOverlay: visible while loading, gone after progress completes.
+- LoadingOverlay: visible while loading, gone after progress completes, and
+  explicit failure state when a required asset reports an error.
 
 ## Playwright Smoke and Regression
 
@@ -176,9 +180,9 @@ Viewports: desktop (1280x800) and mobile (390x844) for every run.
 
 Canvas non-blank check:
 
-- after the loading overlay disappears, screenshot the canvas and assert it
-  is not a single flat color (home scene must render geometry within the
-  load budget from `docs/mobile-performance-budget.md`).
+- after the loading overlay disappears, sample the WebGL framebuffer and
+  assert it is not a single flat color (home scene must render geometry
+  within the load budget from `docs/mobile-performance-budget.md`).
 
 Regression flows - driven through `window.__store` (exposed in dev builds)
 for determinism, with a handful of raw canvas taps kept to cover real input:

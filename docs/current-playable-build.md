@@ -26,6 +26,10 @@ Other commands:
 
 - `npm run build` - type-checks (`tsc -b`) and produces a production bundle;
 - `npm run preview` - serves the production bundle locally.
+- `npm test` - runs all Vitest suites;
+- `npm run test:unit` - runs game and store tests;
+- `npm run test:screen` - runs React screen smoke tests;
+- `npm run test:e2e` - runs desktop and mobile Chromium practice flows.
 
 There are no environment variables, accounts, or services to configure.
 
@@ -126,14 +130,13 @@ Battle:
 ## Known Limitations
 
 - No persistence: a refresh or tab close abandons the match.
-- No automated tests yet (`docs/local-prototype-test-plan.md` defines the
-  plan).
 - The player always moves first; there is no coin flip.
 - The bot's fleet uses the same auto-placement as the `Auto Place` button -
   placement style is not difficulty-dependent.
 - Requires WebGL; there is no fallback renderer or reduced-graphics mode yet.
 - Asset loading happens at startup behind a single loading overlay; there is
-  no progressive or lazy model loading.
+  no progressive or lazy model loading. Required-asset failures show an
+  explicit reload message.
 - No PWA/offline support, no orientation lock, no accessibility audit yet.
 
 ## How This Prototype Maps to the On-chain Version

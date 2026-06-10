@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useProgress } from '@react-three/drei'
 import { sfx } from '../lib/sfx'
 
@@ -21,9 +21,23 @@ export function MuteButton() {
 
 /** Per docs: don't show the field until required models are loaded. */
 export function LoadingOverlay() {
-  const { active, progress } = useProgress()
+  const { active, progress, errors } = useProgress()
   const [everLoaded, setEverLoaded] = useState(false)
-  if (!active && progress >= 100 && !everLoaded) setEverLoaded(true)
+
+  useEffect(() => {
+    if (!active && progress >= 100) setEverLoaded(true)
+  }, [active, progress])
+
+  if (errors.length > 0) {
+    return (
+      <div className="overlay loading" role="alert">
+        <div className="loading-box loading-error">
+          <div className="loading-title">Battlefield Unavailable</div>
+          <div className="loading-sub">A required 3D asset failed to load. Reload to try again.</div>
+        </div>
+      </div>
+    )
+  }
   if (everLoaded || (!active && progress >= 100)) return null
   return (
     <div className="overlay loading">

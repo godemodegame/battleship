@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import { FLEET, cellLabel } from '../game/constants'
 import { autoPlaceFleet, canPlace, isFleetComplete, rotated } from '../game/board'
-import { applyAttack, createMatch } from '../game/engine'
+import { applyAttack, createMatch, sunkHalo } from '../game/engine'
 import { chooseBotTarget } from '../game/bot'
 import type { Difficulty, MatchState, Orientation, Placement, Side } from '../game/types'
 import { sfx } from '../lib/sfx'
@@ -77,6 +77,12 @@ const SWING_MS = 750
 
 let nextId = 1
 const delay = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms))
+let randomSource = Math.random
+
+/** Allows deterministic practice orchestration in tests without patching globals. */
+export function setPracticeRandomSource(rnd: () => number = Math.random) {
+  randomSource = rnd
+}
 
 function shotToast(result: 'miss' | 'hit' | 'sunk', by: Side, label: string | undefined): Toast {
   const yours = by === 'player'
@@ -197,7 +203,7 @@ export const useStore = create<AppState>((set, get) => {
 
     autoPlace: () => {
       sfx.place()
-      set({ placements: autoPlaceFleet(), selectedSlot: null })
+      set({ placements: autoPlaceFleet(randomSource), selectedSlot: null })
     },
 
     clearPlacement: () => {
@@ -211,7 +217,7 @@ export const useStore = create<AppState>((set, get) => {
       sfx.confirm()
       set({
         screen: 'battle',
-        match: createMatch(placements, autoPlaceFleet()),
+        match: createMatch(placements, autoPlaceFleet(randomSource)),
         focus: 'enemy',
         selectedCell: null,
         busy: false,
@@ -222,7 +228,10 @@ export const useStore = create<AppState>((set, get) => {
     selectCell: (cell) => {
       const { match, busy } = get()
       if (!match || match.winner || busy || match.turn !== 'player') return
-      if (cell !== null && match.boards.bot.shots[cell] !== 0) {
+      if (
+        cell !== null &&
+        (match.boards.bot.shots[cell] !== 0 || sunkHalo(match.boards.bot).has(cell))
+      ) {
         sfx.deny()
         return
       }
@@ -249,11 +258,11 @@ export const useStore = create<AppState>((set, get) => {
       }
 
       set({ focus: 'player' })
-      await delay(SWING_MS + 350 + Math.random() * 500)
+      await delay(SWING_MS + 350 + randomSource() * 500)
       if (interrupted()) return
 
       while (get().match?.turn === 'bot') {
-        const target = chooseBotTarget(get().match!.boards.player, difficulty)
+        const target = chooseBotTarget(get().match!.boards.player, difficulty, randomSource)
         const botResult = await resolveShot('bot', target)
         if (botResult === 'aborted') return
         if (botResult === 'won') {
@@ -263,7 +272,7 @@ export const useStore = create<AppState>((set, get) => {
         }
         if (botResult === 'miss') break
 
-        await delay(350 + Math.random() * 350)
+        await delay(350 + randomSource() * 350)
         if (interrupted()) return
       }
 
