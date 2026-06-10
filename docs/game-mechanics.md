@@ -6,6 +6,19 @@ The game is based on the classic Battleship concept: two players place their shi
 
 The base version should be simple, clear, and ready for future expansion. First, the game should implement standard rules. Later, it can add abilities, different ship types, obstacles, a campaign mode, or online features around the core PvP match.
 
+## Implementation Status
+
+The local practice build implements these mechanics: the 10 by 10 board, the
+classic ten-ship fleet, the classic no-touch placement rule, manual and
+automatic placement, attack resolution with miss/hit/sunk results, turn
+passing after every valid attack, victory check, and the game-over summary.
+
+The opponent in the current build is a local practice bot rather than a second
+human player; on-chain PvP is the planned MVP. See
+`docs/current-playable-build.md` for build scope,
+`docs/local-game-engine.md` for the exact rule implementation, and
+`docs/practice-mode-and-bot-ai.md` for bot behavior.
+
 ## Game Board
 
 Each player has their own fixed-size board. For the first version, a 10 by 10 board is a good default.
@@ -42,7 +55,10 @@ The project should start with the classic rule because it is familiar for Battle
 
 Before the battle starts, each player places their fleet on the board.
 
-Placement can be manual or automatic. For the first working version, automatic placement is enough because it lets the project reach the main gameplay loop faster. Manual placement can be added as a separate stage.
+Placement can be manual or automatic. The local build already implements both:
+manual tap-to-place with rotation and pick-up, plus an `Auto Place` button
+(the original plan treated automatic placement as enough for the first
+working version, but manual placement landed with it).
 
 After both fleets are placed, the battle begins.
 
@@ -100,3 +116,7 @@ The first version only needs the following features:
 - simple game over screen.
 
 This version provides a foundation that can later support a better interface, development-only simulation tools, and additional game modes.
+
+The current build already covers this list - and goes further on placement
+(manual placement is in) - with one substitution: the second human player is
+stood in for by a local practice bot until on-chain PvP ships.
