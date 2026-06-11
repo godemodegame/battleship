@@ -13,7 +13,7 @@
  *   DEPLOYMENT_RECORD=deployments/421614/<deploymentId>.json
  */
 
-import { readFileSync } from 'node:fs'
+import { readFileSync, writeFileSync } from 'node:fs'
 import { isAbsolute, join } from 'node:path'
 import {
   Contract,
@@ -21,6 +21,8 @@ import {
   Wallet,
   formatEther,
   keccak256,
+  type ContractTransactionReceipt,
+  type ContractTransactionResponse,
   type InterfaceAbi,
   type Log,
 } from 'ethers'
@@ -29,6 +31,17 @@ import { validateRecordSchema, type DeploymentRecord } from './deploymentRecord'
 
 const MIN_BALANCE = 100_000_000_000_000n
 let activeProvider: JsonRpcProvider | null = null
+
+interface TransactionBaseline {
+  action: 'createMatch' | 'joinMatch' | 'cancelMatch'
+  hash: string
+  gasUsed: string
+  gasPriceWei: string
+  feeWei: string
+  walletToHashMs: number
+  hashToReceiptMs: number
+  walletToReceiptMs: number
+}
 
 function required(name: string): string {
   const value = process.env[name]
@@ -82,8 +95,35 @@ async function main(): Promise<void> {
 
   const creatorGame = new Contract(record.address, abi, creator)
   const opponentGame = new Contract(record.address, abi, opponent)
-  const createReceipt = await (await creatorGame.createMatch(opponent.address)).wait()
-  if (!createReceipt) throw new Error('createMatch receipt missing')
+  const baselines: TransactionBaseline[] = []
+
+  const measuredWrite = async (
+    action: TransactionBaseline['action'],
+    send: () => Promise<ContractTransactionResponse>,
+  ): Promise<ContractTransactionReceipt> => {
+    const startedAt = Date.now()
+    const transaction = await send()
+    const submittedAt = Date.now()
+    const receipt = await transaction.wait()
+    const finishedAt = Date.now()
+    if (!receipt) throw new Error(`${action} receipt missing`)
+    const gasPrice = receipt.gasPrice
+    baselines.push({
+      action,
+      hash: receipt.hash,
+      gasUsed: receipt.gasUsed.toString(),
+      gasPriceWei: gasPrice.toString(),
+      feeWei: (receipt.gasUsed * gasPrice).toString(),
+      walletToHashMs: submittedAt - startedAt,
+      hashToReceiptMs: finishedAt - submittedAt,
+      walletToReceiptMs: finishedAt - startedAt,
+    })
+    return receipt
+  }
+
+  const createReceipt = await measuredWrite('createMatch', () =>
+    creatorGame.createMatch(opponent.address),
+  )
 
   let matchId: bigint | null = null
   for (const log of createReceipt.logs as Log[]) {
@@ -99,15 +139,13 @@ async function main(): Promise<void> {
   }
   if (matchId === null) throw new Error('MatchCreated event missing')
 
-  const joinReceipt = await (await opponentGame.joinMatch(matchId)).wait()
-  if (!joinReceipt) throw new Error('joinMatch receipt missing')
+  const joinReceipt = await measuredWrite('joinMatch', () => opponentGame.joinMatch(matchId))
   const joined = await creatorGame.getMatch(matchId)
   if (Number(joined.status) !== 2 || joined.opponent.toLowerCase() !== opponent.address.toLowerCase()) {
     throw new Error('Joined match state does not identify the invited opponent')
   }
 
-  const cancelReceipt = await (await creatorGame.cancelMatch(matchId)).wait()
-  if (!cancelReceipt) throw new Error('cancelMatch receipt missing')
+  const cancelReceipt = await measuredWrite('cancelMatch', () => creatorGame.cancelMatch(matchId))
   const cancelled = await creatorGame.getMatch(matchId)
   if (Number(cancelled.status) !== 8) throw new Error('Match did not reach Cancelled')
 
@@ -115,6 +153,27 @@ async function main(): Promise<void> {
   console.log(`create ${createReceipt.hash}`)
   console.log(`join   ${joinReceipt.hash}`)
   console.log(`cancel ${cancelReceipt.hash}`)
+
+  if (process.env.TESTNET_EVIDENCE_PATH) {
+    writeFileSync(
+      process.env.TESTNET_EVIDENCE_PATH,
+      `${JSON.stringify(
+        {
+          schemaVersion: 1,
+          checkedAt: new Date().toISOString(),
+          chainId: record.chainId,
+          deploymentId: record.deploymentId,
+          contractAddress: record.address,
+          matchId: matchId.toString(),
+          creator: creator.address,
+          opponent: opponent.address,
+          transactions: baselines,
+        },
+        null,
+        2,
+      )}\n`,
+    )
+  }
 }
 
 void main()

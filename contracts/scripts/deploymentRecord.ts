@@ -24,6 +24,9 @@ export interface DeploymentRecord {
   abiSha256: string
   deployedBytecodeKeccak256: string
   deployedAt: string
+  deploymentGasUsed?: string
+  deploymentGasPriceWei?: string
+  deploymentFeeWei?: string
 }
 
 const DEPLOYMENT_ID_RE = /^[a-z0-9][a-z0-9-]*$/
@@ -103,6 +106,11 @@ export function validateRecordSchema(record: unknown): string[] {
   }
   if (typeof r.deployedAt !== 'string' || Number.isNaN(Date.parse(r.deployedAt))) {
     problems.push('deployedAt must be an ISO-8601 timestamp')
+  }
+  for (const field of ['deploymentGasUsed', 'deploymentGasPriceWei', 'deploymentFeeWei']) {
+    if (r[field] !== undefined && (typeof r[field] !== 'string' || !/^[0-9]+$/.test(r[field]))) {
+      problems.push(`${field} must be a decimal integer string when present`)
+    }
   }
   return problems
 }

@@ -20,7 +20,11 @@ The repository currently has:
 - Vercel SPA rewrite configuration and GitHub Actions CI;
 - release artifact/config verification and a funded two-wallet testnet
   regression command;
-- no active public deployment yet.
+- stable public staging and production Vercel origins serving the practice
+  release candidate;
+- build-embedded `/release.json`, public deployment smoke tests, immutable
+  manifest sync tooling, and a manual GitHub release gate;
+- no active public contract deployment yet.
 
 ## Deployment Decisions
 
@@ -278,10 +282,18 @@ record is a superset of the minimum above, adding `schemaVersion: 1`,
 `status: "active"`, a populated `cofheVersions` map, and
 `deployedBytecodeKeccak256` (hash of the on-chain runtime code, which must
 equal the compiled artifact because the contract has no constructor arguments
-or immutables). `contracts/scripts/deploy.ts` writes records and refuses to
+or immutables). Phase 10 also records deployment gas, gas price, and fee as
+decimal strings. `contracts/scripts/deploy.ts` writes records and refuses to
 reuse a `deploymentId`; `contracts/scripts/validate-deployment.ts` validates
 schema, ABI hash, chain id, and bytecode against an RPC. Local hardhat-node
 records under `contracts/deployments/31337/` are not committed.
+
+`npm run release:sync-manifest -- <record>` copies the public fields from a
+generated contract record into the frontend manifest. It can replace a pending
+reservation, but refuses to change the address of an active deployment id.
+Every Vite build emits `/release.json`, allowing a deployed URL to prove its
+source commit, deployment id/status, chain, address, deployment transaction,
+and ABI hash before promotion or rollback.
 
 Rules:
 
@@ -383,6 +395,25 @@ Operational:
 - contract and frontend release commits are recorded;
 - rollback owner is known;
 - release notes include contract address, deployment id, and explorer link.
+
+Automated release gate:
+
+```bash
+REQUIRE_ACTIVE_DEPLOYMENT=1 npm run verify:release
+PUBLIC_DEMO_URL=https://stable.example \
+  VITE_ACTIVE_DEPLOYMENT_ID=arb-sepolia-v1 \
+  REQUIRE_ACTIVE_DEPLOYMENT=1 \
+  npm run release:verify-public
+PUBLIC_DEMO_URL=https://stable.example \
+  VITE_ACTIVE_DEPLOYMENT_ID=arb-sepolia-v1 \
+  REQUIRE_ACTIVE_DEPLOYMENT=1 \
+  npm run test:public
+```
+
+The manual `Phase 10 Release Gate` GitHub workflow runs those checks together
+with live record validation and the funded two-wallet regression. Its GitHub
+environment must contain the public Vite variables as environment variables
+and RPC/test-wallet credentials as secrets.
 
 ## Frontend Rollback
 

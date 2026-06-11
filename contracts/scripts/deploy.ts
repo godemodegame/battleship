@@ -76,6 +76,7 @@ async function main(): Promise<void> {
   const sourceCommit =
     process.env.SOURCE_COMMIT ??
     execSync('git rev-parse HEAD', { cwd: contractsDir }).toString().trim()
+  const deploymentGasPrice = receipt.gasPrice
 
   const record: DeploymentRecord = {
     schemaVersion: 1,
@@ -92,6 +93,9 @@ async function main(): Promise<void> {
     abiSha256: computeAbiSha256(artifact.abi),
     deployedBytecodeKeccak256: `keccak256:${ethers.keccak256(onchainCode)}`,
     deployedAt: new Date().toISOString(),
+    deploymentGasUsed: receipt.gasUsed.toString(),
+    deploymentGasPriceWei: deploymentGasPrice.toString(),
+    deploymentFeeWei: (receipt.gasUsed * deploymentGasPrice).toString(),
   }
 
   const problems = validateRecordSchema(record)
