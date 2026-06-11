@@ -1,11 +1,11 @@
 import '@nomicfoundation/hardhat-ethers'
 import '@nomicfoundation/hardhat-chai-matchers'
+// GAME-401: the CoFHE Hardhat plugin deploys the mock CoFHE environment
+// (task manager, ACL, zk verifier, query decrypter) onto the in-process
+// hardhat network before tests, so encrypted-rule tests run without live
+// CoFHE infrastructure.
+import 'cofhe-hardhat-plugin'
 import type { HardhatUserConfig } from 'hardhat/config'
-
-// The CoFHE Hardhat plugin (`cofhe-hardhat-plugin`) is installed and pinned in
-// package.json but is not loaded yet: Phase 3 contains no FHE operations, so
-// tests must not depend on the mock CoFHE environment. Phase 4 (GAME-401)
-// enables the plugin import here when encrypted rules land.
 
 const ARBITRUM_SEPOLIA_CHAIN_ID = 421614
 
@@ -14,6 +14,12 @@ const arbitrumSepoliaAccounts = process.env.DEPLOYER_PRIVATE_KEY
   : []
 
 const config: HardhatUserConfig = {
+  cofhe: {
+    // Mock-operation console logging triples test runtime and drowns out
+    // assertion output; benchmarks read gas receipts directly instead.
+    logMocks: false,
+    gasWarning: false,
+  },
   solidity: {
     version: '0.8.25',
     settings: {
@@ -29,6 +35,11 @@ const config: HardhatUserConfig = {
   networks: {
     hardhat: {
       chainId: 31337,
+      // Newer hardforks (osaka) enable the EIP-7951 P256VERIFY precompile at
+      // 0x...0100, which shadows the CoFHE MockZkVerifier that
+      // cofhe-hardhat-plugin etches at that address. Cancun matches the solc
+      // evmVersion above and keeps the address free for the mock.
+      hardfork: 'cancun',
     },
     localhost: {
       url: 'http://127.0.0.1:8545',

@@ -11,7 +11,7 @@
 export const BATTLESHIP_GAME_CONTRACT_NAME = 'BattleshipGame'
 
 /** sha256 of the compact ABI JSON; must match `abiSha256` in the active deployment record. */
-export const BATTLESHIP_GAME_ABI_SHA256 = 'sha256:8b671aa12409e94651065740b46d9fb0f67336b4a808255aa946ce1b921e30df'
+export const BATTLESHIP_GAME_ABI_SHA256 = 'sha256:283d4196c0f6421c3e712aaceb08c2f8c79f3ed8e8f4520f8dd443831e6d7484'
 
 export const battleshipGameAbi = [
   {
@@ -21,7 +21,43 @@ export const battleshipGameAbi = [
   },
   {
     "inputs": [],
+    "name": "CellAlreadyAttacked",
+    "type": "error"
+  },
+  {
+    "inputs": [],
     "name": "CreatorCannotJoinOwnMatch",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "DecryptionResultNotReady",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "FleetAlreadySubmitted",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "InvalidCellIndex",
+    "type": "error"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint8",
+        "name": "got",
+        "type": "uint8"
+      },
+      {
+        "internalType": "uint8",
+        "name": "expected",
+        "type": "uint8"
+      }
+    ],
+    "name": "InvalidEncryptedInput",
     "type": "error"
   },
   {
@@ -36,7 +72,17 @@ export const battleshipGameAbi = [
   },
   {
     "inputs": [],
+    "name": "InvalidMoveId",
+    "type": "error"
+  },
+  {
+    "inputs": [],
     "name": "InvalidPaginationLimit",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "InvalidShotResult",
     "type": "error"
   },
   {
@@ -56,6 +102,21 @@ export const battleshipGameAbi = [
   },
   {
     "inputs": [],
+    "name": "MoveNotFound",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "NoPendingPlacementValidation",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "NoPendingShot",
+    "type": "error"
+  },
+  {
+    "inputs": [],
     "name": "NoTimeoutAvailable",
     "type": "error"
   },
@@ -71,7 +132,17 @@ export const battleshipGameAbi = [
   },
   {
     "inputs": [],
+    "name": "NotMatchPlayerAddress",
+    "type": "error"
+  },
+  {
+    "inputs": [],
     "name": "NotTimeoutClaimant",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "NotYourTurn",
     "type": "error"
   },
   {
@@ -86,8 +157,98 @@ export const battleshipGameAbi = [
   },
   {
     "inputs": [],
+    "name": "PendingShotExists",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "PlacementValidationPending",
+    "type": "error"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "int32",
+        "name": "value",
+        "type": "int32"
+      }
+    ],
+    "name": "SecurityZoneOutOfBounds",
+    "type": "error"
+  },
+  {
+    "inputs": [],
     "name": "SelfInviteNotAllowed",
     "type": "error"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "matchId",
+        "type": "uint256"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "player",
+        "type": "address"
+      }
+    ],
+    "name": "FleetSubmitted",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "matchId",
+        "type": "uint256"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "player",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "bool",
+        "name": "valid",
+        "type": "bool"
+      }
+    ],
+    "name": "FleetValidated",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "matchId",
+        "type": "uint256"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "player",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "ctHash",
+        "type": "uint256"
+      }
+    ],
+    "name": "FleetValidationRequested",
+    "type": "event"
   },
   {
     "anonymous": false,
@@ -125,6 +286,31 @@ export const battleshipGameAbi = [
       }
     ],
     "name": "MatchCreated",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "matchId",
+        "type": "uint256"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "winner",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint32",
+        "name": "moveCount",
+        "type": "uint32"
+      }
+    ],
+    "name": "MatchFinished",
     "type": "event"
   },
   {
@@ -183,6 +369,124 @@ export const battleshipGameAbi = [
       {
         "indexed": true,
         "internalType": "address",
+        "name": "firstPlayer",
+        "type": "address"
+      }
+    ],
+    "name": "MatchStarted",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "matchId",
+        "type": "uint256"
+      },
+      {
+        "indexed": true,
+        "internalType": "uint32",
+        "name": "moveId",
+        "type": "uint32"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "resultCtHash",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "sunkShipCtHash",
+        "type": "uint256"
+      }
+    ],
+    "name": "ShotResolutionRequested",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "matchId",
+        "type": "uint256"
+      },
+      {
+        "indexed": true,
+        "internalType": "uint32",
+        "name": "moveId",
+        "type": "uint32"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint8",
+        "name": "result",
+        "type": "uint8"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint8",
+        "name": "sunkShipId",
+        "type": "uint8"
+      }
+    ],
+    "name": "ShotResolved",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "matchId",
+        "type": "uint256"
+      },
+      {
+        "indexed": true,
+        "internalType": "uint32",
+        "name": "moveId",
+        "type": "uint32"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "attacker",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "address",
+        "name": "defender",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint8",
+        "name": "cellIndex",
+        "type": "uint8"
+      }
+    ],
+    "name": "ShotSubmitted",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "matchId",
+        "type": "uint256"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
         "name": "winner",
         "type": "address"
       },
@@ -194,6 +498,25 @@ export const battleshipGameAbi = [
       }
     ],
     "name": "TimeoutWinClaimed",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "matchId",
+        "type": "uint256"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "currentTurn",
+        "type": "address"
+      }
+    ],
+    "name": "TurnChanged",
     "type": "event"
   },
   {
@@ -332,6 +655,30 @@ export const battleshipGameAbi = [
         "internalType": "uint256",
         "name": "matchId",
         "type": "uint256"
+      },
+      {
+        "internalType": "uint8",
+        "name": "cellIndex",
+        "type": "uint8"
+      }
+    ],
+    "name": "attack",
+    "outputs": [
+      {
+        "internalType": "uint32",
+        "name": "moveId",
+        "type": "uint32"
+      }
+    ],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "matchId",
+        "type": "uint256"
       }
     ],
     "name": "cancelMatch",
@@ -368,6 +715,42 @@ export const battleshipGameAbi = [
         "type": "uint256"
       }
     ],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "matchId",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint32",
+        "name": "moveId",
+        "type": "uint32"
+      }
+    ],
+    "name": "finalizeAttack",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "matchId",
+        "type": "uint256"
+      },
+      {
+        "internalType": "address",
+        "name": "player",
+        "type": "address"
+      }
+    ],
+    "name": "finalizeFleetValidation",
+    "outputs": [],
     "stateMutability": "nonpayable",
     "type": "function"
   },
@@ -500,6 +883,214 @@ export const battleshipGameAbi = [
           }
         ],
         "internalType": "struct BattleshipGame.MatchView",
+        "name": "",
+        "type": "tuple"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "matchId",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint32",
+        "name": "moveId",
+        "type": "uint32"
+      }
+    ],
+    "name": "getMove",
+    "outputs": [
+      {
+        "components": [
+          {
+            "internalType": "uint32",
+            "name": "moveId",
+            "type": "uint32"
+          },
+          {
+            "internalType": "address",
+            "name": "attacker",
+            "type": "address"
+          },
+          {
+            "internalType": "address",
+            "name": "defender",
+            "type": "address"
+          },
+          {
+            "internalType": "uint8",
+            "name": "cellIndex",
+            "type": "uint8"
+          },
+          {
+            "internalType": "enum BattleshipGame.ShotResult",
+            "name": "result",
+            "type": "uint8"
+          },
+          {
+            "internalType": "uint8",
+            "name": "sunkShipId",
+            "type": "uint8"
+          },
+          {
+            "internalType": "uint64",
+            "name": "submittedAt",
+            "type": "uint64"
+          },
+          {
+            "internalType": "uint64",
+            "name": "resolvedAt",
+            "type": "uint64"
+          },
+          {
+            "internalType": "bool",
+            "name": "finalized",
+            "type": "bool"
+          }
+        ],
+        "internalType": "struct BattleshipGame.MoveView",
+        "name": "",
+        "type": "tuple"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "matchId",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint32",
+        "name": "offset",
+        "type": "uint32"
+      },
+      {
+        "internalType": "uint32",
+        "name": "limit",
+        "type": "uint32"
+      }
+    ],
+    "name": "getMoveHistory",
+    "outputs": [
+      {
+        "components": [
+          {
+            "internalType": "uint32",
+            "name": "moveId",
+            "type": "uint32"
+          },
+          {
+            "internalType": "address",
+            "name": "attacker",
+            "type": "address"
+          },
+          {
+            "internalType": "address",
+            "name": "defender",
+            "type": "address"
+          },
+          {
+            "internalType": "uint8",
+            "name": "cellIndex",
+            "type": "uint8"
+          },
+          {
+            "internalType": "enum BattleshipGame.ShotResult",
+            "name": "result",
+            "type": "uint8"
+          },
+          {
+            "internalType": "uint8",
+            "name": "sunkShipId",
+            "type": "uint8"
+          },
+          {
+            "internalType": "uint64",
+            "name": "submittedAt",
+            "type": "uint64"
+          },
+          {
+            "internalType": "uint64",
+            "name": "resolvedAt",
+            "type": "uint64"
+          },
+          {
+            "internalType": "bool",
+            "name": "finalized",
+            "type": "bool"
+          }
+        ],
+        "internalType": "struct BattleshipGame.MoveView[]",
+        "name": "result",
+        "type": "tuple[]"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "matchId",
+        "type": "uint256"
+      }
+    ],
+    "name": "getPendingShot",
+    "outputs": [
+      {
+        "components": [
+          {
+            "internalType": "bool",
+            "name": "exists",
+            "type": "bool"
+          },
+          {
+            "internalType": "uint32",
+            "name": "moveId",
+            "type": "uint32"
+          },
+          {
+            "internalType": "address",
+            "name": "attacker",
+            "type": "address"
+          },
+          {
+            "internalType": "address",
+            "name": "defender",
+            "type": "address"
+          },
+          {
+            "internalType": "uint8",
+            "name": "cellIndex",
+            "type": "uint8"
+          },
+          {
+            "internalType": "uint256",
+            "name": "resultCtHash",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "sunkShipCtHash",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint64",
+            "name": "submittedAt",
+            "type": "uint64"
+          }
+        ],
+        "internalType": "struct BattleshipGame.PendingShotView",
         "name": "",
         "type": "tuple"
       }
@@ -688,6 +1279,19 @@ export const battleshipGameAbi = [
     "type": "function"
   },
   {
+    "inputs": [],
+    "name": "getShipLengths",
+    "outputs": [
+      {
+        "internalType": "uint8[10]",
+        "name": "lengths",
+        "type": "uint8[10]"
+      }
+    ],
+    "stateMutability": "pure",
+    "type": "function"
+  },
+  {
     "inputs": [
       {
         "internalType": "uint256",
@@ -711,6 +1315,77 @@ export const battleshipGameAbi = [
       }
     ],
     "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "matchId",
+        "type": "uint256"
+      },
+      {
+        "internalType": "address",
+        "name": "player",
+        "type": "address"
+      }
+    ],
+    "name": "retryFleetValidation",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "matchId",
+        "type": "uint256"
+      }
+    ],
+    "name": "retryShotResolution",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "matchId",
+        "type": "uint256"
+      },
+      {
+        "components": [
+          {
+            "internalType": "uint256",
+            "name": "ctHash",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint8",
+            "name": "securityZone",
+            "type": "uint8"
+          },
+          {
+            "internalType": "uint8",
+            "name": "utype",
+            "type": "uint8"
+          },
+          {
+            "internalType": "bytes",
+            "name": "signature",
+            "type": "bytes"
+          }
+        ],
+        "internalType": "struct InEuint8[20]",
+        "name": "segments",
+        "type": "tuple[20]"
+      }
+    ],
+    "name": "submitFleet",
+    "outputs": [],
+    "stateMutability": "nonpayable",
     "type": "function"
   }
 ] as const

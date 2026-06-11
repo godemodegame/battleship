@@ -6,6 +6,30 @@ The smart contract manages PvP matches for a Battleship-style game. It is respon
 
 The contract must be the main source of truth. The frontend, 3D client, indexer, or mobile app must not be able to decide whether a shot was a hit, whose turn it is, or who won the match.
 
+## Implementation Status (Phase 4)
+
+`contracts/contracts/BattleshipGame.sol` implements this design. The exact
+ABI is in `docs/contract-api.md`, the storage model in
+`docs/contract-data-model.md`, and the measurements behind the encoding
+decision in `docs/cofhe-feasibility-results.md`. Three deviations from the
+preferences expressed below, decided by measurement:
+
+- the fleet encoding is the encrypted ship-segment list (20 encrypted cell
+  indexes grouped by ship in a fixed public order), not the encrypted
+  100-cell array: the cell array cannot be validated within any transaction
+  budget (~1,000 FHE operations to prove per-ship cell counts);
+- on-chain validation covers range, straightness, contiguity, and row
+  bounds. Cross-ship overlap and the classic no-touch rule are enforced by
+  the client for UX but not on-chain: straightness already excludes the
+  dangerous intra-ship duplicate cells, and overlapping or touching your
+  own ships only harms you (the win check is all-ships-dead, so fewer
+  distinct cells means a faster loss). `docs/security-and-fair-play.md`
+  carries the fairness argument;
+- the client SDK is `cofhejs` (`cofhejs/web` in the browser), and decrypt
+  results are posted on-chain by the CoFHE network itself - finalization
+  functions are permissionless triggers that read the posted plaintext, and
+  no client ever supplies a result value or signature.
+
 ## Network
 
 The first version must run on the Arbitrum testnet.

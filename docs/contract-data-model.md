@@ -17,15 +17,36 @@ of this model: the core constants, all enums except `BotDifficulty`, the
 - timeouts are compiled-in constants (24 hours each) rather than constructor
   configuration, so deployed bytecode is byte-deterministic and deployment
   records can be validated by exact bytecode hash;
-- `RESOLVING_TIMEOUT` is a placeholder constant until the Phase 4 prototype
-  defines the resolving-recovery rule;
 - bot state is omitted entirely instead of stored empty (`BotState`,
-  `BotDifficulty`, and `PlayerSlot` routing arrive only if bot mode lands);
-- `EncryptedFleet`, `FleetHealth`, `Move`, and `PendingShot` storage is
-  deferred to Phase 4/7 so the encrypted encoding is not frozen before the
-  CoFHE feasibility measurements;
-- move history storage shape (array versus mapping) remains open until the
-  attack flow lands.
+  `BotDifficulty`, and `PlayerSlot` routing arrive only if bot mode lands).
+
+Phase 4 froze the encrypted model after the CoFHE feasibility measurements
+(`docs/cofhe-feasibility-results.md`). As implemented:
+
+- the encrypted fleet is a ship-segment list: `euint8[20]` encrypted cell
+  indexes grouped by ship in a fixed public order, plus `euint8[10]`
+  encrypted per-ship health initialized from public ship lengths. The
+  100-cell array, packed masks, and batched variants were measured and
+  rejected (validation cost);
+- encrypted state lives in dedicated mappings
+  (`fleets[matchId][player]`, `pendingValidations[matchId][player]`,
+  `pendingShots[matchId]`), never inside the publicly viewable
+  `PlayerState`;
+- move history is `mapping(matchId => mapping(moveId => Move))` with move
+  ids starting at `1`; `Move` carries a public `sunkShipId`;
+- there is no `totalRemainingHealth`: the win check is
+  all-ships-dead (`and` over the ten encrypted health-is-zero flags),
+  which stays correct even if a player overlaps own ships;
+- pending decryptions store `uint256` ciphertext handles (the native CoFHE
+  handle type); the network posts plaintexts on-chain and finalization
+  reads them - no client-supplied results anywhere;
+- `RESOLVING_TIMEOUT` paces retry UI only: recovery is permissionless
+  re-request (`retryShotResolution`/`retryFleetValidation`), never a
+  timeout win;
+- `ReadyToStart` is never stored: validation finalization auto-starts the
+  match;
+- the MVP sunk reveal is the final attacked cell (`sunkMask` bit) plus the
+  public `sunkShipId`; full sunk-geometry reveal stays post-MVP.
 
 ## Design Goals
 
@@ -84,34 +105,27 @@ uint8 col = cellIndex % 10;
 
 The frontend can display `A1`, `B4`, or `J10`, but the contract should use `uint8 cellIndex`.
 
-## Ship Encoding
+## Ship Encoding (implemented)
 
-Recommended fleet cell encoding:
+The fleet is not stored as board cells. It is a segment list: 20 encrypted
+cell indexes (`0..99`), one per occupied cell, grouped by ship in a fixed
+public submission order. Ship identity is the public array position, so no
+encrypted ship-id values exist at all:
 
 ```solidity
-uint8 constant WATER = 0;
-uint8 constant CARRIER = 1;
-uint8 constant BATTLESHIP = 2;
-uint8 constant CRUISER = 3;
-uint8 constant DESTROYER = 4;
-uint8 constant SUBMARINE = 5;
-uint8 constant PATROL_BOAT = 6;
+// BattleshipGame.sol
+bytes private constant SHIP_LENGTHS = hex"04030302020201010101";
+// segments[0..3]   ship 1  carrier      (4)
+// segments[4..6]   ship 2  battleship   (3)
+// segments[7..9]   ship 3  cruiser      (3)
+// segments[10..11] ship 4  destroyer A  (2)
+// segments[12..13] ship 5  destroyer B  (2)
+// segments[14..15] ship 6  submarine    (2)
+// segments[16..19] ships 7..10 patrol A..D (1 each)
 ```
 
-For MVP storage, each encrypted board cell can contain:
-
-- `0` for water;
-- non-zero ship type or ship id for occupied cells.
-
-Open decision:
-
-- ship type is easier for visual interpretation;
-- unique ship id is easier for exact sunk tracking.
-
-Recommendation:
-
-- use unique ship ids internally if full sunk tracking is required;
-- map ship ids to ship type metadata separately.
+`getShipLengths()` exposes the grouping publicly. Public ship ids `1..10`
+(used by `sunkShipId`) are the one-based ship positions in this order.
 
 ## Enums
 
@@ -227,14 +241,17 @@ MVP bot mode should only use `Easy` if bot mode is added.
 
 ## Main Storage
 
-Recommended top-level storage:
+Implemented top-level storage:
 
 ```solidity
 uint256 public nextMatchId;
 
-mapping(uint256 => Match) private matches;
-mapping(uint256 => Move[]) private matchMoves;
-mapping(address => uint256[]) private playerMatchIds;
+mapping(uint256 => Match) internal matches;
+mapping(address => uint256[]) internal playerMatchIds;
+mapping(uint256 => mapping(address => EncryptedFleet)) private fleets;
+mapping(uint256 => mapping(address => PendingPlacementValidation)) private pendingValidations;
+mapping(uint256 => PendingShot) private pendingShots;
+mapping(uint256 => mapping(uint32 => Move)) private moves;
 ```
 
 Optional public lookup:
@@ -284,9 +301,7 @@ Field notes:
 - `pendingMoveId` points to an unresolved move if `status == ResolvingShot`.
 - `botState` is unused for normal friend matches.
 
-## PlayerState
-
-Recommended structure:
+## PlayerState (implemented)
 
 ```solidity
 struct PlayerState {
@@ -297,92 +312,53 @@ struct PlayerState {
   bool fleetValid;
   uint64 fleetSubmittedAt;
   uint64 fleetValidatedAt;
-  EncryptedFleet fleet;
   PublicBoard publicBoard;
-  FleetHealth fleetHealth;
 }
 ```
 
 Field notes:
 
 - `player` is zero for uninitialized slots.
-- `placementStatus` is more expressive than separate booleans, but booleans can be retained for cheaper reads if useful.
-- `fleet` must never expose plaintext fleet data.
 - `publicBoard` tracks attacks made against this player.
-- `fleetHealth` is encrypted or restricted state used to determine sunk and win.
+- the encrypted fleet and health deliberately live outside this struct (in
+  the `fleets` mapping): `PlayerState` feeds the public `getPlayers` read,
+  and no encrypted handle may travel through it.
+- after an `Invalid` validation verdict, `fleetSubmitted` resets to `false`
+  so the player resubmits and timeout claims stay correct.
 
-## EncryptedFleet
-
-MVP baseline:
+## EncryptedFleet (implemented)
 
 ```solidity
 struct EncryptedFleet {
-  euint8[100] cells;
+  euint8[20] segments;
+  euint8[10] shipHealth;
   bool initialized;
-  bytes32 fleetCommitment;
 }
+
+mapping(uint256 matchId => mapping(address player => EncryptedFleet)) private fleets;
 ```
 
 Fields:
 
-- `cells` stores encrypted cell values.
+- `segments` stores the encrypted occupied-cell indexes in submission order.
+- `shipHealth` starts at the public ship lengths and decrements encrypted on
+  every hit; a zero health is an encrypted sunk flag.
 - `initialized` marks whether the encrypted fleet exists.
-- `fleetCommitment` is optional and can be used to identify a placement payload or anti-replay context.
 
-Storage warning:
+The struct lives in its own mapping, never inside `PlayerState`, so no read
+of public player state can carry encrypted handles. The prototyped
+alternatives (100-cell array in one or four transactions, packed nibble
+masks) and the measurements that rejected them are recorded in
+`docs/cofhe-feasibility-results.md`.
 
-- `euint8[100]` is simple but may be expensive.
-- The first implementation should prototype gas and calldata cost before locking this model.
-
-Fallback models:
-
-```solidity
-struct EncryptedShipListFleet {
-  EncryptedShip[10] ships;
-}
-
-struct EncryptedShip {
-  euint8 startCell;
-  euint8 direction;
-  euint8 length;
-  euint8 shipId;
-}
-```
-
-or:
+## Fleet input (implemented)
 
 ```solidity
-struct PackedEncryptedFleet {
-  euint128 occupiedMaskLow;
-  euint128 occupiedMaskHigh;
-  euint128 shipIdData;
-}
+function submitFleet(uint256 matchId, InEuint8[20] calldata segments) external;
 ```
 
-The MVP starts with `EncryptedFleet` unless prototyping proves it too costly.
-
-## EncryptedFleetInput
-
-Suggested input shape:
-
-```solidity
-struct EncryptedFleetInput {
-  InEuint8[100] cells;
-}
-```
-
-Potential batching shape:
-
-```solidity
-struct EncryptedFleetBatchInput {
-  uint8 startIndex;
-  InEuint8[] cells;
-}
-```
-
-Batching can reduce client and transaction pressure if one 100-cell encrypted input is impractical.
-
-The final contract API must choose one input shape.
+One transaction, one `cofhejs.encrypt` call producing all 20 inputs. No
+batching: the segment encoding made it unnecessary (5.8KB calldata).
 
 ## PublicBoard
 
@@ -423,35 +399,20 @@ MVP reveal rule:
 - do not reveal full sunk ship cells unless they were already attacked;
 - `sunkMask` may equal the final attacked cell only in MVP.
 
-## FleetHealth
+## FleetHealth (implemented inside EncryptedFleet)
 
-The contract needs a way to track whether ships are sunk and whether the fleet is defeated.
+Per-ship health is the `shipHealth: euint8[10]` array of `EncryptedFleet`,
+initialized from the public ship lengths at zero FHE cost.
 
-Recommended MVP structure:
+- a hit decrements the hit ship's encrypted health;
+- sunk detection is `health == 0` combined with this-shot-hit-this-ship;
+- the win check is all-ships-dead (`and` over the ten health-is-zero
+  flags). There is deliberately no `totalRemainingHealth` counter: a
+  per-hit total would diverge from per-ship health if a player overlapped
+  own ships, creating an unwinnable match; the all-sunk conjunction cannot.
 
-```solidity
-struct FleetHealth {
-  euint8 totalRemainingHealth;
-  euint8[10] shipRemainingHealth;
-  bool initialized;
-}
-```
-
-Field notes:
-
-- `totalRemainingHealth` starts at `20`.
-- `shipRemainingHealth` supports sunk detection.
-- values remain encrypted.
-- only final allowed results become public.
-
-Open issue:
-
-- if cells store ship type instead of unique ship id, sunk detection is harder.
-
-Recommendation:
-
-- use unique ship ids for cells;
-- store public ship metadata separately.
+All health values stay encrypted; only the final result enum and sunk ship
+id are ever decrypted.
 
 ## ShipMetadata
 
@@ -484,11 +445,10 @@ This keeps total occupied cells at `20`.
 
 The visual model can still map ids to stylized ship classes.
 
-## Move
+## Move (implemented)
 
-Moves are public after they are submitted. Their results become public only after Fhenix finalization.
-
-Recommended structure:
+Moves are public after they are submitted. Their results become public only
+after decrypt finalization.
 
 ```solidity
 struct Move {
@@ -497,24 +457,26 @@ struct Move {
   address defender;
   uint8 cellIndex;
   ShotResult result;
+  uint8 sunkShipId;
   uint64 submittedAt;
   uint64 resolvedAt;
   bool finalized;
 }
+
+mapping(uint256 matchId => mapping(uint32 moveId => Move)) private moves;
 ```
 
 Field notes:
 
-- `moveId` should increment per match.
+- `moveId` increments per match starting at `1`.
 - `cellIndex` is public.
 - `result` starts as `None`.
-- `finalized` becomes true after decrypt result verification.
+- `sunkShipId` is `0` unless the move sank a ship (`1..10`).
+- `finalized` becomes true when the on-chain decrypt results are applied.
 
-## PendingShot
+## PendingShot (implemented)
 
-`PendingShot` tracks the Fhenix result that has not yet been finalized.
-
-Recommended structure:
+`PendingShot` tracks the one unresolved shot of a match.
 
 ```solidity
 struct PendingShot {
@@ -523,49 +485,49 @@ struct PendingShot {
   address attacker;
   address defender;
   uint8 cellIndex;
-  bytes32 resultCtHash;
-  euint8 encryptedResult;
+  uint256 resultCtHash;
+  uint256 sunkShipCtHash;
   uint64 submittedAt;
 }
+
+mapping(uint256 matchId => PendingShot) private pendingShots;
 ```
 
 Field notes:
 
-- `exists` prevents multiple unresolved shots.
-- `resultCtHash` must match the decrypt result submitted to `finalizeAttack`.
-- `encryptedResult` is the FHE result enum.
-- `moveId` prevents stale finalization.
+- `exists` prevents multiple unresolved shots; `ResolvingShot` status
+  blocks new attacks anyway.
+- `resultCtHash` and `sunkShipCtHash` are the `euint8` handles whose
+  plaintexts the CoFHE network posts on-chain; finalization reads them with
+  `FHE.getDecryptResultSafe`. Handles are stored as plain `uint256` - they
+  are public identifiers, decryption stays ACL-gated.
+- `moveId` rejects stale finalization calls.
 
 When finalized:
 
-- verify `ctHash`;
-- verify signature;
-- update `Move.result`;
+- read both decrypt results (revert until ready);
+- update `Move.result` and `Move.sunkShipId`;
 - update public board masks;
 - update match status and turn;
 - clear `pendingShot`.
 
-## PendingPlacementValidation
-
-Placement validation may also need pending state.
-
-Recommended structure:
+## PendingPlacementValidation (implemented)
 
 ```solidity
 struct PendingPlacementValidation {
   bool exists;
-  address player;
-  bytes32 validityCtHash;
-  ebool encryptedValid;
+  uint256 validityCtHash;
   uint64 requestedAt;
 }
+
+mapping(uint256 matchId => mapping(address player => PendingPlacementValidation))
+    private pendingValidations;
 ```
 
-This can be stored inside `PlayerState` or in a match-level mapping.
-
-Recommended:
-
-- include it inside `PlayerState` once exact validation flow is known.
+Keyed per player in a match-level mapping (not inside `PlayerState`, which
+is publicly viewable). A resubmission after an `Invalid` verdict replaces
+the entry with a fresh handle, so stale decrypt results cannot finalize a
+newer submission.
 
 ## TimeoutState
 
@@ -869,17 +831,22 @@ Revisit after prototype:
 
 ## Open Decisions
 
+Resolved by the Phase 4 implementation:
+
+- fleet encoding: ship-segment list (`euint8[20]`), ship identity by public
+  array position - no encrypted ship ids at all;
+- move history: mapping-based with paginated reads;
+- `ctHash` type: `uint256` (native CoFHE handle);
+- placement validation: dedicated pending struct in a match-level mapping;
+- `ReadyToStart`: never stored, transitional only;
+- sunk reveal: final attacked cell in `sunkMask` plus public `sunkShipId`;
+  full geometry reveal stays post-MVP.
+
 Still unresolved:
 
-- final fleet encoding;
-- whether cells store ship type or unique ship id;
-- whether move history is array-based or mapping-based;
-- exact type of `ctHash` in contract signatures;
-- whether placement validation has a dedicated pending struct;
-- whether `ReadyToStart` is a real stored status or transitional state;
-- whether bot fields live in the main `Match` or separate mapping;
-- exact timeout values;
-- exact public reveal behavior for sunk ships.
+- whether bot fields live in the main `Match` or separate mapping (bot mode
+  is post-MVP);
+- exact timeout values (constants today, tunable by redeployment).
 
 ## Next Document
 

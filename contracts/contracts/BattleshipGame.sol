@@ -1,16 +1,23 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.25;
 
+import {FHE, ebool, euint8} from "@fhenixprotocol/cofhe-contracts/FHE.sol";
+import {InEuint8} from "@fhenixprotocol/cofhe-contracts/ICofhe.sol";
+
 /// @title BattleshipGame
-/// @notice Public match lifecycle for the encrypted Battleship MVP on
-///         Arbitrum Sepolia: strict invited friend matches, joining,
-///         cancellation, forfeit, timeout claims, and public reads.
+/// @notice Encrypted Battleship MVP on Arbitrum Sepolia: strict invited
+///         friend matches, encrypted fleet submission and validation,
+///         encrypted shot resolution, cancellation, forfeit, timeout claims,
+///         and public reads.
 ///
-///         Phase 3 scope (GAME-301..311): this contract intentionally has no
-///         fleet or attack functions. The encrypted fleet encoding and the
-///         attack/finalization ABI are frozen only after the CoFHE
-///         feasibility work in Phase 4 (see docs/game-implementation-roadmap.md).
-///         No plaintext fleet data may ever be added for convenience.
+///         Phase 4 scope (GAME-401..412): fleets are stored as 20 encrypted
+///         ship-segment cell indexes (see docs/cofhe-feasibility-results.md
+///         for the encoding decision). Hit, sunk, and win are computed with
+///         FHE operations; the only values ever decrypted are the per-shot
+///         result enum, the sunk ship id, and the placement validity flag,
+///         through the asynchronous CoFHE decrypt-request flow
+///         (FHE.decrypt -> FHE.getDecryptResultSafe). No client supplies any
+///         authoritative result, and no plaintext fleet data exists anywhere.
 contract BattleshipGame {
     // ---------------------------------------------------------------------
     // Board and fleet constants (docs/contract-data-model.md)
@@ -22,6 +29,21 @@ contract BattleshipGame {
     uint8 public constant TOTAL_SHIP_CELLS = 20;
     uint8 public constant NO_CELL = type(uint8).max;
 
+    /// @dev Frozen fleet layout (docs/cofhe-feasibility-results.md): the 20
+    ///      encrypted segments of submitFleet are grouped by ship in this
+    ///      fixed public order, so ship identity is the array position and
+    ///      per-ship health initializes from public lengths at zero FHE cost.
+    ///      Index: carrier(4), battleship(3), cruiser(3), destroyer A(2),
+    ///      destroyer B(2), submarine(2), patrol A..D(1 each).
+    bytes private constant SHIP_LENGTHS = hex"04030302020201010101";
+
+    /// @notice Public ship lengths in submission order, for clients and tests.
+    function getShipLengths() external pure returns (uint8[10] memory lengths) {
+        for (uint256 i = 0; i < 10; i++) {
+            lengths[i] = uint8(SHIP_LENGTHS[i]);
+        }
+    }
+
     // ---------------------------------------------------------------------
     // Timeout configuration
     // ---------------------------------------------------------------------
@@ -32,8 +54,11 @@ contract BattleshipGame {
     uint64 public constant JOIN_TIMEOUT = 24 hours;
     uint64 public constant PLACEMENT_TIMEOUT = 24 hours;
     uint64 public constant TURN_TIMEOUT = 24 hours;
-    /// @dev Placeholder until the Phase 4 CoFHE prototype defines the real
-    ///      resolving-recovery rule; no resolving claim path exists yet.
+    /// @dev Resolving-recovery rule (decided with the Phase 4 prototype): a
+    ///      stuck decryption is never a win for either player - anyone can
+    ///      re-request it through retryShotResolution / retryFleetValidation,
+    ///      and both players can always exit via forfeit. This deadline only
+    ///      paces retry UI; claimTimeoutWin stays closed during resolution.
     uint64 public constant RESOLVING_TIMEOUT = 24 hours;
 
     /// @dev Cap for paginated reads so view calls stay bounded.
@@ -102,9 +127,9 @@ contract BattleshipGame {
         uint128 sunkMask;
     }
 
-    /// @notice Per-player public state. Encrypted fleet storage and fleet
-    ///         health are added in Phase 4 once the encoding is frozen; they
-    ///         must never appear in public reads.
+    /// @notice Per-player public state. The encrypted fleet lives in the
+    ///         separate `fleets` mapping so no encrypted handle can leak
+    ///         through public reads of this struct.
     struct PlayerState {
         address player;
         bool joined;
@@ -144,6 +169,55 @@ contract BattleshipGame {
         TimeoutState timeoutState;
     }
 
+    /// @notice Encrypted fleet state. Lives outside Match/PlayerState and is
+    ///         never returned by any read function. Segments are encrypted
+    ///         cell indexes (0..99) in the SHIP_LENGTHS submission order;
+    ///         shipHealth starts at the public ship length and decrements
+    ///         encrypted on every hit.
+    struct EncryptedFleet {
+        euint8[20] segments;
+        euint8[10] shipHealth;
+        bool initialized;
+    }
+
+    /// @notice Pending asynchronous placement-validity decryption for one
+    ///         player. validityCtHash is the ebool handle whose plaintext the
+    ///         CoFHE network posts on-chain.
+    struct PendingPlacementValidation {
+        bool exists;
+        uint256 validityCtHash;
+        uint64 requestedAt;
+    }
+
+    /// @notice One public move. result stays None until finalizeAttack reads
+    ///         the on-chain decrypt result. sunkShipId is 0 unless the move
+    ///         sank a ship (1..10, public ship metadata order).
+    struct Move {
+        uint32 moveId;
+        address attacker;
+        address defender;
+        uint8 cellIndex;
+        ShotResult result;
+        uint8 sunkShipId;
+        uint64 submittedAt;
+        uint64 resolvedAt;
+        bool finalized;
+    }
+
+    /// @notice The single unresolved shot of a match. resultCtHash and
+    ///         sunkShipCtHash are euint8 handles awaiting network decryption;
+    ///         the handles are public values, decryption stays ACL-gated.
+    struct PendingShot {
+        bool exists;
+        uint32 moveId;
+        address attacker;
+        address defender;
+        uint8 cellIndex;
+        uint256 resultCtHash;
+        uint256 sunkShipCtHash;
+        uint64 submittedAt;
+    }
+
     // ---------------------------------------------------------------------
     // Read structs
     // ---------------------------------------------------------------------
@@ -176,8 +250,31 @@ contract BattleshipGame {
         PublicBoard publicBoard;
     }
 
+    struct MoveView {
+        uint32 moveId;
+        address attacker;
+        address defender;
+        uint8 cellIndex;
+        ShotResult result;
+        uint8 sunkShipId;
+        uint64 submittedAt;
+        uint64 resolvedAt;
+        bool finalized;
+    }
+
+    struct PendingShotView {
+        bool exists;
+        uint32 moveId;
+        address attacker;
+        address defender;
+        uint8 cellIndex;
+        uint256 resultCtHash;
+        uint256 sunkShipCtHash;
+        uint64 submittedAt;
+    }
+
     // ---------------------------------------------------------------------
-    // Events (lifecycle slice of docs/contract-api.md)
+    // Events (docs/contract-api.md)
     // ---------------------------------------------------------------------
 
     event MatchCreated(
@@ -202,8 +299,54 @@ contract BattleshipGame {
         uint8 reason
     );
 
+    event FleetSubmitted(uint256 indexed matchId, address indexed player);
+
+    /// @dev ctHash is the ebool validity handle; emitted on submission and on
+    ///      every retry so clients can track the pending decryption.
+    event FleetValidationRequested(
+        uint256 indexed matchId,
+        address indexed player,
+        uint256 ctHash
+    );
+
+    event FleetValidated(uint256 indexed matchId, address indexed player, bool valid);
+
+    event MatchStarted(uint256 indexed matchId, address indexed firstPlayer);
+
+    event ShotSubmitted(
+        uint256 indexed matchId,
+        uint32 indexed moveId,
+        address indexed attacker,
+        address defender,
+        uint8 cellIndex
+    );
+
+    event ShotResolutionRequested(
+        uint256 indexed matchId,
+        uint32 indexed moveId,
+        uint256 resultCtHash,
+        uint256 sunkShipCtHash
+    );
+
+    /// @dev result is the ShotResult enum value (1..4). sunkShipId is 0
+    ///      unless the shot sank a ship.
+    event ShotResolved(
+        uint256 indexed matchId,
+        uint32 indexed moveId,
+        uint8 result,
+        uint8 sunkShipId
+    );
+
+    event TurnChanged(uint256 indexed matchId, address indexed currentTurn);
+
+    event MatchFinished(
+        uint256 indexed matchId,
+        address indexed winner,
+        uint32 moveCount
+    );
+
     // ---------------------------------------------------------------------
-    // Errors (lifecycle slice of docs/contract-api.md)
+    // Errors (docs/contract-api.md)
     // ---------------------------------------------------------------------
 
     error MatchNotFound();
@@ -221,6 +364,19 @@ contract BattleshipGame {
     error NoTimeoutAvailable();
     error NotTimeoutClaimant();
     error InvalidPaginationLimit();
+    error NotMatchPlayerAddress();
+    error FleetAlreadySubmitted();
+    error PlacementValidationPending();
+    error NoPendingPlacementValidation();
+    error DecryptionResultNotReady();
+    error NotYourTurn();
+    error InvalidCellIndex();
+    error CellAlreadyAttacked();
+    error PendingShotExists();
+    error NoPendingShot();
+    error InvalidMoveId();
+    error MoveNotFound();
+    error InvalidShotResult();
 
     // ---------------------------------------------------------------------
     // Storage
@@ -231,9 +387,17 @@ contract BattleshipGame {
     uint256 public nextMatchId = 1;
 
     // Internal (not private) so the test harness can drive states that only
-    // become reachable through Phase 4 fleet submission and Phase 7 battle.
+    // become reachable through the full battle flow.
     mapping(uint256 matchId => Match) internal matches;
     mapping(address player => uint256[] matchIds) internal playerMatchIds;
+
+    /// @dev Encrypted fleets, keyed per player. Never exposed by reads.
+    mapping(uint256 matchId => mapping(address player => EncryptedFleet)) private fleets;
+    mapping(uint256 matchId => mapping(address player => PendingPlacementValidation))
+        private pendingValidations;
+    mapping(uint256 matchId => PendingShot) private pendingShots;
+    /// @dev Move ids start at 1 and equal Match.moveCount at creation time.
+    mapping(uint256 matchId => mapping(uint32 moveId => Move)) private moves;
 
     // ---------------------------------------------------------------------
     // Match creation
@@ -297,6 +461,312 @@ contract BattleshipGame {
         playerMatchIds[msg.sender].push(matchId);
 
         emit MatchJoined(matchId, msg.sender);
+    }
+
+    // ---------------------------------------------------------------------
+    // Encrypted fleet submission and validation (GAME-405, GAME-406)
+    // ---------------------------------------------------------------------
+
+    /// @notice Submit the caller's encrypted fleet: 20 encrypted cell indexes
+    ///         grouped by ship in the fixed SHIP_LENGTHS order. Placement
+    ///         validity (range, straightness, contiguity, row bounds) is
+    ///         computed encrypted in this transaction and resolved
+    ///         asynchronously; finalizeFleetValidation publishes the result.
+    ///         A fleet judged Invalid can be resubmitted.
+    function submitFleet(uint256 matchId, InEuint8[20] calldata segments) external {
+        Match storage m = _getMatch(matchId);
+        if (
+            m.status != MatchStatus.WaitingForPlacement &&
+            m.status != MatchStatus.ValidatingPlacement
+        ) revert InvalidMatchStatus();
+
+        PlayerState storage ps = _playerStateOf(m, msg.sender);
+        if (ps.placementStatus == PlacementStatus.ResolvingValidation) {
+            revert PlacementValidationPending();
+        }
+        if (ps.placementStatus == PlacementStatus.Valid) revert FleetAlreadySubmitted();
+
+        EncryptedFleet storage fleet = fleets[matchId][msg.sender];
+        for (uint256 i = 0; i < TOTAL_SHIP_CELLS; i++) {
+            euint8 segment = FHE.asEuint8(segments[i]);
+            FHE.allowThis(segment);
+            fleet.segments[i] = segment;
+        }
+        for (uint256 s = 0; s < MAX_SHIPS; s++) {
+            euint8 health = FHE.asEuint8(uint8(SHIP_LENGTHS[s]));
+            FHE.allowThis(health);
+            fleet.shipHealth[s] = health;
+        }
+        fleet.initialized = true;
+
+        ebool valid = _validatePlacement(fleet);
+        FHE.allowThis(valid);
+        FHE.decrypt(valid);
+
+        uint256 validityCtHash = ebool.unwrap(valid);
+        pendingValidations[matchId][msg.sender] = PendingPlacementValidation({
+            exists: true,
+            validityCtHash: validityCtHash,
+            requestedAt: uint64(block.timestamp)
+        });
+
+        uint64 nowTs = uint64(block.timestamp);
+        ps.placementStatus = PlacementStatus.ResolvingValidation;
+        ps.fleetSubmitted = true;
+        ps.fleetValid = false;
+        ps.fleetSubmittedAt = nowTs;
+        m.status = MatchStatus.ValidatingPlacement;
+        m.lastActionAt = nowTs;
+
+        emit FleetSubmitted(matchId, msg.sender);
+        emit FleetValidationRequested(matchId, msg.sender, validityCtHash);
+    }
+
+    /// @notice Publish a resolved placement-validity result. Permissionless:
+    ///         the plaintext comes from the on-chain decrypt result posted by
+    ///         the CoFHE network, never from the caller. Starts the match
+    ///         when both fleets are valid (invited opponent moves first).
+    function finalizeFleetValidation(uint256 matchId, address player) external {
+        Match storage m = _getMatch(matchId);
+        if (m.status != MatchStatus.ValidatingPlacement) revert InvalidMatchStatus();
+
+        PlayerState storage ps = _playerStateOf(m, player);
+        PendingPlacementValidation storage pending = pendingValidations[matchId][player];
+        if (!pending.exists) revert NoPendingPlacementValidation();
+
+        (bool valid, bool ready) = FHE.getDecryptResultSafe(
+            ebool.wrap(pending.validityCtHash)
+        );
+        if (!ready) revert DecryptionResultNotReady();
+
+        delete pendingValidations[matchId][player];
+
+        uint64 nowTs = uint64(block.timestamp);
+        ps.fleetValidatedAt = nowTs;
+        m.lastActionAt = nowTs;
+        if (valid) {
+            ps.placementStatus = PlacementStatus.Valid;
+            ps.fleetValid = true;
+        } else {
+            ps.placementStatus = PlacementStatus.Invalid;
+            ps.fleetValid = false;
+            // Resubmission replaces the fleet; the stale handles are unusable
+            // because every read path checks placementStatus first.
+            ps.fleetSubmitted = false;
+        }
+
+        emit FleetValidated(matchId, player, valid);
+
+        if (m.creatorState.fleetValid && m.opponentState.fleetValid) {
+            _startMatch(m);
+        }
+    }
+
+    /// @notice Re-request the pending placement-validity decryption. The
+    ///         recovery path when a CoFHE decrypt result never lands.
+    ///         Permissionless and idempotent: re-requesting an already
+    ///         decrypted handle changes nothing.
+    function retryFleetValidation(uint256 matchId, address player) external {
+        Match storage m = _getMatch(matchId);
+        if (m.status != MatchStatus.ValidatingPlacement) revert InvalidMatchStatus();
+        _playerStateOf(m, player);
+
+        PendingPlacementValidation storage pending = pendingValidations[matchId][player];
+        if (!pending.exists) revert NoPendingPlacementValidation();
+
+        FHE.decrypt(ebool.wrap(pending.validityCtHash));
+
+        emit FleetValidationRequested(matchId, player, pending.validityCtHash);
+    }
+
+    // ---------------------------------------------------------------------
+    // Attack and shot finalization (GAME-407, GAME-408)
+    // ---------------------------------------------------------------------
+
+    /// @notice Attack a public cell on the opponent's board. Computes the
+    ///         encrypted Miss/Hit/Sunk/Win result and the encrypted sunk ship
+    ///         id, requests their decryption, and freezes the match in
+    ///         ResolvingShot until finalizeAttack.
+    function attack(uint256 matchId, uint8 cellIndex) external returns (uint32 moveId) {
+        Match storage m = _getMatch(matchId);
+        if (m.status != MatchStatus.InProgress) revert InvalidMatchStatus();
+        if (msg.sender != m.currentTurn) revert NotYourTurn();
+        if (cellIndex >= CELL_COUNT) revert InvalidCellIndex();
+        if (pendingShots[matchId].exists) revert PendingShotExists();
+
+        address defender = msg.sender == m.creator ? m.opponent : m.creator;
+        PlayerState storage defenderState = _playerStateOf(m, defender);
+
+        uint128 cellBit = uint128(1) << cellIndex;
+        if (defenderState.publicBoard.attackedMask & cellBit != 0) {
+            revert CellAlreadyAttacked();
+        }
+        defenderState.publicBoard.attackedMask |= cellBit;
+
+        moveId = m.moveCount + 1;
+        m.moveCount = moveId;
+
+        uint64 nowTs = uint64(block.timestamp);
+        moves[matchId][moveId] = Move({
+            moveId: moveId,
+            attacker: msg.sender,
+            defender: defender,
+            cellIndex: cellIndex,
+            result: ShotResult.None,
+            sunkShipId: 0,
+            submittedAt: nowTs,
+            resolvedAt: 0,
+            finalized: false
+        });
+
+        (euint8 eResult, euint8 eSunkShipId) = _resolveShotEncrypted(
+            fleets[matchId][defender],
+            cellIndex
+        );
+        FHE.allowThis(eResult);
+        FHE.allowThis(eSunkShipId);
+        FHE.decrypt(eResult);
+        FHE.decrypt(eSunkShipId);
+
+        uint256 resultCtHash = euint8.unwrap(eResult);
+        uint256 sunkShipCtHash = euint8.unwrap(eSunkShipId);
+        pendingShots[matchId] = PendingShot({
+            exists: true,
+            moveId: moveId,
+            attacker: msg.sender,
+            defender: defender,
+            cellIndex: cellIndex,
+            resultCtHash: resultCtHash,
+            sunkShipCtHash: sunkShipCtHash,
+            submittedAt: nowTs
+        });
+
+        m.status = MatchStatus.ResolvingShot;
+        m.pendingMoveId = moveId;
+        m.lastActionAt = nowTs;
+        m.timeoutState.resolvingDeadline = nowTs + RESOLVING_TIMEOUT;
+
+        emit ShotSubmitted(matchId, moveId, msg.sender, defender, cellIndex);
+        emit ShotResolutionRequested(matchId, moveId, resultCtHash, sunkShipCtHash);
+    }
+
+    /// @notice Publish a resolved shot. Permissionless: the result is read
+    ///         from the on-chain decrypt results, never from the caller.
+    ///         Miss passes the turn to the defender; Hit and Sunk keep the
+    ///         attacker on turn; Win finishes the match.
+    function finalizeAttack(uint256 matchId, uint32 moveId) external {
+        Match storage m = _getMatch(matchId);
+        if (m.status != MatchStatus.ResolvingShot) revert InvalidMatchStatus();
+
+        PendingShot memory pending = pendingShots[matchId];
+        if (!pending.exists) revert NoPendingShot();
+        if (moveId != pending.moveId) revert InvalidMoveId();
+
+        (ShotResult result, uint8 sunkShipId) = _readShotDecryptResults(pending);
+
+        delete pendingShots[matchId];
+        _recordResolvedMove(matchId, moveId, result, sunkShipId);
+        _applyShotResult(m, pending, result, sunkShipId);
+    }
+
+    /// @dev Reads both on-chain decrypt results for a pending shot, failing
+    ///      closed on unfinished decryption or an out-of-range result.
+    function _readShotDecryptResults(
+        PendingShot memory pending
+    ) private view returns (ShotResult result, uint8 sunkShipId) {
+        (uint8 rawResult, bool resultReady) = FHE.getDecryptResultSafe(
+            euint8.wrap(pending.resultCtHash)
+        );
+        (uint8 rawSunkShipId, bool sunkReady) = FHE.getDecryptResultSafe(
+            euint8.wrap(pending.sunkShipCtHash)
+        );
+        if (!resultReady || !sunkReady) revert DecryptionResultNotReady();
+
+        // The encrypted pipeline only emits 1..4; fail closed regardless.
+        if (rawResult < uint8(ShotResult.Miss) || rawResult > uint8(ShotResult.Win)) {
+            revert InvalidShotResult();
+        }
+        result = ShotResult(rawResult);
+        sunkShipId = (result == ShotResult.Sunk || result == ShotResult.Win)
+            ? rawSunkShipId
+            : 0;
+    }
+
+    function _recordResolvedMove(
+        uint256 matchId,
+        uint32 moveId,
+        ShotResult result,
+        uint8 sunkShipId
+    ) private {
+        Move storage move = moves[matchId][moveId];
+        move.result = result;
+        move.sunkShipId = sunkShipId;
+        move.resolvedAt = uint64(block.timestamp);
+        move.finalized = true;
+    }
+
+    function _applyShotResult(
+        Match storage m,
+        PendingShot memory pending,
+        ShotResult result,
+        uint8 sunkShipId
+    ) private {
+        PlayerState storage defenderState = _playerStateOf(m, pending.defender);
+        uint128 cellBit = uint128(1) << pending.cellIndex;
+        if (result == ShotResult.Miss) {
+            defenderState.publicBoard.missMask |= cellBit;
+        } else {
+            defenderState.publicBoard.hitMask |= cellBit;
+            if (result != ShotResult.Hit) {
+                // MVP sunk reveal rule (docs/contract-data-model.md): only
+                // the final attacked cell is marked sunk.
+                defenderState.publicBoard.sunkMask |= cellBit;
+            }
+        }
+
+        uint64 nowTs = uint64(block.timestamp);
+        m.pendingMoveId = 0;
+        m.lastActionAt = nowTs;
+        m.timeoutState.resolvingDeadline = 0;
+
+        emit ShotResolved(m.id, pending.moveId, uint8(result), sunkShipId);
+
+        if (result == ShotResult.Win) {
+            m.status = MatchStatus.Finished;
+            m.winner = pending.attacker;
+            m.finishedAt = nowTs;
+            m.currentTurn = address(0);
+            emit MatchFinished(m.id, pending.attacker, m.moveCount);
+        } else {
+            m.status = MatchStatus.InProgress;
+            m.timeoutState.turnDeadline = nowTs + TURN_TIMEOUT;
+            if (result == ShotResult.Miss) {
+                m.currentTurn = pending.defender;
+                emit TurnChanged(m.id, pending.defender);
+            }
+        }
+    }
+
+    /// @notice Re-request the pending shot decryptions. The recovery path
+    ///         when a CoFHE decrypt result never lands. Permissionless and
+    ///         idempotent.
+    function retryShotResolution(uint256 matchId) external {
+        Match storage m = _getMatch(matchId);
+        if (m.status != MatchStatus.ResolvingShot) revert InvalidMatchStatus();
+
+        PendingShot storage pending = pendingShots[matchId];
+        if (!pending.exists) revert NoPendingShot();
+
+        FHE.decrypt(euint8.wrap(pending.resultCtHash));
+        FHE.decrypt(euint8.wrap(pending.sunkShipCtHash));
+        m.timeoutState.resolvingDeadline = uint64(block.timestamp) + RESOLVING_TIMEOUT;
+
+        emit ShotResolutionRequested(
+            matchId,
+            pending.moveId,
+            pending.resultCtHash,
+            pending.sunkShipCtHash
+        );
     }
 
     // ---------------------------------------------------------------------
@@ -456,6 +926,53 @@ contract BattleshipGame {
         return playerMatchIds[player].length;
     }
 
+    /// @notice One public move. Move ids start at 1.
+    function getMove(uint256 matchId, uint32 moveId) external view returns (MoveView memory) {
+        Match storage m = _getMatch(matchId);
+        if (moveId == 0 || moveId > m.moveCount) revert MoveNotFound();
+        return _toMoveView(moves[matchId][moveId]);
+    }
+
+    /// @notice Paginated public move history, oldest first.
+    function getMoveHistory(
+        uint256 matchId,
+        uint32 offset,
+        uint32 limit
+    ) external view returns (MoveView[] memory result) {
+        if (limit == 0 || limit > MAX_PAGE_LIMIT) revert InvalidPaginationLimit();
+        Match storage m = _getMatch(matchId);
+
+        uint32 total = m.moveCount;
+        if (offset >= total) return new MoveView[](0);
+
+        uint32 end = offset + limit;
+        if (end > total) end = total;
+
+        result = new MoveView[](end - offset);
+        for (uint32 i = offset; i < end; i++) {
+            // Stored move ids are 1-based.
+            result[i - offset] = _toMoveView(moves[matchId][i + 1]);
+        }
+    }
+
+    /// @notice Pending shot state for refresh recovery. The ct hashes are
+    ///         public handle identifiers; decryption stays ACL-gated.
+    function getPendingShot(uint256 matchId) external view returns (PendingShotView memory) {
+        _getMatch(matchId);
+        PendingShot storage pending = pendingShots[matchId];
+        return
+            PendingShotView({
+                exists: pending.exists,
+                moveId: pending.moveId,
+                attacker: pending.attacker,
+                defender: pending.defender,
+                cellIndex: pending.cellIndex,
+                resultCtHash: pending.resultCtHash,
+                sunkShipCtHash: pending.sunkShipCtHash,
+                submittedAt: pending.submittedAt
+            });
+    }
+
     // ---------------------------------------------------------------------
     // Internal helpers
     // ---------------------------------------------------------------------
@@ -463,6 +980,191 @@ contract BattleshipGame {
     function _getMatch(uint256 matchId) private view returns (Match storage m) {
         m = matches[matchId];
         if (m.status == MatchStatus.None) revert MatchNotFound();
+    }
+
+    /// @dev Player state by address; reverts for non-players. The error
+    ///      distinguishes caller checks (NotMatchPlayer via msg.sender) from
+    ///      address-argument checks per docs/contract-api.md.
+    function _playerStateOf(
+        Match storage m,
+        address player
+    ) private view returns (PlayerState storage) {
+        if (player == m.creator) return m.creatorState;
+        if (player != address(0) && player == m.opponent) return m.opponentState;
+        if (player == msg.sender) revert NotMatchPlayer();
+        revert NotMatchPlayerAddress();
+    }
+
+    /// @dev Both fleets valid: the invited opponent moves first.
+    function _startMatch(Match storage m) private {
+        uint64 nowTs = uint64(block.timestamp);
+        m.status = MatchStatus.InProgress;
+        m.startedAt = nowTs;
+        m.lastActionAt = nowTs;
+        m.currentTurn = m.opponent;
+        m.timeoutState.turnDeadline = nowTs + TURN_TIMEOUT;
+        m.timeoutState.placementDeadline = 0;
+
+        emit MatchStarted(m.id, m.opponent);
+        emit TurnChanged(m.id, m.opponent);
+    }
+
+    /// @dev Encrypted placement validation (GAME-406), ~130 FHE operations:
+    ///      every segment in range, every multi-cell ship straight and
+    ///      contiguous (consecutive deltas of exactly 1 or 10, which also
+    ///      forces distinct cells per ship), and horizontal ships inside one
+    ///      row. Cross-ship overlap is intentionally not checked: it only
+    ///      harms the player who does it (docs/cofhe-feasibility-results.md).
+    function _validatePlacement(EncryptedFleet storage fleet) private returns (ebool valid) {
+        euint8 one = FHE.asEuint8(1);
+        euint8 ten = FHE.asEuint8(BOARD_SIZE);
+        euint8 cellLimit = FHE.asEuint8(CELL_COUNT);
+
+        valid = FHE.lt(fleet.segments[0], cellLimit);
+        for (uint256 i = 1; i < TOTAL_SHIP_CELLS; i++) {
+            valid = FHE.and(valid, FHE.lt(fleet.segments[i], cellLimit));
+        }
+
+        uint256 offset = 0;
+        for (uint256 s = 0; s < MAX_SHIPS; s++) {
+            uint256 length = uint8(SHIP_LENGTHS[s]);
+            if (length > 1) {
+                valid = FHE.and(valid, _validateShipShape(fleet, offset, length, one, ten));
+            }
+            offset += length;
+        }
+    }
+
+    /// @dev One multi-cell ship: consecutive segments differ by exactly 1
+    ///      (horizontal) or exactly 10 (vertical) throughout, and a
+    ///      horizontal ship's first column leaves room for its full length
+    ///      so it cannot wrap across rows. euint8 subtraction wraps modulo
+    ///      256, so out-of-order segments simply fail the equality checks.
+    function _validateShipShape(
+        EncryptedFleet storage fleet,
+        uint256 offset,
+        uint256 length,
+        euint8 one,
+        euint8 ten
+    ) private returns (ebool) {
+        euint8 gap = FHE.sub(fleet.segments[offset + 1], fleet.segments[offset]);
+        ebool horizontalOk = FHE.eq(gap, one);
+        ebool verticalOk = FHE.eq(gap, ten);
+        for (uint256 i = 2; i < length; i++) {
+            gap = FHE.sub(fleet.segments[offset + i], fleet.segments[offset + i - 1]);
+            horizontalOk = FHE.and(horizontalOk, FHE.eq(gap, one));
+            verticalOk = FHE.and(verticalOk, FHE.eq(gap, ten));
+        }
+
+        ebool columnOk = FHE.lt(
+            FHE.rem(fleet.segments[offset], ten),
+            FHE.asEuint8(uint8(BOARD_SIZE + 1 - length))
+        );
+        return FHE.or(FHE.and(horizontalOk, columnOk), verticalOk);
+    }
+
+    /// @dev Memory-only accumulator for the encrypted shot pipeline; keeps
+    ///      the per-ship loop within the EVM stack limit.
+    struct ShotScratch {
+        euint8 target;
+        euint8 zero;
+        euint8 one;
+        ebool anyHit;
+        ebool anySunk;
+        ebool allShipsDead;
+        euint8 sunkShipId;
+    }
+
+    /// @dev Encrypted shot pipeline (GAME-407), ~110 FHE operations: per-ship
+    ///      hit flags from 20 segment comparisons, encrypted health
+    ///      decrement, sunk detection, all-ships-dead win detection, and the
+    ///      public result enum. Only eResult and eSunkShipId ever leave this
+    ///      computation, through an explicit decrypt request; every
+    ///      intermediate value stays transient inside this transaction.
+    function _resolveShotEncrypted(
+        EncryptedFleet storage fleet,
+        uint8 cellIndex
+    ) private returns (euint8 eResult, euint8 eSunkShipId) {
+        ShotScratch memory scratch;
+        scratch.target = FHE.asEuint8(cellIndex);
+        scratch.zero = FHE.asEuint8(0);
+        scratch.one = FHE.asEuint8(1);
+        scratch.sunkShipId = scratch.zero;
+
+        uint256 offset = 0;
+        for (uint256 s = 0; s < MAX_SHIPS; s++) {
+            uint256 length = uint8(SHIP_LENGTHS[s]);
+            _resolveShipShot(fleet, scratch, s, offset, length);
+            offset += length;
+        }
+
+        eResult = FHE.select(
+            scratch.anyHit,
+            FHE.asEuint8(uint8(ShotResult.Hit)),
+            scratch.one
+        );
+        eResult = FHE.select(scratch.anySunk, FHE.asEuint8(uint8(ShotResult.Sunk)), eResult);
+        eResult = FHE.select(
+            FHE.and(scratch.allShipsDead, scratch.anyHit),
+            FHE.asEuint8(uint8(ShotResult.Win)),
+            eResult
+        );
+        eSunkShipId = scratch.sunkShipId;
+    }
+
+    function _resolveShipShot(
+        EncryptedFleet storage fleet,
+        ShotScratch memory scratch,
+        uint256 shipIndex,
+        uint256 offset,
+        uint256 length
+    ) private {
+        ebool shipHit = FHE.eq(fleet.segments[offset], scratch.target);
+        for (uint256 i = 1; i < length; i++) {
+            shipHit = FHE.or(shipHit, FHE.eq(fleet.segments[offset + i], scratch.target));
+        }
+
+        // Validated ships occupy distinct cells and each public cell is
+        // attackable once, so health never underflows.
+        euint8 newHealth = FHE.sub(
+            fleet.shipHealth[shipIndex],
+            FHE.select(shipHit, scratch.one, scratch.zero)
+        );
+        FHE.allowThis(newHealth);
+        fleet.shipHealth[shipIndex] = newHealth;
+
+        ebool shipDead = FHE.eq(newHealth, scratch.zero);
+        ebool sunkNow = FHE.and(shipHit, shipDead);
+        scratch.sunkShipId = FHE.select(
+            sunkNow,
+            FHE.asEuint8(uint8(shipIndex + 1)),
+            scratch.sunkShipId
+        );
+
+        if (shipIndex == 0) {
+            scratch.anyHit = shipHit;
+            scratch.anySunk = sunkNow;
+            scratch.allShipsDead = shipDead;
+        } else {
+            scratch.anyHit = FHE.or(scratch.anyHit, shipHit);
+            scratch.anySunk = FHE.or(scratch.anySunk, sunkNow);
+            scratch.allShipsDead = FHE.and(scratch.allShipsDead, shipDead);
+        }
+    }
+
+    function _toMoveView(Move storage move) private view returns (MoveView memory) {
+        return
+            MoveView({
+                moveId: move.moveId,
+                attacker: move.attacker,
+                defender: move.defender,
+                cellIndex: move.cellIndex,
+                result: move.result,
+                sunkShipId: move.sunkShipId,
+                submittedAt: move.submittedAt,
+                resolvedAt: move.resolvedAt,
+                finalized: move.finalized
+            });
     }
 
     function _isTerminal(MatchStatus status) private pure returns (bool) {

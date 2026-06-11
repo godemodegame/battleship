@@ -369,22 +369,26 @@ Goal:
 
 - prove the encrypted data model before freezing the contract ABI.
 
+Progress:
+
+- `GAME-401` through `GAME-412` complete (June 11, 2026).
+
 Tasks:
 
-| ID | Priority | Work |
-| --- | --- | --- |
-| GAME-401 | P0 | Pin a compatible CoFHE SDK, plugin, contracts, mocks, and compiler set |
-| GAME-402 | P0 | Prototype 100 encrypted `uint8` cells with local CoFHE mocks |
-| GAME-403 | P0 | Measure browser encryption time, calldata size, gas, and storage |
-| GAME-404 | P0 | Compare cell array, batching, packed masks, and ship-list encodings |
-| GAME-405 | P0 | Select and document the fleet encoding and submission transaction shape |
-| GAME-406 | P0 | Implement encrypted placement validation and signed finalization |
-| GAME-407 | P0 | Implement encrypted hit, sunk, remaining-health, and win computation |
-| GAME-408 | P0 | Implement pending shot storage and signed result finalization |
-| GAME-409 | P0 | Apply `FHE.allow*` permissions with least privilege |
-| GAME-410 | P0 | Add replay, wrong hash, wrong signer, duplicate finalization, and stale request tests |
-| GAME-411 | P1 | Benchmark full matches and establish a testnet gas budget |
-| GAME-412 | P0 | Update API, data-model, and Fhenix docs against the implemented code |
+| ID | Priority | Status | Work |
+| --- | --- | --- | --- |
+| GAME-401 | P0 | Complete | Pin a compatible CoFHE SDK, plugin, contracts, mocks, and compiler set |
+| GAME-402 | P0 | Complete | Prototype 100 encrypted `uint8` cells with local CoFHE mocks |
+| GAME-403 | P0 | Complete | Measure browser encryption time, calldata size, gas, and storage |
+| GAME-404 | P0 | Complete | Compare cell array, batching, packed masks, and ship-list encodings |
+| GAME-405 | P0 | Complete | Select and document the fleet encoding and submission transaction shape |
+| GAME-406 | P0 | Complete | Implement encrypted placement validation and signed finalization |
+| GAME-407 | P0 | Complete | Implement encrypted hit, sunk, remaining-health, and win computation |
+| GAME-408 | P0 | Complete | Implement pending shot storage and signed result finalization |
+| GAME-409 | P0 | Complete | Apply `FHE.allow*` permissions with least privilege |
+| GAME-410 | P0 | Complete | Add replay, wrong hash, wrong signer, duplicate finalization, and stale request tests |
+| GAME-411 | P1 | Complete | Benchmark full matches and establish a testnet gas budget |
+| GAME-412 | P0 | Complete | Update API, data-model, and Fhenix docs against the implemented code |
 
 Decision gate:
 
@@ -392,6 +396,14 @@ Decision gate:
   storage budgets, change the encoding before frontend fleet integration;
 - do not hide an impractical encoding behind batching without measuring the
   complete user flow.
+
+Decision gate outcome:
+
+- the gate triggered: the 100-cell baseline fails the validation budget
+  (~1,000 FHE operations to prove per-ship cell counts), and 4 x 25 batching
+  was measured to make encryption 3.8x slower while saving nothing. The
+  encoding changed to the encrypted ship-segment list before any frontend
+  fleet integration; measurements are in `docs/cofhe-feasibility-results.md`.
 
 Exit criteria:
 
@@ -401,9 +413,47 @@ Exit criteria:
 - encrypted internals are not exposed through ordinary reads or events;
 - the chosen ABI is generated and documented from real code.
 
-Specification:
+Exit status:
 
-- `docs/fhenix-integration-plan.md`.
+- met on June 11, 2026.
+
+Realized structure:
+
+- the compatible set (GAME-401) pins `@fhenixprotocol/cofhe-contracts`
+  `0.0.13` (repinned from the mock-incompatible `0.1.4`), mock contracts and
+  `cofhe-hardhat-plugin` `0.3.1`, `cofhejs` `0.3.1`, solc `0.8.25`; the
+  hardhat network pins `hardfork: cancun` because the osaka EIP-7951
+  precompile shadows the mock zk verifier address;
+- encoding prototypes (`contracts/contracts/prototypes/`) and benchmark
+  suites (`test/encodingBenchmarks.test.ts`, `test/fullMatchBenchmark.test.ts`)
+  measured the four encodings and the full match
+  (`docs/cofhe-feasibility-results.md`); the frozen encoding is
+  `submitFleet(matchId, InEuint8[20])` ship segments with ship identity as
+  public array position;
+- `BattleshipGame.sol` implements encrypted placement validation (range,
+  straightness, contiguity, row bounds, ~130 FHE ops), the encrypted shot
+  pipeline (per-ship hit, health decrement, sunk, all-ships-dead win,
+  ~110 FHE ops), pending shot/validation storage, and permissionless
+  finalization plus retry functions; the pinned CoFHE line has no
+  client-relayed decrypt results, so finalization reads the plaintext the
+  network posts on-chain (`FHE.getDecryptResultSafe`) and no client ever
+  supplies a result;
+- least-privilege ACL: stored fleet handles get `FHE.allowThis` only; the
+  only decrypted values are placement validity, the shot result enum, and
+  the sunk ship id; encrypted state lives outside every read struct;
+- 33 encrypted-rules tests cover validation verdicts, the full
+  Miss/Hit/Sunk/Win match, replay, stale move ids, stale validity handles,
+  forged-result rejection (aggregator-only channel), and not-ready
+  finalization; input-to-sender binding is a zk-verifier guarantee that the
+  mock disables, deferred to the GAME-906 testnet regression;
+- the ResolvingShot recovery rule: stuck decryption is never a win;
+  `retryShotResolution` / `retryFleetValidation` are permissionless and
+  idempotent, and `forfeit` remains the exit.
+
+Specifications:
+
+- `docs/fhenix-integration-plan.md`;
+- `docs/cofhe-feasibility-results.md`.
 
 ## Phase 5: Friend-match Frontend
 
@@ -676,7 +726,7 @@ Phase status:
 | 1. Separate modes | Complete (GAME-101 through GAME-110) |
 | 2. Privy and network | Complete (GAME-201 through GAME-211) |
 | 3. Contract public lifecycle | Complete (GAME-301 through GAME-311) |
-| 4. CoFHE encrypted rules | Not started |
+| 4. CoFHE encrypted rules | Complete (GAME-401 through GAME-412) |
 | 5. Friend-match frontend | Not started |
 | 6. Encrypted fleet UI | Not started |
 | 7. On-chain battle | Not started |
@@ -696,6 +746,7 @@ phase. Do not mark a phase complete based only on documentation or mocked UI.
 - `docs/contract-data-model.md`
 - `docs/contract-api.md`
 - `docs/fhenix-integration-plan.md`
+- `docs/cofhe-feasibility-results.md`
 - `docs/security-and-fair-play.md`
 - `docs/testing-strategy.md`
 - `docs/mobile-performance-budget.md`

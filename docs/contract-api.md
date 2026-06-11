@@ -25,22 +25,50 @@ events and errors those functions use. Decisions taken by the implementation:
 - `forfeit` reverts with `InvalidMatchStatus` while the match is still
   `WaitingForOpponent`: there is no opponent to win, so the creator exits with
   `cancelMatch` (this resolves the open cancel-after-join question in favor of
-  allowing cancel until `ReadyToStart`);
+  allowing cancel until the match starts);
 - a missed join deadline is a cancellation path, not a `claimTimeoutWin` case;
 - `claimTimeoutWin` supports placement and turn deadlines with reason codes
-  `1` (placement) and `2` (turn); the `ResolvingShot` recovery rule is
-  deferred to the Phase 4 CoFHE prototype and currently reverts with
-  `NoTimeoutAvailable`;
+  `1` (placement) and `2` (turn);
 - `MatchView` additionally exposes the `TimeoutState` deadlines so the
   frontend can render timeout UI without extra reads;
 - `getPlayerMatchCount(player)` exists alongside `getPlayerMatches` for
   pagination; the pagination cap is `50`;
 - match ids are sequential starting at `1`; id `0` always means no match.
 
-`submitFleet`, `finalizeFleetValidation`, `startMatch`, `attack`,
-`finalizeAttack`, `getMove`, `getMoveHistory`, and `getPendingShot` are not
-implemented yet: the fleet and attack ABI is frozen only after the Phase 4
-feasibility results (GAME-401..405).
+Phase 4 (GAME-401..412) froze and implemented the fleet and attack API:
+`submitFleet`, `finalizeFleetValidation`, `retryFleetValidation`, `attack`,
+`finalizeAttack`, `retryShotResolution`, `getMove`, `getMoveHistory`,
+`getPendingShot`, and `getShipLengths`. The encoding decision and
+measurements live in `docs/cofhe-feasibility-results.md`. Decisions taken by
+the implementation that supersede earlier proposals in this document:
+
+- the pinned CoFHE contracts version (`0.0.13`, the only one supported by
+  the mock/plugin/cofhejs `0.3.1` set) has no client-submitted decrypt
+  results: the contract requests decryption on-chain (`FHE.decrypt`) and the
+  CoFHE network posts the signed plaintext back on-chain. Finalization
+  functions therefore take no `ctHash`/`value`/`signature` arguments - they
+  are permissionless triggers that read `FHE.getDecryptResultSafe` and
+  revert with `DecryptionResultNotReady` until the result lands. The
+  `DecryptResult` struct proposal is obsolete;
+- fleet input is `InEuint8[20]` ship segments (not `InEuint8[100]` cells),
+  grouped by ship in the fixed public order carrier(4), battleship(3),
+  cruiser(3), destroyer A(2), destroyer B(2), submarine(2), patrol A..D(1);
+- `startMatch` does not exist: `finalizeFleetValidation` auto-starts the
+  match when both fleets are valid, atomically, so a separate recovery
+  function has no reachable state. `ReadyToStart` is never stored;
+- `ShotResolved` and `MoveView` carry a public `sunkShipId` (`0` unless the
+  shot sank a ship, else `1..10`), matching the classic rule that a sunk
+  announcement names the ship class;
+- ciphertext handles in events and views are `uint256` (the native CoFHE
+  handle type), not `bytes32`;
+- an invalid placement resets `fleetSubmitted` to `false` and the player
+  resubmits with a fresh validity handle, so stale decrypt results can
+  never finalize a newer submission;
+- the `ResolvingShot` recovery rule: a stuck decryption is never a win or
+  loss for either player; anyone can re-request it with
+  `retryShotResolution` / `retryFleetValidation`, and both players can
+  always exit through `forfeit`. `claimTimeoutWin` stays closed during
+  `ResolvingShot`, and `RESOLVING_TIMEOUT` only paces retry UI.
 
 ## Scope
 
@@ -77,15 +105,18 @@ The first implementation should keep one main contract unless complexity forces 
 
 ## Solidity Version and Imports
 
-Recommended:
+Implemented:
 
 ```solidity
-pragma solidity ^0.8.24;
+pragma solidity 0.8.25;
 
-import "@fhenixprotocol/cofhe-contracts/FHE.sol";
+import {FHE, ebool, euint8} from "@fhenixprotocol/cofhe-contracts/FHE.sol";
+import {InEuint8} from "@fhenixprotocol/cofhe-contracts/ICofhe.sol";
 ```
 
-Exact Solidity version can be adjusted to match the Fhenix/CoFHE package requirements.
+`@fhenixprotocol/cofhe-contracts` is pinned to `0.0.13`, the version the
+CoFHE mock/plugin/cofhejs `0.3.1` toolchain targets
+(`docs/cofhe-feasibility-results.md`).
 
 ## Shared Data Types
 
@@ -143,66 +174,33 @@ Finalized shot results must never be `None`.
 
 ## Input Structs
 
-## EncryptedFleetInput
+## Fleet input (implemented)
 
-MVP baseline:
-
-```solidity
-struct EncryptedFleetInput {
-  InEuint8[100] cells;
-}
-```
-
-The final implementation may replace this with batched input if the single-call payload is too expensive.
-
-Potential batch input:
+The encrypted fleet is submitted as a fixed-size array of CoFHE encrypted
+inputs, one per occupied cell, grouped by ship in the frozen public order:
 
 ```solidity
-struct EncryptedFleetBatchInput {
-  uint8 startIndex;
-  InEuint8[] cells;
-}
+function submitFleet(uint256 matchId, InEuint8[20] calldata segments) external;
 ```
+
+Each `InEuint8` is the standard CoFHE input struct
+(`uint256 ctHash, uint8 securityZone, uint8 utype, bytes signature`)
+produced by one `cofhejs.encrypt` call of 20 `Encryptable.uint8` values.
+Ship identity is the public array position; `getShipLengths()` exposes the
+segment grouping. See `docs/cofhe-feasibility-results.md` for why the
+100-cell baseline and batched variants were rejected.
 
 Do not support plaintext fleet submission.
 
-## DecryptResult
+## Decrypt results (no input struct)
 
-Recommended shared struct for Fhenix finalization:
-
-```solidity
-struct DecryptResult {
-  bytes32 ctHash;
-  uint256 value;
-  bytes signature;
-}
-```
-
-Use `uint256 value` at the API boundary for flexibility, then validate and cast internally:
-
-- placement validity expects `0` or `1`;
-- shot result expects `1..4`.
-
-If Fhenix typed verification requires a narrower plaintext type, the implementation can expose typed structs:
-
-```solidity
-struct BoolDecryptResult {
-  bytes32 ctHash;
-  bool value;
-  bytes signature;
-}
-
-struct Uint8DecryptResult {
-  bytes32 ctHash;
-  uint8 value;
-  bytes signature;
-}
-```
-
-MVP recommendation:
-
-- use typed structs if they make verification safer;
-- keep the frontend shape equivalent to `ctHash`, `value`, and `signature`.
+The pinned CoFHE version has no client-submitted decrypt results. The
+contract requests decryption with `FHE.decrypt(handle)` inside `submitFleet`
+and `attack`; the CoFHE network posts the signed plaintext on-chain; the
+permissionless finalization functions read it with
+`FHE.getDecryptResultSafe(handle)`. No caller ever supplies a result value
+or signature, so the previously proposed `DecryptResult` structs do not
+exist.
 
 ## Read Structs
 
@@ -250,11 +248,15 @@ struct MoveView {
   address defender;
   uint8 cellIndex;
   ShotResult result;
+  uint8 sunkShipId;
   uint64 submittedAt;
   uint64 resolvedAt;
   bool finalized;
 }
 ```
+
+`sunkShipId` is `0` unless the move sank a ship (`1..10`, public ship
+metadata order).
 
 ## PendingShotView
 
@@ -265,10 +267,14 @@ struct PendingShotView {
   address attacker;
   address defender;
   uint8 cellIndex;
-  bytes32 resultCtHash;
+  uint256 resultCtHash;
+  uint256 sunkShipCtHash;
   uint64 submittedAt;
 }
 ```
+
+The ct hashes are public handle identifiers (decryption stays ACL-gated);
+they let a recovering client correlate `ShotResolutionRequested` events.
 
 Encrypted fleet internals must not be returned from ordinary public reads.
 
@@ -407,58 +413,53 @@ Errors:
 
 ## Fleet API
 
-## submitFleet
+## submitFleet (implemented)
 
 ```solidity
-function submitFleet(
-  uint256 matchId,
-  EncryptedFleetInput calldata input
-) external;
+function submitFleet(uint256 matchId, InEuint8[20] calldata segments) external;
 ```
 
 Purpose:
 
-- submit encrypted fleet placement for the caller.
+- submit encrypted fleet placement for the caller and start encrypted
+  validation in the same transaction.
 
 Requirements:
 
 - match exists;
-- caller is creator or opponent;
+- caller is creator or opponent (`NotMatchPlayer`);
 - match status is `WaitingForPlacement` or `ValidatingPlacement`;
-- caller joined the match;
-- caller does not currently have a pending validation;
-- fleet input length and shape are valid;
-- encrypted inputs pass Fhenix input checks through `FHE.asEuint8`.
+- caller has no pending validation (`PlacementValidationPending`);
+- caller's fleet is not already `Valid` (`FleetAlreadySubmitted`);
+- encrypted inputs pass CoFHE input verification through `FHE.asEuint8`
+  (on real networks the zk proof binds them to the caller and chain).
 
 State changes:
 
-- convert each `InEuint8` to `euint8`;
-- store encrypted fleet;
-- call `FHE.allowThis` for stored encrypted values;
-- initialize encrypted fleet health;
-- set `fleetSubmitted = true`;
-- set `placementStatus = ResolvingValidation`;
-- set `fleetSubmittedAt`;
-- create pending placement validation result if validation is asynchronous.
+- convert each `InEuint8` to `euint8`, `FHE.allowThis`, and store;
+- initialize encrypted per-ship health from public ship lengths;
+- compute the encrypted validity flag (range, straightness, contiguity,
+  horizontal row bounds) and request its decryption (`FHE.decrypt`);
+- record the pending validation with the validity handle;
+- set `fleetSubmitted = true`, `placementStatus = ResolvingValidation`,
+  `fleetSubmittedAt`;
+- set match status `ValidatingPlacement`.
 
 Events:
 
 ```solidity
-event FleetSubmitted(
-  uint256 indexed matchId,
-  address indexed player
-);
+event FleetSubmitted(uint256 indexed matchId, address indexed player);
 
 event FleetValidationRequested(
   uint256 indexed matchId,
   address indexed player,
-  bytes32 ctHash
+  uint256 ctHash
 );
 ```
 
 Frontend behavior:
 
-- encrypt fleet with `@cofhe/sdk`;
+- encrypt the 20 segments with one `cofhejs.encrypt` call;
 - submit transaction;
 - show `Validating placement`;
 - wait for `FleetValidated` before showing ready state.
@@ -468,159 +469,82 @@ Errors:
 - `MatchNotFound`;
 - `InvalidMatchStatus`;
 - `NotMatchPlayer`;
-- `PlayerNotJoined`;
-- `FleetAlreadySubmitted`;
 - `PlacementValidationPending`;
-- `InvalidEncryptedInput`;
-- `FleetInputInvalidLength`;
+- `FleetAlreadySubmitted`.
 
-## finalizeFleetValidation
-
-Recommended typed version:
+## finalizeFleetValidation (implemented)
 
 ```solidity
-function finalizeFleetValidation(
-  uint256 matchId,
-  address player,
-  bytes32 ctHash,
-  bool valid,
-  bytes calldata signature
-) external;
-```
-
-Alternative generic version:
-
-```solidity
-function finalizeFleetValidation(
-  uint256 matchId,
-  address player,
-  DecryptResult calldata result
-) external;
+function finalizeFleetValidation(uint256 matchId, address player) external;
 ```
 
 Purpose:
 
-- publish the allowed placement validity result.
+- publish the resolved placement validity once the CoFHE network has posted
+  the decrypt result on-chain. Permissionless: the caller supplies no result
+  data.
 
 Requirements:
 
-- match exists;
-- player is creator or opponent;
-- player's placement status is `ResolvingValidation`;
-- pending validation exists;
-- `ctHash` matches stored pending validation hash;
-- Fhenix decrypt signature is valid;
-- validation has not already been finalized.
+- match exists and is `ValidatingPlacement`;
+- `player` is creator or opponent (`NotMatchPlayerAddress`);
+- a pending validation exists for `player`;
+- the decrypt result for the stored validity handle is ready
+  (`DecryptionResultNotReady` until then).
 
 State changes:
 
-- if `valid == true`, set `placementStatus = Valid` and `fleetValid = true`;
-- if `valid == false`, set `placementStatus = Invalid` and `fleetValid = false`;
-- clear pending validation;
-- set `fleetValidatedAt`;
-- if both players are valid, set `ReadyToStart` or start match immediately.
+- if valid: `placementStatus = Valid`, `fleetValid = true`;
+- if invalid: `placementStatus = Invalid`, `fleetValid = false`, and
+  `fleetSubmitted` resets to `false` so the player can resubmit;
+- clear pending validation; set `fleetValidatedAt`;
+- if both players are valid, start the match immediately: status
+  `InProgress`, `currentTurn = opponent`, turn deadline set.
 
 Events:
 
 ```solidity
-event FleetValidated(
-  uint256 indexed matchId,
-  address indexed player,
-  bool valid
-);
+event FleetValidated(uint256 indexed matchId, address indexed player, bool valid);
+
+event MatchStarted(uint256 indexed matchId, address indexed firstPlayer);
+
+event TurnChanged(uint256 indexed matchId, address indexed currentTurn);
 ```
 
-Optional event if auto-starting:
-
-```solidity
-event MatchStarted(
-  uint256 indexed matchId,
-  address indexed firstPlayer
-);
-```
+`MatchStarted` and `TurnChanged` are emitted by the finalization that
+validates the second fleet. There is no separate `startMatch` function and
+`ReadyToStart` is never stored: auto-start runs atomically inside
+finalization, so a "start did not run" recovery state cannot exist.
 
 Frontend behavior:
 
-- any caller can finalize if decrypt result is public and signature validates;
+- any caller can finalize once the result is ready;
 - show `Fleet confirmed` if valid;
-- show `Fleet placement invalid` if invalid;
-- if both fleets are valid, route both users into battle state.
-
-Errors:
-
-- `MatchNotFound`;
-- `NotMatchPlayerAddress`;
-- `NoPendingPlacementValidation`;
-- `InvalidCtHash`;
-- `InvalidDecryptSignature`;
-- `PlacementAlreadyFinalized`;
-
-## Match Start API
-
-## startMatch
-
-```solidity
-function startMatch(uint256 matchId) external;
-```
-
-Purpose:
-
-- start the match after both fleets are valid.
-
-Recommendation:
-
-- `finalizeFleetValidation` should call `_startMatchIfReady` internally;
-- keep `startMatch` as a permissionless recovery function if auto-start did not run.
-
-Requirements:
-
-- match exists;
-- both players joined;
-- both placements are valid;
-- status is `ReadyToStart` or `WaitingForPlacement` with both valid;
-- no pending placement validation;
-- match not already started.
-
-State changes:
-
-- set `status = InProgress`;
-- set `startedAt`;
-- set `currentTurn = opponent`;
-- set `lastActionAt`;
-- set turn deadline.
-
-Events:
-
-```solidity
-event MatchStarted(
-  uint256 indexed matchId,
-  address indexed firstPlayer
-);
-
-event TurnChanged(
-  uint256 indexed matchId,
-  address indexed currentTurn
-);
-```
-
-Frontend behavior:
-
-- creator sees `Opponent Turn`;
-- invited friend sees `Your Turn`;
-- invited friend can submit first attack.
+- show `Fleet placement invalid` if invalid and return to placement;
+- when `MatchStarted` arrives, route both users into battle state.
 
 Errors:
 
 - `MatchNotFound`;
 - `InvalidMatchStatus`;
-- `PlayersNotReady`;
-- `FleetNotValid`;
-- `PlacementValidationPending`;
-- `MatchAlreadyStarted`;
+- `NotMatchPlayerAddress`;
+- `NoPendingPlacementValidation`;
+- `DecryptionResultNotReady`.
+
+## retryFleetValidation (implemented)
+
+```solidity
+function retryFleetValidation(uint256 matchId, address player) external;
+```
+
+Permissionless, idempotent recovery: re-requests decryption of the same
+pending validity handle and re-emits `FleetValidationRequested`. Used when a
+CoFHE decrypt result never lands. Reverts with the same errors as
+`finalizeFleetValidation` except `DecryptionResultNotReady`.
 
 ## Attack API
 
-## attack
+## attack (implemented)
 
 ```solidity
 function attack(
@@ -636,24 +560,25 @@ Purpose:
 Requirements:
 
 - match exists;
-- `status == InProgress`;
-- `msg.sender == currentTurn`;
-- `cellIndex < 100`;
-- target cell has not already been attacked by this attacker against this defender;
-- no pending shot exists;
-- both fleets are valid.
+- `status == InProgress` (this also implies both fleets are valid and no
+  pending shot exists, since a pending shot holds the match in
+  `ResolvingShot`);
+- `msg.sender == currentTurn` (`NotYourTurn`);
+- `cellIndex < 100` (`InvalidCellIndex`);
+- target cell not already attacked on the defender's board
+  (`CellAlreadyAttacked`).
 
 State changes:
 
-- determine defender;
-- increment move count;
-- create `Move` with `result = None`;
-- set defender `publicBoard.attackedMask`;
-- compute encrypted shot result through Fhenix operations;
-- set pending shot with `resultCtHash`;
-- set `status = ResolvingShot`;
-- set `pendingMoveId`;
-- set resolving deadline.
+- determine defender; mark `publicBoard.attackedMask`;
+- increment move count; create `Move` with `result = None` (move ids start
+  at `1`);
+- run the encrypted shot pipeline: per-ship hit flags, encrypted health
+  decrement, sunk and all-ships-dead detection, encrypted result enum and
+  encrypted sunk-ship id;
+- request decryption of both result handles (`FHE.decrypt`);
+- store the pending shot with both handles;
+- set `status = ResolvingShot`, `pendingMoveId`, resolving deadline.
 
 Events:
 
@@ -669,7 +594,8 @@ event ShotSubmitted(
 event ShotResolutionRequested(
   uint256 indexed matchId,
   uint32 indexed moveId,
-  bytes32 ctHash
+  uint256 resultCtHash,
+  uint256 sunkShipCtHash
 );
 ```
 
@@ -677,8 +603,9 @@ Frontend behavior:
 
 - show selected coordinate confirmation;
 - after transaction, show `Resolving Shot`;
-- request `decryptForTx(ctHash)` after reading event or pending shot view;
-- do not allow next turn until `ShotResolved`.
+- wait for the CoFHE network to post the decrypt results, then call
+  `finalizeAttack` (any wallet may do it);
+- do not allow the next turn until `ShotResolved`.
 
 Errors:
 
@@ -687,62 +614,44 @@ Errors:
 - `NotYourTurn`;
 - `InvalidCellIndex`;
 - `CellAlreadyAttacked`;
-- `PendingShotExists`;
-- `FleetNotValid`;
+- `PendingShotExists` (defensive; unreachable through `InProgress`).
 
-## finalizeAttack
-
-Recommended typed version:
+## finalizeAttack (implemented)
 
 ```solidity
-function finalizeAttack(
-  uint256 matchId,
-  uint32 moveId,
-  bytes32 ctHash,
-  uint8 result,
-  bytes calldata signature
-) external;
-```
-
-Alternative generic version:
-
-```solidity
-function finalizeAttack(
-  uint256 matchId,
-  uint32 moveId,
-  DecryptResult calldata result
-) external;
+function finalizeAttack(uint256 matchId, uint32 moveId) external;
 ```
 
 Purpose:
 
-- verify the Fhenix decrypt result and publish the shot outcome.
+- publish the resolved shot outcome once the CoFHE network has posted both
+  decrypt results on-chain. Permissionless: the caller supplies no result
+  data, so a malicious finalizer cannot influence the outcome.
 
 Requirements:
 
 - match exists;
 - `status == ResolvingShot`;
 - pending shot exists;
-- `moveId == pendingShot.moveId`;
-- `ctHash == pendingShot.resultCtHash`;
-- `result` is one of `Miss`, `Hit`, `Sunk`, `Win`;
-- Fhenix decrypt signature is valid;
-- move is not already finalized.
+- `moveId == pendingShot.moveId` (`InvalidMoveId` rejects stale ids);
+- both decrypt results are ready (`DecryptionResultNotReady`);
+- the result plaintext is `1..4` (`InvalidShotResult`; fail-closed guard,
+  the encrypted pipeline only emits valid values).
 
 State changes:
 
-- update move result;
-- update move `resolvedAt`;
-- set move `finalized = true`;
-- update defender public board masks;
-- clear pending shot;
-- clear `pendingMoveId`;
-- if result is `Win`, set status `Finished` and winner;
-- otherwise set status `InProgress`;
-- if result is `Miss`, set current turn to defender;
-- if result is `Hit` or `Sunk`, keep current turn with the attacker;
-- update `lastActionAt`;
-- set next turn deadline if not finished.
+- update move result, `sunkShipId`, `resolvedAt`, `finalized = true`;
+- update defender public board masks (`missMask` or `hitMask`; `sunkMask`
+  additionally marks the final cell on `Sunk`/`Win`);
+- clear pending shot and `pendingMoveId`;
+- if `Win`: status `Finished`, set winner, clear `currentTurn`;
+- if `Miss`: status `InProgress`, turn passes to the defender;
+- if `Hit`/`Sunk`: status `InProgress`, attacker keeps the turn;
+- reset turn deadline when the match continues.
+
+Duplicate finalization is impossible: clearing the pending shot returns the
+match to `InProgress`/`Finished`, so a replayed call reverts with
+`InvalidMatchStatus`.
 
 Events:
 
@@ -750,13 +659,11 @@ Events:
 event ShotResolved(
   uint256 indexed matchId,
   uint32 indexed moveId,
-  ShotResult result
+  uint8 result,
+  uint8 sunkShipId
 );
 
-event TurnChanged(
-  uint256 indexed matchId,
-  address indexed currentTurn
-);
+event TurnChanged(uint256 indexed matchId, address indexed currentTurn);
 
 event MatchFinished(
   uint256 indexed matchId,
@@ -765,12 +672,13 @@ event MatchFinished(
 );
 ```
 
-`TurnChanged` is emitted only when a miss changes `currentTurn`. A hit or sunk
-ship keeps the same attacker and does not emit a turn-change event.
+`TurnChanged` is emitted only when a miss changes `currentTurn`. A hit or
+sunk ship keeps the same attacker and does not emit a turn-change event.
+`sunkShipId` is `0` unless the result is `Sunk` or `Win`.
 
 Frontend behavior:
 
-- any caller may finalize if the decrypt result is valid;
+- any caller may finalize once results are ready;
 - show `Miss`, `Hit`, `Sunk`, `Victory`, or `Defeat`;
 - after a miss, update the active player to the defender;
 - after a hit or sunk ship, let the attacker select another target.
@@ -781,10 +689,19 @@ Errors:
 - `InvalidMatchStatus`;
 - `NoPendingShot`;
 - `InvalidMoveId`;
-- `InvalidCtHash`;
-- `InvalidShotResult`;
-- `InvalidDecryptSignature`;
-- `MoveAlreadyFinalized`;
+- `DecryptionResultNotReady`;
+- `InvalidShotResult`.
+
+## retryShotResolution (implemented)
+
+```solidity
+function retryShotResolution(uint256 matchId) external;
+```
+
+Permissionless, idempotent recovery: re-requests decryption of both pending
+shot handles, extends the resolving deadline, and re-emits
+`ShotResolutionRequested`. This is the `ResolvingShot` recovery rule: a
+stuck decryption is never a win, and players can still exit via `forfeit`.
 
 ## Cancel, Forfeit, and Timeout API
 
@@ -890,7 +807,9 @@ Timeout cases:
 - opponent did not join before join deadline: creator may cancel rather than win;
 - opponent did not submit fleet before placement deadline: submitted player can claim;
 - current turn player did not move before turn deadline: other player can claim;
-- resolving deadline expired: recovery rule must be defined before production.
+- resolving deadline expired: not a win claim. Recovery is the permissionless
+  `retryShotResolution` / `retryFleetValidation`, plus `forfeit` as the exit;
+  `claimTimeoutWin` reverts with `NoTimeoutAvailable` during `ResolvingShot`.
 
 State changes:
 
@@ -1053,7 +972,7 @@ Rules:
 
 ## Events
 
-Required MVP events:
+Implemented events:
 
 ```solidity
 event MatchCreated(
@@ -1075,7 +994,7 @@ event FleetSubmitted(
 event FleetValidationRequested(
   uint256 indexed matchId,
   address indexed player,
-  bytes32 ctHash
+  uint256 ctHash
 );
 
 event FleetValidated(
@@ -1100,13 +1019,15 @@ event ShotSubmitted(
 event ShotResolutionRequested(
   uint256 indexed matchId,
   uint32 indexed moveId,
-  bytes32 ctHash
+  uint256 resultCtHash,
+  uint256 sunkShipCtHash
 );
 
 event ShotResolved(
   uint256 indexed matchId,
   uint32 indexed moveId,
-  ShotResult result
+  uint8 result,
+  uint8 sunkShipId
 );
 
 event TurnChanged(
@@ -1145,10 +1066,9 @@ Event rule:
 
 ## Custom Errors
 
-Recommended errors:
+Implemented errors:
 
 ```solidity
-error ContractPaused();
 error MatchNotFound();
 error InvalidMatchStatus();
 error InvalidInvitedOpponent();
@@ -1159,17 +1079,16 @@ error OpponentAlreadyJoined();
 error JoinDeadlineExpired();
 error OnlyCreator();
 error NotMatchPlayer();
+error CannotCancelStartedMatch();
+error MatchAlreadyFinished();
+error NoTimeoutAvailable();
+error NotTimeoutClaimant();
+error InvalidPaginationLimit();
 error NotMatchPlayerAddress();
-error PlayerNotJoined();
 error FleetAlreadySubmitted();
 error PlacementValidationPending();
 error NoPendingPlacementValidation();
-error PlacementAlreadyFinalized();
-error InvalidEncryptedInput();
-error FleetInputInvalidLength();
-error PlayersNotReady();
-error FleetNotValid();
-error MatchAlreadyStarted();
+error DecryptionResultNotReady();
 error NotYourTurn();
 error InvalidCellIndex();
 error CellAlreadyAttacked();
@@ -1177,16 +1096,22 @@ error PendingShotExists();
 error NoPendingShot();
 error InvalidMoveId();
 error MoveNotFound();
-error InvalidCtHash();
 error InvalidShotResult();
-error InvalidDecryptSignature();
-error MoveAlreadyFinalized();
-error CannotCancelStartedMatch();
-error MatchAlreadyFinished();
-error NoTimeoutAvailable();
-error NotTimeoutClaimant();
-error InvalidPaginationLimit();
 ```
+
+Errors proposed earlier but not implemented, with the reason:
+
+- `InvalidCtHash`, `InvalidDecryptSignature`: callers never supply hashes or
+  signatures in the on-chain decrypt flow;
+- `PlacementAlreadyFinalized`, `MoveAlreadyFinalized`: duplicate
+  finalization structurally reverts with `NoPendingPlacementValidation` /
+  `InvalidMatchStatus` because finalization clears the pending state;
+- `PlayersNotReady`, `FleetNotValid`, `MatchAlreadyStarted`: belonged to the
+  removed `startMatch`;
+- `PlayerNotJoined`: unreachable - `WaitingForPlacement` implies both joined;
+- `InvalidEncryptedInput`, `FleetInputInvalidLength`: the fixed-size
+  `InEuint8[20]` ABI and CoFHE input verification enforce shape;
+- `ContractPaused`: no pause support in the MVP.
 
 Frontend should map these to short English messages from the copy deck.
 
@@ -1227,10 +1152,11 @@ Important:
 | `createMatch` | any wallet |
 | `joinMatch` | invited wallet only |
 | `submitFleet` | creator or opponent |
-| `finalizeFleetValidation` | any caller with valid Fhenix result |
-| `startMatch` | any caller if both fleets valid |
+| `finalizeFleetValidation` | any caller once the decrypt result is ready |
+| `retryFleetValidation` | any caller while validation is pending |
 | `attack` | current turn player only |
-| `finalizeAttack` | any caller with valid Fhenix result |
+| `finalizeAttack` | any caller once the decrypt results are ready |
+| `retryShotResolution` | any caller while a shot is resolving |
 | `cancelMatch` | creator only before start |
 | `forfeit` | creator or opponent |
 | `claimTimeoutWin` | eligible timeout claimant |
@@ -1258,16 +1184,23 @@ Frontend should not:
 
 ## Open API Decisions
 
-Still unresolved:
+Resolved by the Phase 4 implementation:
 
-- exact Fhenix typed decrypt verification signature;
-- `DecryptResult` generic struct versus typed structs;
-- single-call fleet input versus batched fleet input;
-- whether `startMatch` is needed as public function or only internal;
-- whether move history is array-based or mapping-based;
-- exact timeout reason enum;
-- exact bot API inclusion phase;
-- whether `cancelMatch` is allowed after opponent joins but before fleet validation.
+- decrypt verification: on-chain `FHE.decrypt` + `FHE.getDecryptResultSafe`;
+  no client-supplied results, no `DecryptResult` struct (see Implementation
+  Status);
+- fleet input: single-call `InEuint8[20]` ship segments;
+- `startMatch`: does not exist; auto-start inside `finalizeFleetValidation`;
+- move history: `mapping(matchId => mapping(moveId => Move))` with
+  paginated `getMoveHistory`;
+- timeout reasons: `1` placement, `2` turn; resolving is retry-based, never
+  a claim;
+- `cancelMatch`: allowed through `WaitingForOpponent`, `WaitingForPlacement`,
+  and `ValidatingPlacement`; blocked from `InProgress` on.
+
+Still open:
+
+- exact bot API inclusion phase (post-MVP).
 
 ## MVP API Checklist
 
