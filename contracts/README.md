@@ -2,8 +2,9 @@
 
 Smart contract package for the encrypted Battleship MVP on Arbitrum Sepolia
 (chain id `421614`). Phase 3 of `docs/game-implementation-roadmap.md`
-implements the public match lifecycle; encrypted fleets and battle arrive with
-Phases 4 and 7.
+implemented the public match lifecycle; Phase 4 implemented the encrypted
+fleet and battle rules over CoFHE. The frontend battle integration arrives
+with Phases 6 and 7.
 
 ## Scope
 
@@ -11,18 +12,30 @@ Implemented (`contracts/BattleshipGame.sol`):
 
 - strict invited friend matches: `createMatch(invitedOpponent)`;
 - invited-wallet joining: `joinMatch(matchId)`;
+- encrypted fleet submission: `submitFleet(matchId, InEuint8[20])` ship
+  segments (encoding decision in `docs/cofhe-feasibility-results.md`), with
+  full encrypted placement validation (range, straightness, contiguity, row
+  bounds);
+- encrypted battle: `attack(matchId, cellIndex)` computes hit/sunk/win with
+  FHE operations; permissionless `finalizeFleetValidation` /
+  `finalizeAttack` read the decrypt results the CoFHE network posts
+  on-chain (no client ever supplies a result); permissionless
+  `retryFleetValidation` / `retryShotResolution` recover stuck decryptions;
 - `cancelMatch`, `forfeit`, and `claimTimeoutWin` timeout hooks;
 - public reads: `getMatch`, `getPlayers`, `getPlayerMatches`,
-  `getPlayerMatchCount`;
-- lifecycle events: `MatchCreated`, `MatchJoined`, `MatchCancelled`,
-  `MatchForfeited`, `TimeoutWinClaimed`.
+  `getPlayerMatchCount`, `getMove`, `getMoveHistory`, `getPendingShot`,
+  `getShipLengths`;
+- events: the lifecycle set (`MatchCreated`, `MatchJoined`,
+  `MatchCancelled`, `MatchForfeited`, `TimeoutWinClaimed`) plus the
+  encrypted-flow set (`FleetSubmitted`, `FleetValidationRequested`,
+  `FleetValidated`, `MatchStarted`, `ShotSubmitted`,
+  `ShotResolutionRequested`, `ShotResolved`, `TurnChanged`,
+  `MatchFinished`).
 
-Deliberately absent until the Phase 4 CoFHE feasibility results freeze the
-encoding:
+Deliberately absent:
 
-- fleet submission of any kind (plaintext fleet input is forbidden, full stop);
-- attack and result finalization;
-- open matches and bot matches.
+- plaintext fleet input of any kind, full stop;
+- open matches and bot matches (post-MVP).
 
 ## Toolchain
 
@@ -30,26 +43,38 @@ Pinned in `package.json` (exact versions, no ranges) and `.nvmrc`:
 
 - Node `20.19.5`, npm lockfile v3;
 - Hardhat `2.28.6`, solc `0.8.25` (Cancun EVM target), ethers `6.16.0`;
-- CoFHE set: `@fhenixprotocol/cofhe-contracts` `0.1.4`,
+- CoFHE set: `@fhenixprotocol/cofhe-contracts` `0.0.13`,
   `@fhenixprotocol/cofhe-mock-contracts` `0.3.1`, `cofhe-hardhat-plugin`
   `0.3.1`, `cofhejs` `0.3.1`.
 
-The CoFHE Hardhat plugin is installed and version-pinned but not yet loaded in
-`hardhat.config.ts`: Phase 3 has no FHE operations, and tests must not depend
-on the mock CoFHE environment. `contracts/test/CofheCompileCheck.sol` proves
-the Solidity dependency compiles with these settings. Phase 4 (GAME-401)
-enables the plugin.
+`cofhe-hardhat-plugin` is loaded in `hardhat.config.ts` and etches the mock
+CoFHE environment (task manager, ACL, zk verifier, query decrypter) onto the
+in-process hardhat network before tests. The hardhat network pins
+`hardfork: cancun`: newer hardforks enable the EIP-7951 P256VERIFY
+precompile at `0x...0100`, the exact address the plugin uses for the mock
+zk verifier. `@fhenixprotocol/cofhe-contracts` is pinned to `0.0.13`
+because the `0.3.1` plugin/mocks/cofhejs line targets it exclusively (see
+`docs/cofhe-feasibility-results.md`).
 
 ## Commands
 
 ```bash
 npm ci             # install with the lockfile
 npm run compile    # hardhat compile
-npm test           # 47 lifecycle/access/deadline tests on the hardhat network
+npm test           # lifecycle + encrypted-rules + benchmark suites on the hardhat network
 npm run generate:abi        # write abi/BattleshipGame.json + src/onchain/abi/battleshipGame.ts
 npm run deploy:local        # deploy to a running `npx hardhat node`
 npm run deploy:arb-sepolia  # deploy to Arbitrum Sepolia (see below)
 npm run validate:deployment -- deployments/<chainId>/<id>.json [--rpc <url>]
+```
+
+Focused suites:
+
+```bash
+npx hardhat test test/battleshipGame.test.ts      # public lifecycle (47 tests)
+npx hardhat test test/encryptedRules.test.ts      # encrypted rules (33 tests)
+npx hardhat test test/encodingBenchmarks.test.ts  # GAME-402..404 encoding table
+npx hardhat test test/fullMatchBenchmark.test.ts  # GAME-411 gas budget table
 ```
 
 ## Deployment records
@@ -69,9 +94,13 @@ Arbitrum Sepolia deployment expects `DEPLOYMENT_ID`, `DEPLOYER_PRIVATE_KEY`,
 and optionally `ARBITRUM_SEPOLIA_RPC_URL` in the environment. Frontend wiring
 of a live record into `src/onchain/deployments.ts` happens in Phase 5/10.
 
-## Test harness
+## Test harness and prototypes
 
-`contracts/test/BattleshipGameHarness.sol` is a test-only subclass that forces
-states production code reaches only through Phase 4/7 (fleet submitted, match
-in progress) so the timeout-win transitions are tested today. It must never be
-deployed.
+`contracts/test/BattleshipGameHarness.sol` is a test-only subclass that
+forces states (fleet submitted, match in progress) directly, keeping the
+timeout-claim tests fast and independent of the encrypted flow. It must
+never be deployed.
+
+`contracts/prototypes/FleetEncodingPrototypes.sol` holds the
+measurement-only encoding candidates behind the GAME-405 decision; they are
+exercised by the benchmark suite and are never deployed.

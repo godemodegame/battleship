@@ -246,17 +246,36 @@ Possible abuses:
 - try to start a match before both fleets are valid;
 - try to learn private placement from validation timing.
 
-Controls:
+Controls (implemented in Phase 4):
 
-- reject invalid encrypted input shape;
+- the fixed `InEuint8[20]` ABI and CoFHE input verification enforce input
+  shape;
 - store placement status per player;
 - use `ResolvingValidation` to prevent duplicate validation;
 - finalize only the public validity boolean;
-- allow resubmission only after an invalid result if the product wants that UX;
+- allow resubmission after an invalid result, with a fresh validity handle
+  so stale decrypt results cannot finalize the new submission;
 - avoid exposing intermediate validation values;
 - avoid detailed validation errors that reveal private layout.
 
 Player-facing copy should say `Fleet placement invalid`, not reveal exact hidden validation internals.
+
+On-chain validation scope (decided by measurement, see
+`docs/cofhe-feasibility-results.md`):
+
+- enforced encrypted: every segment in board range, every multi-cell ship
+  straight and contiguous, horizontal ships inside one row. Straightness
+  (consecutive deltas of exactly 1 or 10) also forces distinct cells within
+  a ship, which excludes the one dangerous shape abuse: a ship folded onto
+  fewer cells than its health, which could never be sunk;
+- not enforced on-chain: cross-ship overlap and the classic no-touch rule.
+  Both only harm the player who breaks them. The win condition is
+  all-ships-dead, and per-ship health decrements on every hit to one of the
+  ship's own cells, so stacking or touching ships concentrates the fleet
+  into fewer distinct cells and strictly speeds up the owner's defeat - it
+  grants no defensive or informational advantage. The client still enforces
+  classic placement for UX, and a rule-breaking opponent cannot win by
+  breaking these rules.
 
 ## Attack Abuse
 
@@ -270,17 +289,21 @@ Possible abuses:
 - try to finalize a shot for another move;
 - try to continue after a win.
 
-Controls:
+Controls (implemented in Phase 4):
 
 - check `status == InProgress`;
 - check `msg.sender == currentTurn`;
 - check `cellIndex < 100`;
-- track attacked cells per attacker and defender;
+- track attacked cells on the defender's public board;
 - set `status = ResolvingShot` after attack;
-- store pending move id and result ciphertext hash;
-- verify ciphertext hash during finalization;
-- verify Fhenix decrypt signature;
-- reject result values outside `1..4`;
+- store the pending move id and both result ciphertext handles;
+- finalization takes no result data from the caller: it reads the decrypt
+  results the CoFHE network posted on-chain for exactly the stored handles,
+  so a forged hash, value, or signature has no entry point;
+- reject stale move ids during finalization (`InvalidMoveId`);
+- duplicate finalization structurally reverts: clearing the pending shot
+  leaves `ResolvingShot`, so a replayed call fails the status check;
+- reject result values outside `1..4` (fail-closed guard);
 - set `Finished` immediately on `Win`.
 
 The UI may disable unavailable actions, but the contract must enforce every rule.
@@ -289,11 +312,15 @@ The UI may disable unavailable actions, but the contract must enforce every rule
 
 Fhenix operations can be asynchronous. A player may try to stall the game by leaving a fleet validation or shot result unresolved.
 
-Controls:
+Controls (implemented in Phase 4):
 
-- make public decrypt finalization permissionless where safe;
-- allow either player to submit a valid public decrypt result;
-- provide recovery functions such as `startMatch`;
+- `finalizeFleetValidation` and `finalizeAttack` are permissionless: any
+  wallet can trigger them once the network posts the decrypt result, and
+  the caller cannot influence the outcome;
+- `retryFleetValidation` and `retryShotResolution` are permissionless and
+  idempotent re-requests for decryptions that never land; a stuck
+  resolution is never a win or loss for either player, and `forfeit`
+  remains the guaranteed exit;
 - provide timeout windows for placement and turns;
 - expose `getPendingShot(matchId)` for recovery after refresh;
 - show clear UI states for pending Fhenix work.

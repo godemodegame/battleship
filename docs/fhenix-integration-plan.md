@@ -6,6 +6,41 @@ This document defines how the game should integrate Fhenix/CoFHE for private on-
 
 The game requires hidden fleet placement and private board state while keeping match rules fully on-chain. Fhenix/CoFHE is the privacy layer that allows the contract to store and compute over encrypted data without revealing the player's hidden board.
 
+## Implementation Status (Phase 4)
+
+The contract side of this plan is implemented in
+`contracts/contracts/BattleshipGame.sol` (GAME-401..412). Measurements and
+the frozen encoding decision live in `docs/cofhe-feasibility-results.md`;
+the implemented ABI is in `docs/contract-api.md`. Realities discovered
+during implementation that supersede assumptions below:
+
+- the compatible package set is `@fhenixprotocol/cofhe-contracts 0.0.13`,
+  `@fhenixprotocol/cofhe-mock-contracts 0.3.1`, `cofhe-hardhat-plugin
+  0.3.1`, and `cofhejs 0.3.1` (the npm package is `cofhejs` with
+  `cofhejs/web` and `cofhejs/node` entrypoints, not `@cofhe/sdk`);
+- the pinned `FHE.sol` has no client-relayed decrypt results
+  (`verifyDecryptResult`/`publishDecryptResult` belong to a newer contracts
+  line without mock support). The implemented result flow is fully
+  on-chain: the contract calls `FHE.decrypt(handle)`, the CoFHE network
+  posts the signed plaintext to the task manager, and permissionless
+  finalization functions read `FHE.getDecryptResultSafe(handle)`. The
+  browser never runs `decryptForTx` and never submits result values or
+  signatures - sections below describing client-relayed finalization are
+  kept for history but are superseded;
+- the fleet encoding is the encrypted ship-segment list
+  (`InEuint8[20]`, ship identity = public array position), not the
+  100-cell array;
+- placement validation implements the full geometric rule set (range,
+  straightness, contiguity, row bounds) in ~130 FHE operations; cross-ship
+  overlap is deliberately left to the client (self-harming, see
+  `docs/security-and-fair-play.md`);
+- per shot, exactly two values are decrypted: the result enum (`1..4`) and
+  the sunk ship id (`0` unless sunk). Hidden state never gets
+  `allowGlobal`/`allow(player)`; stored handles get `allowThis` only;
+- the mock environment cannot exercise the zk-verifier guarantee that
+  encrypted inputs bind to the submitting account and chain; that property
+  is validated on Arbitrum Sepolia (GAME-906).
+
 ## Goals
 
 The integration must support:
@@ -46,16 +81,16 @@ The app must require the connected wallet to be on Arbitrum Sepolia before start
 
 ## Current Fhenix Components
 
-Use the compatible CoFHE package versions from the Fhenix Compatibility page when implementation begins.
+Pinned in `contracts/package.json` (GAME-401, see
+`docs/cofhe-feasibility-results.md` for the compatibility findings):
 
-Relevant components:
-
-- `@cofhe/sdk` - browser client SDK for encryption, permits, and decryption requests;
-- `@fhenixprotocol/cofhe-contracts` - Solidity contracts and `FHE.sol`;
-- `@cofhe/hardhat-plugin` or `@cofhe/foundry-plugin` - local development and testing;
-- `@cofhe/mock-contracts` - mock FHE environment for local tests.
-
-The exact versions should be pinned in the implementation repo after package installation.
+- `cofhejs` `0.3.1` - client SDK for encryption, permits, and decryption
+  requests (`cofhejs/web` for browsers, `cofhejs/node` for tests);
+- `@fhenixprotocol/cofhe-contracts` `0.0.13` - Solidity `FHE.sol`;
+- `cofhe-hardhat-plugin` `0.3.1` - deploys the mock environment before
+  `hardhat test`;
+- `@fhenixprotocol/cofhe-mock-contracts` `0.3.1` - mock task manager, ACL,
+  zk verifier, and query decrypter.
 
 ## High-level Architecture
 
@@ -693,16 +728,26 @@ Must enforce:
 
 ## Open Decisions
 
-These must be resolved during prototype:
+Resolved by the Phase 4 prototype:
 
-- exact Arbitrum Sepolia chain export name in `@cofhe/sdk/chains`;
-- exact encrypted fleet encoding;
-- whether fleet validation is full or simplified for MVP;
-- whether result uses one `euint8` enum or separate encrypted booleans;
-- whether finalization uses `verifyDecryptResult` or `publishDecryptResult`;
-- who pays gas for result finalization if the active player leaves;
-- whether any keeper is introduced later as optional convenience;
-- whether bot fleet uses encrypted template selection or full encrypted generation.
+- encrypted fleet encoding: ship-segment list (`InEuint8[20]`);
+- fleet validation: full geometric rule set on-chain (range, straightness,
+  contiguity, row bounds); cross-ship overlap left to client UX as the
+  measured exception;
+- result shape: one `euint8` enum (`1..4`) plus one `euint8` sunk ship id;
+- finalization: neither `verifyDecryptResult` nor `publishDecryptResult`
+  exists in the pinned contracts; finalization reads the on-chain decrypt
+  result that the CoFHE network posts (`FHE.getDecryptResultSafe`);
+- finalization gas: finalization is permissionless and cheap (<125k mock
+  gas), so either player - in practice the player waiting for the result -
+  can finalize; a keeper stays an optional later convenience.
+
+Still open (post-MVP):
+
+- exact browser chain export naming in the cofhejs web entrypoint (Phase 6
+  wires the browser client);
+- whether bot fleet uses encrypted template selection or full encrypted
+  generation.
 
 ## MVP Integration Checklist
 
