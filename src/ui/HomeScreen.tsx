@@ -3,6 +3,8 @@ import { useStore } from '../practice/practiceStore'
 import type { Difficulty } from '../game/types'
 import { MuteButton } from './common'
 import { haptics } from '../lib/haptics'
+import { useWalletSession } from '../onchain/wallet/WalletSessionContext'
+import { WalletSessionBar } from '../onchain/wallet/WalletSessionBar'
 
 const DIFFICULTIES: { id: Difficulty; label: string }[] = [
   { id: 'easy', label: 'Easy' },
@@ -10,23 +12,9 @@ const DIFFICULTIES: { id: Difficulty; label: string }[] = [
   { id: 'hard', label: 'Hard' },
 ]
 
-/**
- * Temporary bridge to the on-chain match route so the wallet connection flow is
- * reachable from the menu before the real friend-match menu lands (Phase 5,
- * GAME-504/505). Mirrors `getActiveDeploymentId()` in
- * `src/onchain/deployments.ts` (the canonical source) but is inlined here to keep
- * the on-chain/viem bundle out of the practice chunk. Replace this handler when
- * GAME-505 (`Play Against Friend` address input) is built.
- */
-function _onchainLobbyPath(): string {
-  const deploymentId = import.meta.env.VITE_ACTIVE_DEPLOYMENT_ID || 'arb-sepolia-v1'
-  return `/match/${deploymentId}/lobby`
-}
-void _onchainLobbyPath;
-
 export function HomeScreen() {
-  const _navigate = useNavigate()
-  void _navigate;
+  const navigate = useNavigate()
+  const wallet = useWalletSession()
   const difficulty = useStore((s) => s.difficulty)
   const setDifficulty = useStore((s) => s.setDifficulty)
   const startPlacement = useStore((s) => s.startPlacement)
@@ -38,6 +26,18 @@ export function HomeScreen() {
       <div className="home-top">
         <MuteButton />
       </div>
+
+      {/* Practice is the hub: surface the connected wallet so disconnect stays
+          reachable here. A disconnected player connects through the friend-match
+          flow, so no connect button clutters the pure-practice menu. */}
+      {wallet.session.isConnected && (
+        <WalletSessionBar
+          session={wallet.session}
+          onConnect={wallet.actions.connect}
+          onDisconnect={wallet.actions.disconnect}
+          configMissing={wallet.configMissing}
+        />
+      )}
       <div className="title-lockup">
         <span className="title-kicker">Tactical FHE Naval Ops</span>
         <h1>
@@ -75,16 +75,16 @@ export function HomeScreen() {
         >
           Practice vs Bot
         </button>
-        <button className="btn" disabled title="On-chain PvP coming soon">
+        <button className="btn" onClick={() => navigate('/match/new')}>
           Play Against Friend
         </button>
-        <button className="btn" disabled title="On-chain PvP coming soon">
+        <button className="btn" disabled title="Open matchmaking coming soon">
           Open Match
         </button>
         <button className="btn ghost" onClick={() => setHowItWorksOpen(true)}>
           How It Works
         </button>
-        <p className="footnote">Local practice build — on-chain PvP on Arbitrum Sepolia coming soon.</p>
+        <p className="footnote">On-chain friend matches run on Arbitrum Sepolia.</p>
       </div>
 
       {howItWorksOpen && (

@@ -238,24 +238,34 @@ rather than the local plaintext `MatchState`.
 
 ## Routes
 
-Recommended routes:
+Implemented routes (Phase 5):
 
-- `/` - wallet-aware entry route with conditional onboarding and wallet entry.
-- `/menu` - main menu after wallet connection.
-- `/play` - opponent selection.
-- `/match/new` - create a friend match.
+- `/` - wallet-aware entry route with conditional onboarding; a connected
+  wallet is routed straight to `/practice` (`src/onchain/menu/EntryScreen.tsx`).
+- `/practice` - local practice, playable without a wallet, and the menu hub:
+  it carries `Play Against Friend`, bot difficulty, How It Works, and (when a
+  wallet is connected) the wallet bar with disconnect. A separate `/menu`
+  Command Deck was removed as redundant — the practice home already lists every
+  MVP entry point, and `Play Against Friend` is the only live on-chain mode.
+- `/match/new` - create a friend match
+  (`src/onchain/match/CreateFriendMatchScreen.tsx`).
 - `/match/:deploymentId/:matchId` - versioned shared match route for join,
-  placement, waiting, battle, resolving, and game over.
+  placement, waiting, battle, resolving, and game over
+  (`src/onchain/MatchRouteShell.tsx`).
+
+Post-MVP routes (not implemented):
+
+- `/play` - opponent selection (when more than one mode exists).
 - `/history` - local and on-chain match history.
 - `/settings` - graphics, sound, wallet, and network settings.
 
-The invite link should point to:
+The invite link points to:
 
 ```txt
 /match/:deploymentId/:matchId
 ```
 
-The match route should inspect contract state and route the player to the right phase inside the same screen shell.
+The match route inspects contract state and routes the player to the right phase inside the same screen shell.
 
 ## Screen Flow
 
@@ -375,9 +385,27 @@ After encrypted fleet submission succeeds, the placement store should clear the 
 
 ## Contract API Layer
 
-The frontend should wrap contract calls in typed hooks or services.
+The frontend wraps contract calls in typed clients; UI code never imports viem
+directly.
 
-Recommended read hooks:
+Implemented (Phase 5, `src/onchain/client/`):
+
+- `BattleshipReadClient` (`getMatch`, `watchMatch`) and
+  `BattleshipWriteClient` (`createMatch`, `joinMatch`, `cancelMatch`,
+  `forfeit`) in `battleshipClient.ts`, bound to the deployment's address over
+  the wallet layer's viem clients;
+- `useBattleshipClients(deploymentId)` resolves + validates the deployment
+  record and assembles the clients (with a test override seam);
+- `useMatchView` (read query with event/focus/reconnect/account/chain
+  refetches), `useTrackedWrite` + `txTracker.ts` (wallet → pending →
+  confirmed/reverted/replaced/dropped lifecycle, duplicate-submit guard),
+  `decodeError.ts` (viem error chains → player-facing `ErrorCode`s),
+  `mapping.ts` (raw struct → `ChainMatchView`).
+
+Every write simulates first so named contract errors surface before the wallet
+opens. Phase 6/7 add the fleet and attack clients on the same pattern.
+
+Recommended read hooks (target shape for later phases):
 
 - `useMatch(matchId)`;
 - `usePlayers(matchId)`;
@@ -417,7 +445,12 @@ Events should trigger refetches. They should not replace contract reads as the s
 
 ## Event Sync Layer
 
-The event sync layer should subscribe to contract events and trigger targeted state refreshes.
+The event sync layer subscribes to contract events and triggers targeted state
+refreshes. Phase 5 implements this for the match lifecycle:
+`BattleshipReadClient.watchMatch` filters decoded logs by `matchId`,
+`useMatchView` dedupes them by block hash + log index and follows every fresh
+event with an authoritative `getMatch` read. Focus, visibility return,
+reconnect, account changes, and chain changes also refetch (GAME-510).
 
 Important events:
 

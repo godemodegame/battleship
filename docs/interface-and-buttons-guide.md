@@ -44,21 +44,21 @@ Recommended colors:
 
 ## Current Local Practice Entry
 
-The playable build does not use the wallet-first entry flow below yet. It opens
-directly on a local practice menu with:
+Since Phase 5 the app root (`/`) is the wallet-aware entry flow described in
+the next section; the local practice menu lives at `/practice` and stays
+playable without a wallet. The practice menu contains:
 
 - title and tagline;
 - `Easy`, `Normal`, and `Hard` bot difficulty selector;
 - primary `Practice vs Bot` action;
-- disabled `Play Against Friend` and `Open Match` actions;
+- `Play Against Friend` action (routes to the friend match creation screen);
+- disabled `Open Match` action (post-MVP);
 - `How It Works` overlay;
 - sound mute control;
-- explicit local-build and on-chain-coming-soon note.
+- Arbitrum Sepolia friend-match note.
 
-This is intentional. Do not show `Connect Wallet`, wallet status, or network
-status before Privy and the Arbitrum Sepolia guard are implemented. Disabled
-on-chain actions must remain visibly unavailable and must not navigate to
-placeholder transaction screens.
+Disabled post-MVP actions must remain visibly unavailable and must not navigate
+to placeholder transaction screens.
 
 The exact current strings and their relationship to the target copy deck are
 documented in `docs/copy-implementation-sync.md`.

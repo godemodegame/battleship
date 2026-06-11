@@ -69,8 +69,14 @@ describe('application routes', () => {
     expect(screen.getByTestId('app-shell')).toBeTruthy()
   })
 
-  it('redirects the root route to practice', () => {
+  it('shows the wallet-aware entry at the root and keeps practice reachable (GAME-504)', async () => {
+    const user = userEvent.setup()
     render(<TestRouter initialEntries={['/']} />)
+    // No wallet provider mounted → disconnected session → short onboarding.
+    expect(screen.getByTestId('entry-screen')).toBeTruthy()
+    expect(screen.getByTestId('onboarding-slides')).toBeTruthy()
+    // Skip keeps local practice playable without a wallet.
+    await user.click(screen.getByTestId('entry-skip'))
     expect(screen.getByRole('button', { name: 'Practice vs Bot' })).toBeTruthy()
   })
 

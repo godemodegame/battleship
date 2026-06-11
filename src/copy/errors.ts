@@ -25,6 +25,23 @@ export const ERROR_MESSAGES = {
   'finalization-failed': 'Result finalization failed',
   'transaction-rejected': 'Transaction rejected',
   'transaction-reverted': 'Transaction reverted',
+  // Phase 5 lifecycle + transaction tracking copy (GAME-503/507/508/511),
+  // wording from the Errors section of docs/copy-deck.md.
+  'match-not-found': 'This match was not found.',
+  'match-load-failed': 'Could not load the match. Check your connection and retry.',
+  'invalid-address': 'Invalid address.',
+  'address-required': 'Enter a wallet address.',
+  'self-invite': 'You cannot invite yourself.',
+  'join-deadline-expired': 'This invite has expired.',
+  'already-joined': 'This match has already started.',
+  'match-finished': 'Match already finished.',
+  'cannot-cancel': 'This match can no longer be cancelled.',
+  'only-creator': 'Only the match creator can do this.',
+  'not-participant': 'You are not a player in this match.',
+  'fleet-already-submitted': 'Fleet already submitted.',
+  'invalid-status': 'This action is not available right now.',
+  'transaction-cancelled': 'Transaction was cancelled in the wallet.',
+  'transaction-dropped': 'Transaction was dropped by the network. Try again.',
   unknown: 'Something went wrong',
 } as const
 
@@ -36,7 +53,8 @@ export function errorMessage(code: ErrorCode): string {
 
 /**
  * Known contract revert identifiers mapped to a player-facing code. Names mirror
- * the errors planned in `docs/contract-api.md`; unknown names degrade safely.
+ * the custom errors in the generated `BattleshipGame` ABI
+ * (`src/onchain/abi/battleshipGame.ts`); unknown names degrade safely.
  */
 const CONTRACT_ERROR_CODES: Record<string, ErrorCode> = {
   NotInvited: 'not-invited',
@@ -48,6 +66,24 @@ const CONTRACT_ERROR_CODES: Record<string, ErrorCode> = {
   ShotStillResolving: 'shot-resolving',
   InvalidPlacement: 'invalid-placement',
   WrongNetwork: 'wrong-network',
+  // Real ABI error names (Phase 3/4 contract), wired for Phase 5 writes.
+  MatchNotFound: 'match-not-found',
+  NotInvitedOpponent: 'not-invited',
+  CreatorCannotJoinOwnMatch: 'not-invited',
+  OpponentAlreadyJoined: 'already-joined',
+  JoinDeadlineExpired: 'join-deadline-expired',
+  InvalidInvitedOpponent: 'invalid-address',
+  SelfInviteNotAllowed: 'self-invite',
+  InvalidMatchStatus: 'invalid-status',
+  CannotCancelStartedMatch: 'cannot-cancel',
+  OnlyCreator: 'only-creator',
+  MatchAlreadyFinished: 'match-finished',
+  FleetAlreadySubmitted: 'fleet-already-submitted',
+  NotMatchPlayer: 'not-participant',
+  NotMatchPlayerAddress: 'not-participant',
+  PendingShotExists: 'shot-resolving',
+  PlacementValidationPending: 'invalid-status',
+  NoTimeoutAvailable: 'invalid-status',
 }
 
 export function mapContractError(name: string | null | undefined): ErrorCode {

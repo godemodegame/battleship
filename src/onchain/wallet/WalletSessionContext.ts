@@ -11,6 +11,10 @@
 
 import { createContext, useContext } from 'react'
 import type { ErrorCode } from '../../copy/errors'
+import type {
+  PublicClientLike,
+  WalletClientLike,
+} from '../client/battleshipClient'
 import { DISCONNECTED_SESSION, type WalletSession } from './session'
 import type { WriteBlockReason } from './writeGuard'
 
@@ -67,6 +71,16 @@ export interface WalletContextValue {
    * CoFHE permits, pending receipts). (GAME-208)
    */
   accountEpoch: number
+  /**
+   * viem public client for contract reads (GAME-502). Present whenever the
+   * provider is mounted with a Privy config; null in the disconnected default.
+   */
+  publicClient: PublicClientLike | null
+  /**
+   * viem wallet client for the active external wallet (GAME-502). Null until a
+   * wallet is connected and its EIP-1193 provider resolves.
+   */
+  walletClient: WalletClientLike | null
   actions: WalletActions
 }
 
@@ -82,6 +96,8 @@ export const DISCONNECTED_CONTEXT: WalletContextValue = {
   balanceStatus: 'unknown',
   handoffRestored: false,
   accountEpoch: 0,
+  publicClient: null,
+  walletClient: null,
   actions: {
     connect: noop,
     disconnect: noop,

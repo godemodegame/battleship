@@ -62,7 +62,12 @@ function activeWalletOf(wallets: ConnectedWallet[]): ConnectedWallet | null {
 function WalletSessionBridge({ children }: { children: ReactNode }) {
   const { ready, authenticated, login, logout, connectWallet } = usePrivy()
   const { wallets } = useWallets()
-  const wallet = activeWalletOf(wallets)
+  // An injected wallet stays in `wallets` after logout (the extension's
+  // connection to the site outlives the Privy session). Only an authenticated
+  // session has an active wallet; otherwise Disconnect would appear to do
+  // nothing while the wallet client, balance, and account epoch kept the old
+  // account alive (GAME-204/208).
+  const wallet = ready && authenticated ? activeWalletOf(wallets) : null
 
   const [connecting, setConnecting] = useState(false)
   const [lastError, setLastError] = useState<ErrorCode | null>(null)
@@ -285,6 +290,10 @@ function WalletSessionBridge({ children }: { children: ReactNode }) {
     balanceStatus,
     handoffRestored,
     accountEpoch,
+    // Typed contract clients are built over these (GAME-502). The structural
+    // *Like types are the subset of the viem API the client layer uses.
+    publicClient: publicClient as unknown as WalletContextValue['publicClient'],
+    walletClient: walletClient as unknown as WalletContextValue['walletClient'],
     actions: {
       connect,
       disconnect,

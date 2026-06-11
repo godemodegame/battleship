@@ -98,6 +98,9 @@ beforeEach(() => {
   mocks.progress.errors = []
   mocks.sfx.muted = false
   mocks.sfx.setMuted.mockClear()
+  // `/` is the wallet-aware entry since Phase 5 (GAME-504); these suites cover
+  // the practice screens, so mount the app on the practice route.
+  window.history.replaceState(null, '', '/practice')
 })
 
 afterEach(() => {
@@ -114,8 +117,10 @@ describe('HomeScreen', () => {
     expect(hard.getAttribute('aria-checked')).toBe('true')
     expect(useStore.getState().difficulty).toBe('hard')
 
+    // Phase 5: Play Against Friend is live (routes to /match/new); Open Match
+    // stays disabled until post-MVP matchmaking exists.
     expect((screen.getByRole('button', { name: 'Play Against Friend' }) as HTMLButtonElement).disabled)
-      .toBe(true)
+      .toBe(false)
     expect((screen.getByRole('button', { name: 'Open Match' }) as HTMLButtonElement).disabled)
       .toBe(true)
 

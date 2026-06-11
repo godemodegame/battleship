@@ -37,22 +37,24 @@ Current visible copy:
 | Difficulty label | `Bot Difficulty` | Practice-only |
 | Difficulty values | `Easy`, `Normal`, `Hard` | Practice-only |
 | Primary action | `Practice vs Bot` | Practice-only and intentionally primary |
-| Disabled action | `Play Against Friend` | Target PvP entry, not implemented |
-| Disabled action | `Open Match` | Target public match entry, not implemented |
+| Action | `Play Against Friend` | Live since Phase 5; routes to friend match creation |
+| Disabled action | `Open Match` | Target public match entry, post-MVP |
 | Help action | `How It Works` | Current and target-safe |
-| Build note | `Local practice build — on-chain PvP on Arbitrum Sepolia coming soon.` | Temporary implementation disclosure |
+| Build note | `On-chain friend matches run on Arbitrum Sepolia.` | Implementation disclosure |
 
-The disabled PvP buttons use the tooltip:
+The disabled Open Match button uses the tooltip:
 
-- `On-chain PvP coming soon`
+- `Open matchmaking coming soon`
 
 Rules:
 
-- keep disabled on-chain actions visibly disabled;
-- never show `Connect Wallet` until Privy is integrated;
-- do not imply that a local bot result is an on-chain match result;
-- keep the local-build disclosure visible while practice is the only playable
-  mode.
+- keep disabled post-MVP actions visibly disabled;
+- do not imply that a local bot result is an on-chain match result.
+
+Since Phase 5 the wallet-first copy (onboarding, main menu `Command Deck`,
+`Invite Friend` creation, join/waiting/cancelled/expired match states,
+transaction states, and explorer labels) ships from typed modules in
+`src/copy/en.ts`, sourced from `docs/copy-deck.md`.
 
 ## Current How-It-Works Copy
 

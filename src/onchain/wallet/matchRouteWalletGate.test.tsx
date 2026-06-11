@@ -112,10 +112,14 @@ describe('MatchRouteShell wallet gate (non-demo)', () => {
     )
   })
 
-  it('drives the phase from a ready session (non-participant sees waiting-for-opponent)', () => {
+  it('shows wallet identity and the pending-deployment state for a ready session', () => {
+    // Phase 5: real ids load contract state. The committed manifest has no live
+    // contract yet, so a ready wallet sees the recoverable pending state — no
+    // phantom match phase is synthesized for non-demo ids anymore.
     renderShell(makeValue({ session: READY_SESSION, canWrite: true, writeBlockedReason: null }))
-    expect(screen.getByTestId('match-phase-kind').textContent).toContain('waiting-for-opponent')
     expect(screen.getByTestId('wallet-address').textContent).toBe('0x9999…9999')
+    expect(screen.getByTestId('deployment-pending')).toBeTruthy()
+    expect(screen.queryByTestId('match-phase-kind')).toBeNull()
     expect(screen.queryByTestId('wallet-connect')).toBeNull()
   })
 

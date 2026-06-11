@@ -5,8 +5,24 @@ import {
   phaseLabel,
   type MatchView,
 } from './phaseResolver'
-import { getActiveDeploymentId, getDeployment, isDeploymentReady } from './deployments'
-import { deploymentCopy, matchRouteCopy, walletCopy } from '../copy/en'
+import { getActiveDeploymentId } from './deployments'
+import {
+  deploymentCopy,
+  joinCopy,
+  matchRouteCopy,
+  matchStateCopy,
+  phaseCopy,
+  walletCopy,
+} from '../copy/en'
+import { errorMessage } from '../copy/errors'
+import { parseMatchIdParam } from './client/mapping'
+import { useBattleshipClients } from './client/useBattleshipClients'
+import { useMatchView } from './useMatchView'
+import {
+  InviteWaitingPanel,
+  JoinPanel,
+  MatchIdentityPanel,
+} from './match/MatchLifecyclePanels'
 import { useWalletSession } from './wallet/WalletSessionContext'
 import { WalletSessionBar } from './wallet/WalletSessionBar'
 import { WrongNetworkPanel } from './wallet/WrongNetworkPanel'
@@ -23,8 +39,8 @@ const DEMO_SPECTATOR = '0x4444444444444444444444444444444444444444' as const
  * for visual verification and route tests without any contract client.
  *
  * Selection uses explicit rules checked in order (specific keys like 'battle-mine'
- * before any potential overlap). Real implementation will replace this with
- * contract reads + a proper MatchView from on-chain state.
+ * before any potential overlap). Real (non-demo) ids never reach this factory —
+ * they load `ChainMatchView`s through the typed read client (GAME-503).
  */
 function makeDemoMatch(deploymentId: string, matchId: string): MatchView {
   const base: MatchView = {
@@ -41,16 +57,12 @@ function makeDemoMatch(deploymentId: string, matchId: string): MatchView {
   const id = (matchId || '').toLowerCase()
 
   // Only apply special demo phase synthesis when the matchId contains an explicit
-  // "demo" marker. This prevents a real future on-chain matchId (opaque, e.g. a uuid
-  // or on-chain id) that happens to contain substrings like "win", "place", "battle",
-  // "join", "resolv" etc. from accidentally activating a mocked phase or viewer.
-  // Supported URLs now use the "demo-*" convention (see routes tests and comments below).
-  // The entire makeDemoMatch factory is temporary and will be replaced by real
-  // MatchView loading from contract reads in later slices.
+  // "demo" marker. This prevents a real on-chain matchId from accidentally
+  // activating a mocked phase or viewer. Supported URLs use the "demo-*"
+  // convention (see routes tests and comments below). The factory stays for
+  // visual phase verification; the live path never consults it.
   const hasDemoMarker = id.includes('demo')
   if (!hasDemoMarker) {
-    // Plain ids (e.g. the restore-navigation test using "42") get the safe default
-    // creator + WaitingForOpponent view. No special patches.
     return base
   }
 
@@ -109,8 +121,14 @@ function PhasePanel({ phase }: { phase: ReturnType<typeof resolveMatchPhase> }) 
   )
 }
 
-/** Shown when an invite link references a deployment id not in the manifest. */
-function DeploymentUnavailable({ deploymentId }: { deploymentId: string }) {
+/** Shown when an invite link references an unknown or invalid deployment id. */
+function DeploymentUnavailable({
+  deploymentId,
+  reason,
+}: {
+  deploymentId: string
+  reason: 'unknown' | 'invalid'
+}) {
   return (
     <div
       className="overlay home"
@@ -121,11 +139,15 @@ function DeploymentUnavailable({ deploymentId }: { deploymentId: string }) {
         <span className="title-kicker">{matchRouteCopy.kicker}</span>
         <h1>{matchRouteCopy.heading}</h1>
         <p className="tagline" data-testid="deployment-unavailable">
-          {deploymentCopy.unknownTitle}
+          {reason === 'invalid' ? deploymentCopy.invalidTitle : deploymentCopy.unknownTitle}
         </p>
       </div>
       <div className="home-actions">
-        <p className="footnote">{deploymentCopy.unknownBody(deploymentId)}</p>
+        <p className="footnote">
+          {reason === 'invalid'
+            ? deploymentCopy.invalidBody(deploymentId)
+            : deploymentCopy.unknownBody(deploymentId)}
+        </p>
         <Link className="btn primary" to="/practice">
           {matchRouteCopy.backToPractice}
         </Link>
@@ -138,43 +160,57 @@ export function MatchRouteShell() {
   const params = useParams()
   const wallet = useWalletSession()
   const deploymentId = params.deploymentId ?? getActiveDeploymentId()
-  const matchId = params.matchId ?? 'demo'
+  const matchIdParam = params.matchId ?? 'demo'
+
+  const id = matchIdParam.toLowerCase()
+  const hasDemoMarker = id.includes('demo')
+
+  // GAME-501/502: resolve + validate the deployment and bind typed clients to
+  // its contract address. Real reads run only for live deployments.
+  const clients = useBattleshipClients(deploymentId)
+  const { resolution, readClient, writeClient } = clients
+  const ready = resolution.ok && resolution.ready
+
+  // GAME-503/509/510: authoritative match view, kept fresh by contract events,
+  // focus/reconnect, and account/chain changes. Demo ids never reach the chain.
+  const numericMatchId = hasDemoMarker ? null : parseMatchIdParam(matchIdParam)
+  const query = useMatchView({
+    readClient,
+    matchId: numericMatchId,
+    accountEpoch: wallet.accountEpoch,
+    chainId: wallet.session.chainId,
+  })
+
+  // GAME-210: consume the transient handoff-restore signal after the route has
+  // had a chance to react. Writes call prepareHandoff() right before opening a
+  // mobile wallet; the refetch hooks in useMatchView re-read on focus return.
+  useEffect(() => {
+    if (!hasDemoMarker && wallet.handoffRestored) {
+      wallet.actions.clearHandoffRestore()
+    }
+  }, [hasDemoMarker, wallet.handoffRestored, wallet.actions])
 
   // GAME-110: resolve the versioned deployment before rendering any match phase.
   // Old invite links must keep pointing at their original deployment; an unknown
-  // id resolves to a recoverable "unavailable" state instead of a phantom match.
-  const deployment = getDeployment(deploymentId)
-  if (!deployment) {
-    return <DeploymentUnavailable deploymentId={deploymentId} />
+  // or invalid id resolves to a recoverable "unavailable" state.
+  if (!resolution.ok) {
+    return <DeploymentUnavailable deploymentId={deploymentId} reason={resolution.reason} />
   }
 
   // Demo-only: synthesize a mock MatchView from the URL so the route shell can
   // demonstrate phase rendering without a contract client and without ever
   // importing the local plaintext attack engine (GAME-103 empty shell).
-  const demoMatch = makeDemoMatch(deploymentId, matchId)
+  const demoMatch = makeDemoMatch(deploymentId, matchIdParam)
 
-  // Demo viewer/wallet context is also derived from matchId for broader phase coverage
-  // in the shell (e.g. "demo-join-invited" will render the 'join' phase for the invited wallet).
-  // Supported demo tokens (extendable; require "demo" marker to avoid clashing with real IDs):
+  // Demo viewer/wallet context is derived from matchId for broader phase coverage
+  // in the shell (e.g. "demo-join-invited" renders the 'join' phase for the
+  // invited wallet). Supported demo tokens (require the "demo" marker):
   //   - demo-join / demo-invited → invited wallet (exercises 'join')
-  //   - demo-observer / demo-spectator → third-party non-participant wallet (exercises
-  //     the participant guard in resolveMatchPhase → waiting-for-opponent for active phases)
-  //   - demo-no-wallet → hasWallet:false (exercises 'wallet-required')
-  //   - demo-wrong-chain → isCorrectChain:false (exercises 'wrong-network')
-  //   - (default for demo- ids) creator wallet for placement/battle/finished/etc.
-  //   - plain ids (e.g. "42") → safe default creator + waiting-for-opponent view
-  // NOTE: Full coverage of every MatchPhase kind through the route shell + PhasePanel
-  // is intentionally limited in this slice; unit tests in phaseResolver.test.ts cover the
-  // pure function exhaustively. Real implementation will source values from Privy + chain
-  // guard and the match from on-chain reads (public MatchView shape only).
-  const id = matchId.toLowerCase()
-  const hasDemoMarker = id.includes('demo')
-
-  // Demo ids form a self-contained visualization harness that derives the viewer
-  // wallet + active chain from the URL (kept from GAME-103 so the Phase 1 route
-  // tests stay green). Real match ids source wallet identity and the active chain
-  // from the live Privy session (GAME-204/205). The harness is removed when real
-  // contract reads land (Phase 5).
+  //   - demo-observer / demo-spectator → third-party non-participant wallet
+  //   - demo-no-wallet → hasWallet:false; demo-wrong-chain → isCorrectChain:false
+  //   - (default for demo- ids) creator wallet
+  // Real ids source wallet identity from the live Privy session and the match
+  // from on-chain reads (public MatchView shape only).
   const resolverInput = hasDemoMarker
     ? {
         hasWallet: !id.includes('no-wallet'),
@@ -192,28 +228,32 @@ export function MatchRouteShell() {
         hasWallet: wallet.session.isConnected,
         walletAddress: wallet.session.address,
         isCorrectChain: wallet.session.isCorrectChain,
-        match: demoMatch,
+        match: query.match,
       }
 
   const phase = resolveMatchPhase(resolverInput)
-  const ready = isDeploymentReady(deployment)
 
-  // GAME-210: consume the transient handoff-restore signal after the route has
-  // had a chance to react (e.g. trigger a refetch in later phases). Real flows
-  // will also call prepareHandoff() right before a write that may open a mobile
-  // wallet (connect is already instrumented in the provider).
-  useEffect(() => {
-    if (!hasDemoMarker && wallet.handoffRestored) {
-      wallet.actions.clearHandoffRestore()
-    }
-  }, [hasDemoMarker, wallet.handoffRestored, wallet.actions])
+  const me = wallet.session.address
+  const match = query.match
+  const isCreator = Boolean(match && me && match.creator === me)
+  const isInvited = Boolean(match && me && match.invitedOpponent === me)
+
+  // What the real (non-demo) route shows in its content slot, by priority:
+  // wallet gates → deployment readiness → match query state → resolved phase.
+  const walletGate = phase.kind === 'wallet-required' || phase.kind === 'wrong-network'
+  const showLoading =
+    !walletGate && ready && numericMatchId !== null && (query.status === 'loading' || query.status === 'idle')
+  const showNotFound =
+    !walletGate && ready && (numericMatchId === null || query.status === 'not-found')
+  const showError = !walletGate && ready && numericMatchId !== null && query.status === 'error'
+  const showMatch = !walletGate && ready && query.status === 'ready' && match !== null
 
   return (
     <div className="overlay home" data-game-slice="onchain-shell-103" data-testid="match-route-shell">
       <div className="title-lockup">
         <span className="title-kicker">{matchRouteCopy.kicker}</span>
         <h1>{matchRouteCopy.heading}</h1>
-        <p className="tagline">{matchRouteCopy.tagline(deploymentId, matchId)}</p>
+        <p className="tagline">{matchRouteCopy.tagline(deploymentId, matchIdParam)}</p>
       </div>
 
       {!hasDemoMarker && (
@@ -225,7 +265,11 @@ export function MatchRouteShell() {
         />
       )}
 
-      <PhasePanel phase={phase} />
+      {/* Demo harness renders the phase panel exactly as before. */}
+      {hasDemoMarker && <PhasePanel phase={phase} />}
+
+      {/* Real route: wallet gates first (panel keeps the phase visible). */}
+      {!hasDemoMarker && walletGate && <PhasePanel phase={phase} />}
 
       {!hasDemoMarker && phase.kind === 'wallet-required' && !wallet.configMissing && (
         <p className="footnote" data-testid="wallet-connect-prompt">
@@ -251,9 +295,6 @@ export function MatchRouteShell() {
             session={wallet.session}
             balanceWei={wallet.balance}
             onFund={() => {
-              // GAME-209 + GAME-210: record handoff intent (so visibility/focus resume
-              // can restore the /match/* route after the user returns from the faucet tab
-              // or a wallet interaction on mobile), then perform the actual funding action.
               wallet.actions.prepareHandoff()
               if (typeof window !== 'undefined') {
                 window.open(FAUCET_URL, '_blank', 'noopener,noreferrer')
@@ -261,6 +302,92 @@ export function MatchRouteShell() {
             }}
           />
         )}
+
+      {/* Match query states (GAME-508): loading, unavailable, not found. */}
+      {showLoading && (
+        <p className="status-sub" data-testid="match-loading">
+          {matchStateCopy.loading}
+        </p>
+      )}
+
+      {showError && (
+        <div className="home-actions" data-testid="match-error">
+          <p className="error-note" role="alert">
+            {errorMessage(query.error ?? 'match-load-failed')}
+          </p>
+          <button className="btn" data-testid="match-retry" onClick={query.refetch}>
+            {matchStateCopy.retry}
+          </button>
+        </div>
+      )}
+
+      {showNotFound && (
+        <div className="home-actions" data-testid="match-not-found">
+          <p className="status-label">{phaseCopy.notFound}</p>
+          <p className="status-sub">{errorMessage('match-not-found')}</p>
+        </div>
+      )}
+
+      {/* Live match content, keyed off the resolved phase (GAME-507/508). */}
+      {showMatch && match && (
+        <>
+          <PhasePanel phase={phase} />
+
+          {phase.kind === 'join' && (
+            <JoinPanel
+              match={match}
+              writeClient={writeClient}
+              canWrite={wallet.canWrite}
+              onJoined={query.refetch}
+              prepareHandoff={wallet.actions.prepareHandoff}
+            />
+          )}
+
+          {phase.kind === 'waiting-for-opponent' &&
+            match.status === 'WaitingForOpponent' &&
+            isCreator && (
+              <InviteWaitingPanel
+                match={match}
+                writeClient={writeClient}
+                canWrite={wallet.canWrite}
+                onCancelled={query.refetch}
+                prepareHandoff={wallet.actions.prepareHandoff}
+              />
+            )}
+
+          {phase.kind === 'waiting-for-opponent' &&
+            match.status === 'WaitingForOpponent' &&
+            !isCreator &&
+            !isInvited && (
+              <p className="footnote" data-testid="wrong-wallet-note">
+                {joinCopy.wrongWallet}
+              </p>
+            )}
+
+          {phase.kind === 'waiting-for-opponent' && match.status !== 'WaitingForOpponent' && (
+            <p className="footnote" data-testid="spectator-note">
+              {matchStateCopy.spectatorActiveBody}
+            </p>
+          )}
+
+          {phase.kind === 'cancelled' && (
+            <p className="status-sub" data-testid="match-cancelled">
+              {matchStateCopy.cancelledBody}
+            </p>
+          )}
+
+          {phase.kind === 'forfeited' && (
+            <p className="status-sub" data-testid="match-forfeited">
+              {matchStateCopy.forfeitedBody}
+            </p>
+          )}
+
+          <MatchIdentityPanel
+            match={match}
+            contractAddress={resolution.ok ? resolution.record.address : null}
+          />
+        </>
+      )}
 
       <div className="home-actions">
         <Link className="btn primary" to="/practice">
@@ -271,7 +398,7 @@ export function MatchRouteShell() {
             {deploymentCopy.pendingNote}
           </p>
         )}
-        <p className="footnote">{matchRouteCopy.shellFootnote}</p>
+        {hasDemoMarker && <p className="footnote">{matchRouteCopy.shellFootnote}</p>}
         {/* Expose handoff restore signal for tests / visual verification (GAME-210). */}
         {!hasDemoMarker && wallet.handoffRestored && (
           <p className="footnote" data-testid="handoff-restored">

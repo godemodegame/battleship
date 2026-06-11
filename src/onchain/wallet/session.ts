@@ -42,7 +42,10 @@ export interface WalletSession {
 export interface RawWalletState {
   /** Privy `ready` — the SDK has finished initializing. */
   ready: boolean
-  /** Privy `authenticated` — a session exists. Not sufficient for gameplay. */
+  /**
+   * Privy `authenticated` — a session exists. Necessary but not sufficient for
+   * gameplay: without it any lingering injected-wallet address is ignored.
+   */
   authenticated: boolean
   /** Active external EVM address, if any (any casing). */
   address: string | null | undefined
@@ -82,6 +85,16 @@ export function deriveWalletSession(raw: RawWalletState): WalletSession {
 
   if (!raw.ready) {
     return DISCONNECTED_SESSION
+  }
+
+  if (!raw.authenticated) {
+    // No Privy session. An injected wallet may still be listed by the browser
+    // after logout (the extension connection outlives the Privy session), so a
+    // lingering address must NOT count as connected — otherwise Disconnect
+    // appears to do nothing. A login flow in flight still reads as connecting.
+    return raw.connecting
+      ? { ...DISCONNECTED_SESSION, status: 'connecting' }
+      : DISCONNECTED_SESSION
   }
 
   if (!address) {

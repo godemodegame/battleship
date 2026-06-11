@@ -63,4 +63,19 @@ describe('deriveWalletSession', () => {
     const s = deriveWalletSession(raw({ authenticated: true, address: null }))
     expect(s.isConnected).toBe(false)
   })
+
+  it('ignores a lingering injected-wallet address after logout (disconnect works)', () => {
+    // After Privy logout the extension may still report the wallet; without a
+    // session the address must not count as connected, or Disconnect appears
+    // to do nothing.
+    const s = deriveWalletSession(raw({ authenticated: false }))
+    expect(s).toEqual(DISCONNECTED_SESSION)
+  })
+
+  it('still reports connecting during a login flow with a stale address visible', () => {
+    const s = deriveWalletSession(raw({ authenticated: false, connecting: true }))
+    expect(s.status).toBe('connecting')
+    expect(s.isConnected).toBe(false)
+    expect(s.address).toBeNull()
+  })
 })
