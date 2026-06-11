@@ -5,12 +5,77 @@ import { MuteButton } from './common'
 import { haptics } from '../lib/haptics'
 import { useWalletSession } from '../onchain/wallet/WalletSessionContext'
 import { WalletSessionBar } from '../onchain/wallet/WalletSessionBar'
+import {
+  useSettingsStore,
+  type MotionSetting,
+  type QualitySetting,
+} from './settingsStore'
 
 const DIFFICULTIES: { id: Difficulty; label: string }[] = [
   { id: 'easy', label: 'Easy' },
   { id: 'normal', label: 'Normal' },
   { id: 'hard', label: 'Hard' },
 ]
+
+const MOTION_OPTIONS: { id: MotionSetting; label: string }[] = [
+  { id: 'system', label: 'System' },
+  { id: 'reduced', label: 'Reduced' },
+  { id: 'full', label: 'Full' },
+]
+
+const QUALITY_OPTIONS: { id: QualitySetting; label: string }[] = [
+  { id: 'auto', label: 'Auto' },
+  { id: 'low', label: 'Low' },
+  { id: 'medium', label: 'Medium' },
+  { id: 'high', label: 'High' },
+]
+
+/** Display settings (GAME-807): reduced motion + graphics quality. */
+function DisplaySettings() {
+  const motion = useSettingsStore((s) => s.motion)
+  const quality = useSettingsStore((s) => s.quality)
+  const setMotion = useSettingsStore((s) => s.setMotion)
+  const setQuality = useSettingsStore((s) => s.setQuality)
+
+  return (
+    <>
+      <div className="difficulty-row" role="radiogroup" aria-label="Motion">
+        <span className="difficulty-label">Motion</span>
+        <div className="segmented">
+          {MOTION_OPTIONS.map((option) => (
+            <button
+              key={option.id}
+              role="radio"
+              aria-checked={motion === option.id}
+              data-testid={`motion-${option.id}`}
+              className={motion === option.id ? 'on' : ''}
+              onClick={() => setMotion(option.id)}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
+      </div>
+      <div className="difficulty-row" role="radiogroup" aria-label="Graphics Quality">
+        <span className="difficulty-label">Graphics</span>
+        <div className="segmented">
+          {QUALITY_OPTIONS.map((option) => (
+            <button
+              key={option.id}
+              role="radio"
+              aria-checked={quality === option.id}
+              data-testid={`quality-${option.id}`}
+              className={quality === option.id ? 'on' : ''}
+              onClick={() => setQuality(option.id)}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
+      </div>
+    </>
+  )
+}
 
 export function HomeScreen() {
   const navigate = useNavigate()
@@ -81,6 +146,7 @@ export function HomeScreen() {
         <button className="btn" disabled title="Open matchmaking coming soon">
           Open Match
         </button>
+        <DisplaySettings />
         <button className="btn ghost" onClick={() => setHowItWorksOpen(true)}>
           How It Works
         </button>

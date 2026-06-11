@@ -30,6 +30,9 @@ export const ERROR_MESSAGES = {
   // wording from the Errors section of docs/copy-deck.md.
   'match-not-found': 'This match was not found.',
   'match-load-failed': 'Could not load the match. Check your connection and retry.',
+  // GAME-804 degraded network/deployment states.
+  'rpc-unreachable': 'The network RPC is not responding. Check your connection and retry.',
+  'stale-deployment': 'No contract was found at the recorded address. This deployment may be stale.',
   'invalid-address': 'Invalid address.',
   'address-required': 'Enter a wallet address.',
   'self-invite': 'You cannot invite yourself.',

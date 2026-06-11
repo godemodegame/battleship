@@ -112,7 +112,7 @@ describe('HomeScreen', () => {
     const user = userEvent.setup()
     render(<App />)
 
-    const hard = screen.getByRole('radio', { name: 'Hard' })
+    const hard = await screen.findByRole('radio', { name: 'Hard' })
     await user.click(hard)
     expect(hard.getAttribute('aria-checked')).toBe('true')
     expect(useStore.getState().difficulty).toBe('hard')
@@ -141,7 +141,7 @@ describe('PlacementScreen', () => {
     useStore.getState().startPlacement()
     render(<App />)
 
-    const confirm = screen.getByRole('button', { name: 'Confirm Fleet' }) as HTMLButtonElement
+    const confirm = (await screen.findByRole('button', { name: 'Confirm Fleet' })) as HTMLButtonElement
     const clear = screen.getByRole('button', { name: 'Clear' }) as HTMLButtonElement
     expect(screen.getByText(/0\/10 placed/)).toBeTruthy()
     expect(confirm.disabled).toBe(true)

@@ -33,19 +33,19 @@ describe('EntryScreen (GAME-504)', () => {
     expect(wallet.actions.connect).toHaveBeenCalledOnce()
   })
 
-  it('skips onboarding for a connected wallet and lands on the practice hub', () => {
+  it('skips onboarding for a connected wallet and lands on the practice hub', async () => {
     renderApp({ route: '/', wallet: connectedWalletValue(CREATOR) })
     expect(screen.queryByTestId('entry-screen')).toBeNull()
     // Practice doubles as the menu; the connected wallet bar is shown there so
     // disconnect stays reachable.
-    expect(screen.getByRole('button', { name: 'Practice vs Bot' })).toBeTruthy()
+    expect(await screen.findByRole('button', { name: 'Practice vs Bot' })).toBeTruthy()
     expect(screen.getByTestId('wallet-address').textContent).toBe('0xaaaa…0001')
   })
 
   it('keeps practice reachable through Skip without a wallet', async () => {
     renderApp({ route: '/', wallet: makeWalletValue() })
     await userEvent.click(screen.getByTestId('entry-skip'))
-    expect(screen.getByRole('button', { name: 'Practice vs Bot' })).toBeTruthy()
+    expect(await screen.findByRole('button', { name: 'Practice vs Bot' })).toBeTruthy()
     // No wallet bar clutters the pure-practice menu when disconnected.
     expect(screen.queryByTestId('wallet-address')).toBeNull()
   })
@@ -60,14 +60,14 @@ describe('EntryScreen (GAME-504)', () => {
 describe('practice hub wallet bar (GAME-504)', () => {
   it('routes Play Against Friend from the practice hub to match creation', async () => {
     renderApp({ route: '/practice', wallet: connectedWalletValue(CREATOR) })
-    await userEvent.click(screen.getByRole('button', { name: 'Play Against Friend' }))
-    expect(screen.getByTestId('create-match-screen')).toBeTruthy()
+    await userEvent.click(await screen.findByRole('button', { name: 'Play Against Friend' }))
+    expect(await screen.findByTestId('create-match-screen')).toBeTruthy()
   })
 
   it('lets a connected wallet disconnect from the practice hub', async () => {
     const wallet = connectedWalletValue(CREATOR)
     renderApp({ route: '/practice', wallet })
-    await userEvent.click(screen.getByTestId('wallet-disconnect'))
+    await userEvent.click(await screen.findByTestId('wallet-disconnect'))
     expect(wallet.actions.disconnect).toHaveBeenCalledOnce()
   })
 })

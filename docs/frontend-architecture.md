@@ -928,11 +928,15 @@ Strict friend invite remains the MVP default. The contract should enforce the in
 Allowed local persistence:
 
 - onboarding completed flag;
-- graphics settings;
+- graphics settings (`settings:display:v1` in localStorage: motion + quality,
+  GAME-807);
 - sound settings;
 - last used wallet preference only when Privy manages it;
 - recently viewed match ids;
-- intended route and match id during a mobile wallet handoff.
+- intended route and match id during a mobile wallet handoff;
+- in-flight transaction hashes scoped by deployment|match|address|kind
+  (`onchain:pending-tx:v1` in sessionStorage, GAME-802) — public chain data
+  only, cleared on terminal state, account change, and disconnect.
 
 Forbidden local persistence:
 
@@ -942,6 +946,43 @@ Forbidden local persistence:
 - broad Fhenix permits;
 - decrypted hidden values;
 - private wallet data.
+
+## Phase 8 Hardening Layer
+
+Phase 8 (GAME-801..810) added the mobile/recovery layer on top of the
+structures above:
+
+- **Suspension recovery (GAME-802)** — `src/onchain/client/pendingTxStore.ts`
+  persists each in-flight write's hash under a
+  deployment|match|address|kind scope; `useTrackedWrite(persistScope)` records
+  and clears it through the tracked lifecycle, and
+  `src/onchain/client/usePendingTxRecovery.ts` re-attaches to stored hashes on
+  mount/visibility return and refetches the authoritative phase. The match
+  route shows a visible "resuming" status while re-attaching.
+- **Handoff coverage (GAME-801)** — every contract write calls
+  `prepareHandoff()` before reaching the wallet; ordering is asserted by
+  `src/onchain/wallet/handoffWritePaths.test.tsx`.
+- **Degraded states (GAME-804)** — `balanceStatus: 'low'` with
+  `LowBalanceWarning`, `rpc-unreachable` mapping for transport failures,
+  `src/onchain/useDeploymentHealth.ts` bytecode probe for stale deployments,
+  and an unsupported-wallet state when the EIP-1193 provider fails.
+- **Connectivity and assets (GAME-805)** — `src/lib/online.ts` drives the
+  shell offline banner; the loading overlay offers an explicit retry on
+  required asset failures.
+- **Display settings (GAME-807)** — `src/ui/settingsStore.ts` resolves motion
+  (system/reduced/full) and quality (auto/low/medium/high); the scene applies
+  the quality profile at Canvas creation and reduced motion collapses CSS,
+  camera, ocean, and VFX animation.
+- **Code splitting (GAME-808)** — practice/create/match routes are lazy
+  chunks; the Privy + viem bridge lives in the lazily loaded
+  `src/onchain/wallet/PrivyWalletBridge.tsx` behind the thin `WalletProvider`
+  gate; vendor chunks (three/viem/react) are split in `vite.config.ts`.
+- **Local perf instrumentation (GAME-809)** — `src/lib/perf.ts` records load
+  time, fps, heap, encryption duration, and transaction latency; `?perf=1`
+  renders the shell overlay. Nothing is uploaded.
+- **Copy quality gates (GAME-810)** — `src/copy/copyQuality.test.ts`
+  (English-only, no internals) and `src/onchain/rawErrorExposure.test.tsx`
+  (raw revert/hex text never renders).
 
 ## PWA and Mobile App Option
 

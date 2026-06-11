@@ -51,11 +51,13 @@ const fragment = /* glsl */ `
   }
 `
 
-export function Ocean() {
+export function Ocean({ animated = true }: { animated?: boolean }) {
   const material = useRef<THREE.ShaderMaterial>(null)
   const uniforms = useMemo(() => ({ uTime: { value: 0 } }), [])
+  // GAME-807: low quality / reduced motion freezes the shader time, leaving a
+  // static dark-glass surface with no per-frame uniform updates.
   useFrame((_, dt) => {
-    if (material.current) material.current.uniforms.uTime.value += dt
+    if (animated && material.current) material.current.uniforms.uTime.value += dt
   })
   return (
     <mesh rotation-x={-Math.PI / 2} position-y={-0.22}>

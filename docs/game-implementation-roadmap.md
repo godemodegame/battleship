@@ -701,20 +701,24 @@ Goal:
 - make the transaction-heavy game usable on real phones and unreliable
   connections.
 
+Progress:
+
+- `GAME-801` through `GAME-810` complete (June 11, 2026).
+
 Tasks:
 
-| ID | Priority | Work |
-| --- | --- | --- |
-| GAME-801 | P0 | Test and fix mobile wallet handoff for every write path |
-| GAME-802 | P0 | Recover pending receipts and contract phases after browser suspension |
-| GAME-803 | P0 | Clear private state on account, chain, logout, and deployment changes |
-| GAME-804 | P0 | Add low-balance, RPC failure, stale deployment, and unsupported wallet states |
-| GAME-805 | P1 | Add required model-load retry and offline/network failure UI |
-| GAME-806 | P1 | Meet 44x44 touch targets, safe-area, contrast, focus, and accessible-name requirements |
-| GAME-807 | P1 | Add reduced motion and graphics quality controls |
-| GAME-808 | P1 | Code-split wallet/on-chain routes and reduce the current large JS chunk |
-| GAME-809 | P1 | Measure FPS, load, memory, battery, encryption time, and transaction latency |
-| GAME-810 | P1 | Add English-only and raw-error exposure checks |
+| ID | Priority | Status | Work |
+| --- | --- | --- | --- |
+| GAME-801 | P0 | Complete | Test and fix mobile wallet handoff for every write path |
+| GAME-802 | P0 | Complete | Recover pending receipts and contract phases after browser suspension |
+| GAME-803 | P0 | Complete | Clear private state on account, chain, logout, and deployment changes |
+| GAME-804 | P0 | Complete | Add low-balance, RPC failure, stale deployment, and unsupported wallet states |
+| GAME-805 | P1 | Complete | Add required model-load retry and offline/network failure UI |
+| GAME-806 | P1 | Complete | Meet 44x44 touch targets, safe-area, contrast, focus, and accessible-name requirements |
+| GAME-807 | P1 | Complete | Add reduced motion and graphics quality controls |
+| GAME-808 | P1 | Complete | Code-split wallet/on-chain routes and reduce the current large JS chunk |
+| GAME-809 | P1 | Complete | Measure FPS, load, memory, battery, encryption time, and transaction latency |
+| GAME-810 | P1 | Complete | Add English-only and raw-error exposure checks |
 
 Exit criteria:
 
@@ -723,6 +727,64 @@ Exit criteria:
 - the application recovers after reload during every pending phase;
 - mobile performance stays inside `docs/mobile-performance-budget.md`;
 - accessibility blockers are resolved.
+
+Exit status:
+
+- code-level criteria met on June 11, 2026 (`npm run build` + the unit/screen
+  suites cover handoff ordering on every write, suspension recovery, private
+  state clearing, degraded states, offline/asset-retry UI, stylesheet
+  accessibility invariants, settings, perf aggregation, and copy checks);
+- the on-device passes (iOS Safari / Android Chrome friend-match run and the
+  performance measurements on a reference phone) follow the manual procedure
+  in `docs/mobile-performance-budget.md` and remain part of Phase 9/10
+  acceptance on real hardware.
+
+Realized structure:
+
+- `src/onchain/client/pendingTxStore.ts` persists each in-flight write's hash
+  (sessionStorage; public identifiers only) keyed by
+  deployment|match|address|kind; `useTrackedWrite(persistScope)` records the
+  broadcast hash and clears it on any terminal state, and
+  `src/onchain/client/usePendingTxRecovery.ts` re-attaches to stored hashes on
+  mount and on visibility/focus return, then refetches the authoritative
+  contract phase (GAME-802). All write panels pass scopes; handoff-intent
+  ordering before every write is locked by
+  `src/onchain/wallet/handoffWritePaths.test.tsx` (GAME-801);
+- private placement state stays scope-bound: account, chain, logout,
+  deployment, and unmount transitions wipe the plaintext fleet and dispose the
+  scoped CoFHE client (`src/onchain/placement/privateStateClearing.test.tsx`);
+  disconnect also clears handoff markers and pending-tx records (GAME-803);
+- degraded states (GAME-804): `balanceStatus` gained 'low'
+  (`LOW_BALANCE_THRESHOLD_WEI`, non-blocking `LowBalanceWarning`), RPC
+  transport failures map to the `rpc-unreachable` copy on both read and write
+  paths (`isRpcTransportError`), `src/onchain/useDeploymentHealth.ts` probes
+  `getCode` to surface a stale-deployment state, and a failed EIP-1193
+  provider resolution surfaces the unsupported-wallet message;
+- `src/lib/online.ts` + the AppShell offline banner cover network loss, and
+  the model-load overlay offers an explicit Retry action (GAME-805);
+- accessibility (GAME-806): 44px minimum touch targets, a global
+  `:focus-visible` outline, contrast lifts on footnote/status text, larger
+  board grids (10x10 cells are the documented exception), and accessible-name
+  coverage asserted by `src/test/accessibility.test.tsx`;
+- `src/ui/settingsStore.ts` (GAME-807) persists motion + graphics-quality
+  device preferences; quality drives Canvas dpr/antialias/shadows and the
+  ocean shader per the budget table, reduced motion collapses CSS animation,
+  camera damping, and VFX duration (system preference respected via
+  `prefers-reduced-motion` and `[data-motion='reduced']`);
+- code splitting (GAME-808): practice, create-match, and match routes are
+  `lazy()` chunks, the Privy+viem bridge moved to the lazily loaded
+  `src/onchain/wallet/PrivyWalletBridge.tsx`, and vendor chunks (three /
+  viem / react) are split in `vite.config.ts`; the entry chunk dropped from
+  ~2.5 MB to ~19 kB (7.5 kB gzip), and three.js (~839 kB) loads only with the
+  practice scene;
+- `src/lib/perf.ts` (GAME-809) records load time, fps (rAF sampler), JS heap,
+  encryption duration, and wallet-to-terminal transaction latency, locally
+  only, with a `?perf=1` overlay in the shell and `window.__PERF__` for
+  manual runs (battery remains a manual procedure per the budget doc);
+- `src/copy/copyQuality.test.ts` walks every exported copy string for
+  English-only glyphs and developer-internal leakage, and
+  `src/onchain/rawErrorExposure.test.tsx` drives raw revert/hex errors
+  through the match route asserting only mapped copy renders (GAME-810).
 
 ## Phase 9: Security and Release QA
 
@@ -856,7 +918,7 @@ Phase status:
 | 5. Friend-match frontend | Complete (GAME-501 through GAME-512) |
 | 6. Encrypted fleet UI | Complete (GAME-601 through GAME-612) |
 | 7. On-chain battle | Complete (GAME-701 through GAME-712) |
-| 8. Mobile and recovery | Not started |
+| 8. Mobile and recovery | Complete (GAME-801 through GAME-810) |
 | 9. Security and release QA | Not started |
 | 10. Staging and public demo | Not started |
 

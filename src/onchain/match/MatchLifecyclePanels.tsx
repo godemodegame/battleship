@@ -21,14 +21,29 @@ import {
 } from '../../copy/en'
 import type { BattleshipWriteClient } from '../client/battleshipClient'
 import { isJoinExpired, type ChainMatchView } from '../client/mapping'
+import { pendingTxScope } from '../client/pendingTxStore'
 import { isTxBusy } from '../client/txTracker'
 import { useTrackedWrite } from '../client/useTrackedWrite'
 import { explorerAddressUrl } from '../explorer'
 import { buildInviteLink } from '../inviteLink'
+import { useWalletSession } from '../wallet/WalletSessionContext'
 import { TxStatusLine } from './TxStatusLine'
 
 function nowSeconds(): number {
   return Math.floor(Date.now() / 1000)
+}
+
+/** Suspension-recovery scope for one lifecycle write on this match (GAME-802). */
+function useLifecycleTxScope(match: ChainMatchView, kind: string): string | null {
+  const { session } = useWalletSession()
+  return session.address
+    ? pendingTxScope({
+        deploymentId: match.deploymentId,
+        matchId: match.matchIdBig,
+        address: session.address,
+        kind,
+      })
+    : null
 }
 
 export interface JoinPanelProps {
@@ -42,7 +57,7 @@ export interface JoinPanelProps {
 
 /** Invited wallet's view of a waiting match (GAME-507). */
 export function JoinPanel({ match, writeClient, canWrite, onJoined, prepareHandoff }: JoinPanelProps) {
-  const tx = useTrackedWrite()
+  const tx = useTrackedWrite(useLifecycleTxScope(match, 'join'))
   const busy = isTxBusy(tx.state)
   const expired = isJoinExpired(match, nowSeconds())
 
@@ -101,7 +116,7 @@ export function InviteWaitingPanel({
   onCancelled,
   prepareHandoff,
 }: InviteWaitingPanelProps) {
-  const tx = useTrackedWrite()
+  const tx = useTrackedWrite(useLifecycleTxScope(match, 'cancel'))
   const busy = isTxBusy(tx.state)
   const [copyNote, setCopyNote] = useState<string | null>(null)
   const expired = isJoinExpired(match, nowSeconds())

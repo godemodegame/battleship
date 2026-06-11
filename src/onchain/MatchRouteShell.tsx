@@ -12,21 +12,24 @@ import {
   matchRouteCopy,
   matchStateCopy,
   phaseCopy,
+  txCopy,
   walletCopy,
 } from '../copy/en'
 import { errorMessage } from '../copy/errors'
 import { parseMatchIdParam } from './client/mapping'
 import { useBattleshipClients } from './client/useBattleshipClients'
+import { usePendingTxRecovery } from './client/usePendingTxRecovery'
 import { useMatchView } from './useMatchView'
 import {
   InviteWaitingPanel,
   JoinPanel,
   MatchIdentityPanel,
 } from './match/MatchLifecyclePanels'
+import { useDeploymentHealth } from './useDeploymentHealth'
 import { useWalletSession } from './wallet/WalletSessionContext'
 import { WalletSessionBar } from './wallet/WalletSessionBar'
 import { WrongNetworkPanel } from './wallet/WrongNetworkPanel'
-import { LowBalanceNotice, FAUCET_URL } from './wallet/LowBalanceNotice'
+import { LowBalanceNotice, LowBalanceWarning, FAUCET_URL } from './wallet/LowBalanceNotice'
 import type { ChainMatchView } from './client/mapping'
 
 const EncryptedFleetPanel = lazy(async () => {
@@ -231,6 +234,25 @@ export function MatchRouteShell() {
     }
   }, [hasDemoMarker, wallet.handoffRestored, wallet.actions])
 
+  // GAME-802: re-attach to any persisted in-flight write for this match +
+  // account after a suspension or reload, then re-read the contract phase.
+  const recoveryPrefix =
+    !hasDemoMarker && numericMatchId !== null && wallet.session.address
+      ? `${deploymentId}|${numericMatchId}|${wallet.session.address.toLowerCase()}|`
+      : null
+  const recovery = usePendingTxRecovery({
+    publicClient: wallet.publicClient,
+    scopePrefix: recoveryPrefix,
+    onSettled: query.refetch,
+  })
+
+  // GAME-804: probe for bytecode at the recorded address so a wiped or
+  // misrecorded deployment shows a clear state instead of opaque failures.
+  const deploymentHealth = useDeploymentHealth({
+    publicClient: wallet.publicClient,
+    address: resolution.ok && resolution.ready ? resolution.record.address : null,
+  })
+
   // GAME-110: resolve the versioned deployment before rendering any match phase.
   // Old invite links must keep pointing at their original deployment; an unknown
   // or invalid id resolves to a recoverable "unavailable" state.
@@ -405,6 +427,33 @@ export function MatchRouteShell() {
             }}
           />
         )}
+
+      {/* GAME-804: non-blocking low-balance warning before long write flows. */}
+      {!hasDemoMarker &&
+        wallet.session.isConnected &&
+        wallet.session.isCorrectChain &&
+        wallet.balanceStatus === 'low' && <LowBalanceWarning balanceWei={wallet.balance} />}
+
+      {/* GAME-804: the connected wallet has no usable provider in this browser. */}
+      {!hasDemoMarker && wallet.lastError === 'unsupported-wallet' && (
+        <p className="error-note" role="alert" data-testid="unsupported-wallet">
+          {walletCopy.unsupportedWalletBody}
+        </p>
+      )}
+
+      {/* GAME-804: no bytecode at the recorded deployment address. */}
+      {!hasDemoMarker && deploymentHealth === 'stale' && (
+        <p className="error-note" role="alert" data-testid="stale-deployment">
+          {errorMessage('stale-deployment')}
+        </p>
+      )}
+
+      {/* GAME-802: visible resume state while re-attaching to a pending write. */}
+      {!hasDemoMarker && recovery.recovering.length > 0 && (
+        <p className="status-sub" data-testid="pending-tx-recovery" role="status">
+          {txCopy.resuming}
+        </p>
+      )}
 
       {/* Match query states (GAME-508): loading, unavailable, not found. */}
       {showLoading && (

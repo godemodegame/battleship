@@ -55,9 +55,10 @@ export interface WalletContextValue {
   balance: bigint | null
   /**
    * Convenience status derived from balance for funding guidance UI.
-   * 'zero' triggers visible testnet funding guidance.
+   * 'zero' triggers visible testnet funding guidance; 'low' (below the
+   * multi-transaction threshold, GAME-804) shows a non-blocking warning.
    */
-  balanceStatus: 'unknown' | 'zero' | 'ok'
+  balanceStatus: 'unknown' | 'zero' | 'low' | 'ok'
   /**
    * Transient signal set when the app resumed from a mobile wallet handoff
    * (visibility/focus with a pending marker). Consumer routes can react and
