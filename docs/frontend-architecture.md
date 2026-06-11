@@ -542,7 +542,8 @@ Tracks temporary local placement state:
 - ship orientation;
 - local fleet placements (validated through the pure `src/game/board.ts`
   helpers; completion is exposed through `completedFleet`);
-- encryption progress (added when encrypted submission lands, GAME-606/611).
+- encryption progress (implemented by the scoped CoFHE client and
+  `EncryptedFleetPanel`, GAME-606/611).
 
 Privacy rule (enforced by the store and its tests):
 
@@ -712,7 +713,7 @@ Frontend flow:
 2. App validates simple placement UX locally.
 3. Player taps `Lock Fleet`.
 4. App shows `Encrypting Fleet`.
-5. Fhenix SDK encrypts the 100-cell representation or chosen batch format.
+5. CoFHE encrypts the frozen 20-cell ship-segment representation in one call.
 6. App asks wallet to confirm `submitFleet`.
 7. App waits for the transaction receipt.
 8. App clears plaintext fleet state.
@@ -720,6 +721,23 @@ Frontend flow:
 10. App shows `Fleet Confirmed` or `Fleet Invalid`.
 
 Local validation improves UX only. The contract and Fhenix flow remain authoritative.
+
+Implemented Phase 6 details:
+
+- `fleetEncoding.ts` preserves the fixed public ship order and emits exactly
+  20 cell indexes;
+- CoFHE initializes only after the active external wallet, Arbitrum Sepolia,
+  public client, and wallet client are ready;
+- a module worker owns the CoFHE singleton and proof generation when workers
+  are supported; its provider/signer calls are bridged to the active viem
+  clients and checked against the bound account and chain;
+- encrypted inputs stay function-local and are discarded after each write
+  attempt. Retries always perform fresh encryption;
+- the placement store and worker are cleared after a confirmed submission and
+  on account, chain, deployment, match, disconnect, or route changes;
+- `getPlayers` drives each wallet's `NotSubmitted`,
+  `ResolvingValidation`, `Valid`, and `Invalid` UI. A pending validation can
+  be finalized or re-requested after refresh or mobile wallet return.
 
 ## Shot Flow
 
@@ -979,11 +997,12 @@ Recommended frontend implementation order:
 3. Add routing, the on-chain route shell, and a pure phase resolver.
 4. Add Privy wallet-only login and the Arbitrum Sepolia guard.
 5. Add versioned contract addresses, ABI, typed reads, and typed writes.
-6. Add the CoFHE client bridge and account/chain invalidation.
+6. Add the CoFHE client bridge and account/chain invalidation. Complete.
 7. Build wallet-aware onboarding, menu, and opponent selection.
 8. Build friend match creation, invite links, and join flow.
-9. Reuse placement helpers in a transient on-chain placement store.
+9. Reuse placement helpers in a transient on-chain placement store. Complete.
 10. Add fleet encryption, `submitFleet`, plaintext clearing, and validation
+    recovery. Complete.
     recovery.
 11. Build event sync, targeted refetches, and idempotent move processing.
 12. Adapt the existing 3D scene to `PublicBattleRenderModel`.

@@ -29,6 +29,22 @@ export type MatchStatus =
   | 'Cancelled'
   | 'Forfeited'
 
+export type PublicPlacementStatus =
+  | 'None'
+  | 'NotSubmitted'
+  | 'Submitted'
+  | 'ResolvingValidation'
+  | 'Valid'
+  | 'Invalid'
+
+export interface PublicPlayerPlacementView {
+  player: HexAddress | null
+  joined: boolean
+  placementStatus: PublicPlacementStatus
+  fleetSubmitted: boolean
+  fleetValid: boolean
+}
+
 export interface MatchView {
   /** Logical deployment/version key, e.g. "arb-sepolia-v1" */
   deploymentId: string
@@ -40,6 +56,10 @@ export interface MatchView {
   /** Current turn address when InProgress or ResolvingShot */
   currentTurn: HexAddress | null
   winner: HexAddress | null
+  players?: {
+    creator: PublicPlayerPlacementView
+    opponent: PublicPlayerPlacementView
+  }
 }
 
 export interface PhaseResolverInput {
@@ -65,6 +85,8 @@ export type MatchPhase =
       /** Both players submitted but not yet validated/started */
       waitingForOpponent: boolean
       validating: boolean
+      /** Contract rejected the previous encrypted placement; player may retry. */
+      invalid: boolean
     }
   | { kind: 'battle'; isMyTurn: boolean }
   | { kind: 'resolving' }
@@ -121,15 +143,38 @@ export function resolveMatchPhase(input: PhaseResolverInput): MatchPhase {
       if (!isParticipant) {
         return { kind: 'waiting-for-opponent' }
       }
+      const playerView =
+        match.players?.creator.player && norm(match.players.creator.player) === me
+          ? match.players.creator
+          : match.players?.opponent.player && norm(match.players.opponent.player) === me
+            ? match.players.opponent
+            : null
+
+      if (playerView) {
+        const invalid = playerView.placementStatus === 'Invalid'
+        const validating = playerView.placementStatus === 'ResolvingValidation'
+        const valid = playerView.placementStatus === 'Valid' || playerView.fleetValid
+        const canSubmit =
+          playerView.placementStatus === 'NotSubmitted' ||
+          invalid
+        return {
+          kind: 'placement',
+          canSubmit,
+          submitted: playerView.fleetSubmitted || validating || valid,
+          waitingForOpponent: valid,
+          validating,
+          invalid,
+        }
+      }
+
       if (match.status === 'WaitingForPlacement') {
-        // In the initial on-chain shell (GAME-103) we return a simple actionable placement phase.
-        // Later client code will map real per-player PlacementStatus here.
         return {
           kind: 'placement',
           canSubmit: true,
           submitted: false,
           waitingForOpponent: false,
           validating: false,
+          invalid: false,
         }
       }
       if (match.status === 'ValidatingPlacement') {
@@ -139,6 +184,7 @@ export function resolveMatchPhase(input: PhaseResolverInput): MatchPhase {
           submitted: true,
           waitingForOpponent: true,
           validating: true,
+          invalid: false,
         }
       }
       return {
@@ -147,6 +193,7 @@ export function resolveMatchPhase(input: PhaseResolverInput): MatchPhase {
         submitted: true,
         waitingForOpponent: true,
         validating: false,
+        invalid: false,
       }
     }
 

@@ -100,6 +100,55 @@ describe('resolveMatchPhase', () => {
     expect(phaseLabel(result)).toBe('Waiting for opponent fleet')
   })
 
+  it('uses the connected player public placement verdict instead of match-wide guesses', () => {
+    const player = (
+      placementStatus: 'NotSubmitted' | 'ResolvingValidation' | 'Valid' | 'Invalid',
+      fleetSubmitted: boolean,
+      fleetValid: boolean,
+    ) => ({
+      player: CREATOR,
+      joined: true,
+      placementStatus,
+      fleetSubmitted,
+      fleetValid,
+    })
+    const opponent = {
+      player: OPPONENT,
+      joined: true,
+      placementStatus: 'NotSubmitted' as const,
+      fleetSubmitted: false,
+      fleetValid: false,
+    }
+
+    const invalid = resolveMatchPhase(input({
+      match: baseMatch({
+        status: 'ValidatingPlacement',
+        opponent: OPPONENT,
+        players: { creator: player('Invalid', false, false), opponent },
+      }),
+    }))
+    expect(invalid).toEqual(expect.objectContaining({
+      kind: 'placement',
+      canSubmit: true,
+      invalid: true,
+      validating: false,
+    }))
+
+    const valid = resolveMatchPhase(input({
+      match: baseMatch({
+        status: 'ValidatingPlacement',
+        opponent: OPPONENT,
+        players: { creator: player('Valid', true, true), opponent },
+      }),
+    }))
+    expect(valid).toEqual(expect.objectContaining({
+      kind: 'placement',
+      canSubmit: false,
+      waitingForOpponent: true,
+      validating: false,
+    }))
+  })
+
   it('battle phase marks whose turn it is', () => {
     const myTurnMatch = baseMatch({
       status: 'InProgress',

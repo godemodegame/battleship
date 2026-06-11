@@ -144,6 +144,39 @@ export const joinCopy = {
   wrongWallet: 'This invite is for another wallet.',
 } as const
 
+/** Encrypted on-chain fleet placement (GAME-602..611). */
+export const encryptedPlacementCopy = {
+  title: 'Deploy Encrypted Fleet',
+  helper: 'Tap a ship, then a grid cell. Ships cannot touch.',
+  rotate: 'Rotate',
+  autoPlace: 'Auto Place',
+  clear: 'Clear',
+  confirm: 'Encrypt & Submit Fleet',
+  preparing: 'Preparing CoFHE',
+  encrypting: 'Encrypting Fleet',
+  progress: {
+    extract: 'Preparing fleet inputs',
+    pack: 'Packing encrypted inputs',
+    prove: 'Generating privacy proof',
+    verify: 'Verifying encrypted inputs',
+    replace: 'Preparing contract payload',
+    done: 'Encryption complete',
+    initializing: 'Preparing CoFHE',
+  },
+  worker: 'Encryption runs in a background worker on this browser.',
+  mainThread: 'This browser does not support the encryption worker.',
+  invalidTitle: 'Fleet Placement Invalid',
+  invalidBody: 'The contract rejected this fleet. Place a new fleet and submit again.',
+  validatingTitle: 'Validating Placement',
+  validatingBody:
+    'The encrypted result is pending. Finalize it once the CoFHE network has responded.',
+  finalize: 'Finalize Validation',
+  retryRequest: 'Retry CoFHE Request',
+  validTitle: 'Fleet Confirmed',
+  waitingOpponent: 'Your fleet is valid. Waiting for the opponent fleet.',
+  privacyNote: 'Your plaintext fleet is cleared after the submission confirms.',
+} as const
+
 /** Terminal / blocked lifecycle states on the match route (GAME-508). */
 export const matchStateCopy = {
   waitingForOpponentSpectator: 'This match is waiting for the invited player.',

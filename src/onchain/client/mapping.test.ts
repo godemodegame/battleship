@@ -4,7 +4,9 @@ import {
   isJoinExpired,
   parseMatchIdParam,
   toChainMatchView,
+  toMatchPlayersView,
   type RawMatchView,
+  type RawPlayerPublicView,
 } from './mapping'
 
 const CREATOR = '0xAaAA000000000000000000000000000000000001' as const
@@ -86,6 +88,38 @@ describe('toChainMatchView (GAME-503)', () => {
     expect(view!.status).toBe('InProgress')
     expect(view!.currentTurn).toBe(INVITED.toLowerCase())
     expect(view!.moveCount).toBe(4)
+  })
+})
+
+describe('toMatchPlayersView (GAME-608/609)', () => {
+  const player = (
+    placementStatus: number,
+    over: Partial<RawPlayerPublicView> = {},
+  ): RawPlayerPublicView => ({
+    player: CREATOR,
+    joined: true,
+    placementStatus,
+    fleetSubmitted: placementStatus >= 3,
+    fleetValid: placementStatus === 4,
+    publicBoard: {
+      attackedMask: 1n,
+      missMask: 2n,
+      hitMask: 4n,
+      sunkMask: 8n,
+    },
+    ...over,
+  })
+
+  it('maps public placement states and zero-address opponent slots', () => {
+    const players = toMatchPlayersView([
+      player(3),
+      player(0, { player: ZERO_ADDRESS, joined: false }),
+    ])
+    expect(players.creator.placementStatus).toBe('ResolvingValidation')
+    expect(players.creator.fleetSubmitted).toBe(true)
+    expect(players.creator.publicBoard.hitMask).toBe(4n)
+    expect(players.opponent.player).toBeNull()
+    expect(players.opponent.placementStatus).toBe('None')
   })
 })
 

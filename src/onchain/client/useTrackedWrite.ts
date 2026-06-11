@@ -25,16 +25,19 @@ export interface TrackedWrite {
 
 export function useTrackedWrite(): TrackedWrite {
   const [state, setState] = useState<TxState>(IDLE_TX_STATE)
+  const [running, setRunning] = useState(false)
   const inFlightRef = useRef(false)
 
   const run = useCallback(
     async <T,>(write: (onState: (state: TxState) => void) => Promise<T>): Promise<T | null> => {
       if (inFlightRef.current) return null
       inFlightRef.current = true
+      setRunning(true)
       try {
         return await write(setState)
       } finally {
         inFlightRef.current = false
+        setRunning(false)
       }
     },
     [],
@@ -44,5 +47,5 @@ export function useTrackedWrite(): TrackedWrite {
     if (!inFlightRef.current) setState(IDLE_TX_STATE)
   }, [])
 
-  return { state, busy: isTxBusy(state) || inFlightRef.current, run, reset }
+  return { state, busy: isTxBusy(state) || running, run, reset }
 }

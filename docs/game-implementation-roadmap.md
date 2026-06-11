@@ -548,30 +548,28 @@ Goal:
 
 Progress:
 
-- `GAME-601` complete (June 11, 2026): the transient on-chain placement store
-  (`src/onchain/placement/placementStore.ts`) reuses the pure placement
-  helpers from `src/game/board.ts`, binds all plaintext to one
-  (address, chain, deployment, match) scope, wipes on any scope change or
-  disconnect, exposes `clearFleet` for post-submission plaintext clearing,
-  and is never persisted or exposed as a browser global; tests cover scope
-  wiping, editing, completion, and practice-store isolation.
+- `GAME-601` through `GAME-612` complete (June 11, 2026).
+- The transient placement store, frozen 20-segment encoder, scoped CoFHE
+  worker/client, typed fleet writes, public player-state reads, receipt-driven
+  plaintext clearing, validation recovery, and privacy regression coverage
+  are implemented and tested.
 
 Tasks:
 
 | ID | Priority | Status | Work |
 | --- | --- | --- | --- |
 | GAME-601 | P0 | Complete | Create a transient on-chain placement store separate from practice state |
-| GAME-602 | P0 | Not started | Reuse local placement and no-touch validation for immediate UX |
-| GAME-603 | P0 | Not started | Encode the completed fleet using the Phase 4 decision |
-| GAME-604 | P0 | Not started | Initialize CoFHE client only after wallet and network readiness |
-| GAME-605 | P0 | Not started | Run encryption/proof generation in workers when supported |
-| GAME-606 | P0 | Not started | Submit encrypted fleet and track the receipt |
-| GAME-607 | P0 | Not started | Clear plaintext cells, inputs, and account-bound encryption state after success |
-| GAME-608 | P0 | Not started | Recover `ValidatingPlacement` after refresh or mobile handoff |
-| GAME-609 | P0 | Not started | Display valid, invalid, waiting-for-opponent, and ready states |
-| GAME-610 | P0 | Not started | Prevent cross-account or cross-chain encrypted input reuse |
-| GAME-611 | P1 | Not started | Add encryption progress, retry, and actionable error states |
-| GAME-612 | P1 | Not started | Verify no fleet data appears in storage, URLs, logs, analytics, or screenshots |
+| GAME-602 | P0 | Complete | Reuse local placement and no-touch validation for immediate UX |
+| GAME-603 | P0 | Complete | Encode the completed fleet using the Phase 4 decision |
+| GAME-604 | P0 | Complete | Initialize CoFHE client only after wallet and network readiness |
+| GAME-605 | P0 | Complete | Run encryption/proof generation in workers when supported |
+| GAME-606 | P0 | Complete | Submit encrypted fleet and track the receipt |
+| GAME-607 | P0 | Complete | Clear plaintext cells, inputs, and account-bound encryption state after success |
+| GAME-608 | P0 | Complete | Recover `ValidatingPlacement` after refresh or mobile handoff |
+| GAME-609 | P0 | Complete | Display valid, invalid, waiting-for-opponent, and ready states |
+| GAME-610 | P0 | Complete | Prevent cross-account or cross-chain encrypted input reuse |
+| GAME-611 | P1 | Complete | Add encryption progress, retry, and actionable error states |
+| GAME-612 | P1 | Complete | Verify no fleet data appears in storage, URLs, logs, analytics, or screenshots |
 
 Owner fleet rule:
 
@@ -587,6 +585,33 @@ Exit criteria:
 - plaintext placement is absent after successful submission;
 - refresh and mobile return recover from contract state;
 - both valid fleets transition to match start.
+
+Exit status:
+
+- met on June 11, 2026. Contract tests already prove two encrypted fleets
+  validate and auto-start; frontend tests cover the same submission and
+  recovery boundaries with typed clients and a deterministic CoFHE fake.
+
+Realized structure:
+
+- `src/onchain/placement/fleetEncoding.ts` converts a locally complete,
+  no-touch fleet to the frozen `InEuint8[20]` ship-segment order; plaintext
+  remains only in `placementStore.ts`;
+- `src/onchain/fhenix/` owns the account/chain/deployment/match-scoped CoFHE
+  client. It initializes only behind the wallet write guard, runs inside a
+  module worker when `Worker` is available, reports SDK proof stages, and
+  terminates on scope changes or successful submission; unsupported browsers
+  use the same scoped adapter on the main thread;
+- the typed client reads `getPlayers` with `getMatch` and exposes
+  `submitFleet`, `finalizeFleetValidation`, and `retryFleetValidation`.
+  Contract reads remain authoritative after every event, focus return,
+  reconnect, account change, and chain change;
+- `EncryptedFleetPanel.tsx` provides manual/automatic placement, receipt
+  tracking, immediate plaintext clearing, invalid-fleet resubmission,
+  valid/waiting states, and refresh-safe validation finalization/retry;
+- encrypted inputs are function-local, never reusable for retry, and never
+  written to React state, storage, URLs, logs, analytics, browser globals, or
+  screenshots. After submission, exact owner geometry is not rendered.
 
 ## Phase 7: On-chain Battle and Terminal States
 

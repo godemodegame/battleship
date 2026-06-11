@@ -69,6 +69,33 @@ describe('useMatchView (GAME-509/510)', () => {
     expect(result.current.match!.matchId).toBe('7')
   })
 
+  it('attaches authoritative public player placement state when available', async () => {
+    const client = fakeReadClient()
+    client.getPlayers = vi.fn(async () => ({
+      creator: {
+        player: CREATOR,
+        joined: true,
+        placementStatus: 'Valid' as const,
+        fleetSubmitted: true,
+        fleetValid: true,
+        publicBoard: { attackedMask: 0n, missMask: 0n, hitMask: 0n, sunkMask: 0n },
+      },
+      opponent: {
+        player: null,
+        joined: false,
+        placementStatus: 'None' as const,
+        fleetSubmitted: false,
+        fleetValid: false,
+        publicBoard: { attackedMask: 0n, missMask: 0n, hitMask: 0n, sunkMask: 0n },
+      },
+    }))
+    const { result } = renderHook(() =>
+      useMatchView({ readClient: client, matchId: 7n, accountEpoch: 0, chainId: 421614 }),
+    )
+    await waitFor(() => expect(result.current.status).toBe('ready'))
+    expect(result.current.match?.players?.creator.placementStatus).toBe('Valid')
+  })
+
   it('reports not-found when the contract has no such match', async () => {
     const client = fakeReadClient(null)
     const { result } = renderHook(() =>
