@@ -114,6 +114,32 @@ describe('createBattleshipReadClient (GAME-502/503)', () => {
     )
   })
 
+  it('reads and maps public placement state for both players', async () => {
+    const rawPlayer = {
+      player: CREATOR,
+      joined: true,
+      placementStatus: 3,
+      fleetSubmitted: true,
+      fleetValid: false,
+      publicBoard: {
+        attackedMask: 0n,
+        missMask: 0n,
+        hitMask: 0n,
+        sunkMask: 0n,
+      },
+    }
+    const publicClient = makePublicClient({
+      readContract: vi.fn(async (params: { functionName: string }) =>
+        params.functionName === 'getPlayers'
+          ? [rawPlayer, { ...rawPlayer, player: INVITED, placementStatus: 1 }]
+          : rawMatch(),
+      ) as PublicClientLike['readContract'],
+    })
+    const players = await readClientFor(publicClient).getPlayers!(7n)
+    expect(players.creator.placementStatus).toBe('ResolvingValidation')
+    expect(players.opponent.placementStatus).toBe('NotSubmitted')
+  })
+
   it('returns null for MatchNotFound instead of throwing', async () => {
     const publicClient = makePublicClient({
       readContract: vi.fn(async () => {
@@ -229,5 +255,53 @@ describe('createBattleshipWriteClient (GAME-503/506/507)', () => {
     })
     const result = await writeClientFor(publicClient).forfeit(7n, () => {})
     expect(result).toEqual({ ok: false, error: 'transaction-reverted' })
+  })
+
+  it('submits encrypted fleet inputs and exposes validation recovery writes', async () => {
+    const publicClient = makePublicClient({
+      waitForTransactionReceipt: vi.fn(async () => ({
+        status: 'success' as const,
+        transactionHash: TX_HASH,
+        logs: [],
+      })),
+    })
+    const client = writeClientFor(publicClient)
+    const segments = Array.from({ length: 20 }, (_, index) => ({
+      ctHash: BigInt(index + 1),
+      securityZone: 0,
+      utype: 2,
+      signature: '0x12',
+    }))
+
+    await expect(client.submitFleet!(7n, segments, () => {})).resolves.toEqual({
+      ok: true,
+      hash: TX_HASH,
+    })
+    await expect(
+      client.finalizeFleetValidation!(7n, CREATOR, () => {}),
+    ).resolves.toEqual({ ok: true, hash: TX_HASH })
+    await expect(
+      client.retryFleetValidation!(7n, CREATOR, () => {}),
+    ).resolves.toEqual({ ok: true, hash: TX_HASH })
+
+    expect(publicClient.simulateContract).toHaveBeenCalledWith(
+      expect.objectContaining({
+        functionName: 'submitFleet',
+        args: [7n, segments],
+        account: CREATOR,
+      }),
+    )
+    expect(publicClient.simulateContract).toHaveBeenCalledWith(
+      expect.objectContaining({
+        functionName: 'finalizeFleetValidation',
+        args: [7n, CREATOR],
+      }),
+    )
+    expect(publicClient.simulateContract).toHaveBeenCalledWith(
+      expect.objectContaining({
+        functionName: 'retryFleetValidation',
+        args: [7n, CREATOR],
+      }),
+    )
   })
 })

@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { lazy, Suspense, useEffect } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import {
   resolveMatchPhase,
@@ -27,6 +27,12 @@ import { useWalletSession } from './wallet/WalletSessionContext'
 import { WalletSessionBar } from './wallet/WalletSessionBar'
 import { WrongNetworkPanel } from './wallet/WrongNetworkPanel'
 import { LowBalanceNotice, FAUCET_URL } from './wallet/LowBalanceNotice'
+import type { ChainMatchView } from './client/mapping'
+
+const EncryptedFleetPanel = lazy(async () => {
+  const module = await import('./placement/EncryptedFleetPanel')
+  return { default: module.EncryptedFleetPanel }
+})
 
 /** Demo addresses (match the ones used in phaseResolver.test.ts for consistency). */
 const DEMO_CREATOR = '0x1111111111111111111111111111111111111111' as const
@@ -121,6 +127,23 @@ function PhasePanel({ phase }: { phase: ReturnType<typeof resolveMatchPhase> }) 
   )
 }
 
+function PlacementPhaseMetadata({ phase }: { phase: Extract<ReturnType<typeof resolveMatchPhase>, { kind: 'placement' }> }) {
+  return (
+    <div className="sr-only" data-testid="match-phase-panel" aria-live="polite">
+      <p data-testid="match-phase-kind">Phase: placement</p>
+      <p data-testid="match-phase-label">{phaseLabel(phase)}</p>
+    </div>
+  )
+}
+
+function PlacementLoading() {
+  return (
+    <div className="home-actions" data-testid="placement-loading">
+      <p>Preparing encrypted placement…</p>
+    </div>
+  )
+}
+
 /** Shown when an invite link references an unknown or invalid deployment id. */
 function DeploymentUnavailable({
   deploymentId,
@@ -201,6 +224,31 @@ export function MatchRouteShell() {
   // demonstrate phase rendering without a contract client and without ever
   // importing the local plaintext attack engine (GAME-103 empty shell).
   const demoMatch = makeDemoMatch(deploymentId, matchIdParam)
+  const demoPlacementMatch: ChainMatchView = {
+    deploymentId: demoMatch.deploymentId,
+    matchId: demoMatch.matchId,
+    status: demoMatch.status,
+    creator: demoMatch.creator,
+    opponent: demoMatch.opponent,
+    invitedOpponent: demoMatch.invitedOpponent,
+    currentTurn: demoMatch.currentTurn,
+    winner: demoMatch.winner,
+    matchIdBig: 1n,
+    matchType: 'Friend',
+    createdAt: 1,
+    joinedAt: 2,
+    startedAt: 0,
+    finishedAt: 0,
+    lastActionAt: 2,
+    moveCount: 0,
+    pendingMoveId: 0,
+    deadlines: {
+      joinDeadline: 0,
+      placementDeadline: 0,
+      turnDeadline: 0,
+      resolvingDeadline: 0,
+    },
+  }
 
   // Demo viewer/wallet context is derived from matchId for broader phase coverage
   // in the shell (e.g. "demo-join-invited" renders the 'join' phase for the
@@ -249,7 +297,11 @@ export function MatchRouteShell() {
   const showMatch = !walletGate && ready && query.status === 'ready' && match !== null
 
   return (
-    <div className="overlay home" data-game-slice="onchain-shell-103" data-testid="match-route-shell">
+    <div
+      className={`overlay home ${phase.kind === 'placement' ? 'match-placement-route' : ''}`}
+      data-game-slice="onchain-shell-103"
+      data-testid="match-route-shell"
+    >
       <div className="title-lockup">
         <span className="title-kicker">{matchRouteCopy.kicker}</span>
         <h1>{matchRouteCopy.heading}</h1>
@@ -266,7 +318,32 @@ export function MatchRouteShell() {
       )}
 
       {/* Demo harness renders the phase panel exactly as before. */}
-      {hasDemoMarker && <PhasePanel phase={phase} />}
+      {hasDemoMarker && phase.kind !== 'placement' && <PhasePanel phase={phase} />}
+      {hasDemoMarker && phase.kind === 'placement' && (
+        <>
+          <PlacementPhaseMetadata phase={phase} />
+          <Suspense fallback={<PlacementLoading />}>
+            <EncryptedFleetPanel
+              phase={phase}
+              match={demoPlacementMatch}
+              writeClient={null}
+              wallet={{
+                ...wallet,
+                session: {
+                  status: 'ready',
+                  address: DEMO_CREATOR,
+                  chainId: 421614,
+                  isCorrectChain: true,
+                  isConnected: true,
+                },
+                canWrite: false,
+                writeBlockedReason: 'client-not-ready',
+              }}
+              onRefetch={() => {}}
+            />
+          </Suspense>
+        </>
+      )}
 
       {/* Real route: wallet gates first (panel keeps the phase visible). */}
       {!hasDemoMarker && walletGate && <PhasePanel phase={phase} />}
@@ -331,7 +408,7 @@ export function MatchRouteShell() {
       {/* Live match content, keyed off the resolved phase (GAME-507/508). */}
       {showMatch && match && (
         <>
-          <PhasePanel phase={phase} />
+          {phase.kind !== 'placement' && <PhasePanel phase={phase} />}
 
           {phase.kind === 'join' && (
             <JoinPanel
@@ -368,6 +445,21 @@ export function MatchRouteShell() {
             <p className="footnote" data-testid="spectator-note">
               {matchStateCopy.spectatorActiveBody}
             </p>
+          )}
+
+          {phase.kind === 'placement' && (
+            <>
+              <PlacementPhaseMetadata phase={phase} />
+              <Suspense fallback={<PlacementLoading />}>
+                <EncryptedFleetPanel
+                  phase={phase}
+                  match={match}
+                  writeClient={writeClient}
+                  wallet={wallet}
+                  onRefetch={query.refetch}
+                />
+              </Suspense>
+            </>
           )}
 
           {phase.kind === 'cancelled' && (

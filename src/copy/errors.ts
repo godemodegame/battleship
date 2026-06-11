@@ -23,6 +23,7 @@ export const ERROR_MESSAGES = {
   'invalid-placement': 'Fleet placement is invalid',
   'encryption-failed': 'Fhenix encryption failed',
   'finalization-failed': 'Result finalization failed',
+  'decryption-not-ready': 'Encrypted validation is still processing. Try again shortly.',
   'transaction-rejected': 'Transaction rejected',
   'transaction-reverted': 'Transaction reverted',
   // Phase 5 lifecycle + transaction tracking copy (GAME-503/507/508/511),
@@ -83,6 +84,8 @@ const CONTRACT_ERROR_CODES: Record<string, ErrorCode> = {
   NotMatchPlayerAddress: 'not-participant',
   PendingShotExists: 'shot-resolving',
   PlacementValidationPending: 'invalid-status',
+  DecryptionResultNotReady: 'decryption-not-ready',
+  NoPendingPlacementValidation: 'finalization-failed',
   NoTimeoutAvailable: 'invalid-status',
 }
 

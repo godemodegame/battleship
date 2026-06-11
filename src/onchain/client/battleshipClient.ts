@@ -16,9 +16,17 @@
 import { parseEventLogs } from 'viem'
 import type { ErrorCode } from '../../copy/errors'
 import { battleshipGameAbi } from '../abi/battleshipGame'
+import type { EncryptedFleetSegment } from '../fhenix/types'
 import type { HexAddress } from '../phaseResolver'
 import { decodeReadError, decodeTxError } from './decodeError'
-import { toChainMatchView, type ChainMatchView, type RawMatchView } from './mapping'
+import {
+  toChainMatchView,
+  toMatchPlayersView,
+  type ChainMatchView,
+  type MatchPlayersView,
+  type RawMatchView,
+  type RawPlayerPublicView,
+} from './mapping'
 import {
   trackTransaction,
   type Hash,
@@ -37,6 +45,8 @@ export interface MatchEventRef {
 export interface BattleshipReadClient {
   /** Authoritative match read; `null` when the match does not exist. */
   getMatch(matchId: bigint): Promise<ChainMatchView | null>
+  /** Public placement/board state for both player slots. */
+  getPlayers?(matchId: bigint): Promise<MatchPlayersView>
   /**
    * Watch this match's contract events. The callback receives event identities
    * only — consumers must follow with authoritative reads. Returns unwatch.
@@ -60,6 +70,21 @@ export interface BattleshipWriteClient {
   joinMatch(matchId: bigint, onState: (state: TxState) => void): Promise<WriteResult>
   cancelMatch(matchId: bigint, onState: (state: TxState) => void): Promise<WriteResult>
   forfeit(matchId: bigint, onState: (state: TxState) => void): Promise<WriteResult>
+  submitFleet?(
+    matchId: bigint,
+    segments: readonly EncryptedFleetSegment[],
+    onState: (state: TxState) => void,
+  ): Promise<WriteResult>
+  finalizeFleetValidation?(
+    matchId: bigint,
+    player: HexAddress,
+    onState: (state: TxState) => void,
+  ): Promise<WriteResult>
+  retryFleetValidation?(
+    matchId: bigint,
+    player: HexAddress,
+    onState: (state: TxState) => void,
+  ): Promise<WriteResult>
 }
 
 /* ------------------------------------------------------------------------- *
@@ -149,6 +174,18 @@ export function createBattleshipReadClient(
       }
     },
 
+    async getPlayers(matchId) {
+      const raw = await publicClient.readContract({
+        address: contractAddress,
+        abi: battleshipGameAbi,
+        functionName: 'getPlayers',
+        args: [matchId],
+      })
+      return toMatchPlayersView(
+        raw as readonly [RawPlayerPublicView, RawPlayerPublicView],
+      )
+    },
+
     watchMatch(matchId, onEvents) {
       return publicClient.watchContractEvent({
         address: contractAddress,
@@ -201,7 +238,14 @@ export function createBattleshipWriteClient(
   const { publicClient, walletClient, contractAddress, account } = config
 
   async function performWrite(
-    functionName: 'createMatch' | 'joinMatch' | 'cancelMatch' | 'forfeit',
+    functionName:
+      | 'createMatch'
+      | 'joinMatch'
+      | 'cancelMatch'
+      | 'forfeit'
+      | 'submitFleet'
+      | 'finalizeFleetValidation'
+      | 'retryFleetValidation',
     args: readonly unknown[],
     onState: (state: TxState) => void,
   ): Promise<{ ok: true; receipt: ReceiptLike } | { ok: false; error: ErrorCode }> {
@@ -257,6 +301,29 @@ export function createBattleshipWriteClient(
 
     async forfeit(matchId, onState) {
       const result = await performWrite('forfeit', [matchId], onState)
+      return result.ok ? { ok: true, hash: result.receipt.transactionHash } : result
+    },
+
+    async submitFleet(matchId, segments, onState) {
+      const result = await performWrite('submitFleet', [matchId, segments], onState)
+      return result.ok ? { ok: true, hash: result.receipt.transactionHash } : result
+    },
+
+    async finalizeFleetValidation(matchId, player, onState) {
+      const result = await performWrite(
+        'finalizeFleetValidation',
+        [matchId, player],
+        onState,
+      )
+      return result.ok ? { ok: true, hash: result.receipt.transactionHash } : result
+    },
+
+    async retryFleetValidation(matchId, player, onState) {
+      const result = await performWrite(
+        'retryFleetValidation',
+        [matchId, player],
+        onState,
+      )
       return result.ok ? { ok: true, hash: result.receipt.transactionHash } : result
     },
   }

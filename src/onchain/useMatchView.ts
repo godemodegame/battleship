@@ -74,7 +74,11 @@ export function useMatchView(params: UseMatchViewParams): MatchViewQuery {
           setError(null)
           setStatus('not-found')
         } else {
-          setMatch(view)
+          const players = readClient.getPlayers
+            ? await readClient.getPlayers(matchId)
+            : null
+          if (seq !== seqRef.current) return
+          setMatch(players ? { ...view, players } : view)
           setError(null)
           setStatus('ready')
         }

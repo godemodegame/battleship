@@ -56,6 +56,49 @@ export interface ChainMatchView extends MatchView {
   moveCount: number
   pendingMoveId: number
   deadlines: MatchDeadlines
+  /** Authoritative public player state, loaded alongside getMatch in Phase 6. */
+  players?: MatchPlayersView
+}
+
+const PLACEMENT_STATUS_BY_INDEX = [
+  'None',
+  'NotSubmitted',
+  'Submitted',
+  'ResolvingValidation',
+  'Valid',
+  'Invalid',
+] as const
+
+export type PlacementStatusName = (typeof PLACEMENT_STATUS_BY_INDEX)[number]
+
+export interface PublicBoardView {
+  attackedMask: bigint
+  missMask: bigint
+  hitMask: bigint
+  sunkMask: bigint
+}
+
+export interface ChainPlayerView {
+  player: HexAddress | null
+  joined: boolean
+  placementStatus: PlacementStatusName
+  fleetSubmitted: boolean
+  fleetValid: boolean
+  publicBoard: PublicBoardView
+}
+
+export interface MatchPlayersView {
+  creator: ChainPlayerView
+  opponent: ChainPlayerView
+}
+
+export interface RawPlayerPublicView {
+  player: `0x${string}`
+  joined: boolean
+  placementStatus: number
+  fleetSubmitted: boolean
+  fleetValid: boolean
+  publicBoard: PublicBoardView
 }
 
 /** Structural type of the raw `getMatch` tuple as decoded by viem. */
@@ -123,6 +166,31 @@ export function toChainMatchView(
       turnDeadline: Number(raw.timeoutState.turnDeadline),
       resolvingDeadline: Number(raw.timeoutState.resolvingDeadline),
     },
+  }
+}
+
+export function toChainPlayerView(raw: RawPlayerPublicView): ChainPlayerView {
+  return {
+    player: addressOrNull(raw.player),
+    joined: raw.joined,
+    placementStatus: PLACEMENT_STATUS_BY_INDEX[raw.placementStatus] ?? 'None',
+    fleetSubmitted: raw.fleetSubmitted,
+    fleetValid: raw.fleetValid,
+    publicBoard: {
+      attackedMask: raw.publicBoard.attackedMask,
+      missMask: raw.publicBoard.missMask,
+      hitMask: raw.publicBoard.hitMask,
+      sunkMask: raw.publicBoard.sunkMask,
+    },
+  }
+}
+
+export function toMatchPlayersView(
+  raw: readonly [RawPlayerPublicView, RawPlayerPublicView],
+): MatchPlayersView {
+  return {
+    creator: toChainPlayerView(raw[0]),
+    opponent: toChainPlayerView(raw[1]),
   }
 }
 
