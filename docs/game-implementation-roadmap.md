@@ -462,22 +462,26 @@ Goal:
 - make the public contract lifecycle usable before fleet encryption is wired
   into the UI.
 
+Progress:
+
+- `GAME-501` through `GAME-512` complete (June 11, 2026).
+
 Tasks:
 
-| ID | Priority | Work |
-| --- | --- | --- |
-| GAME-501 | P0 | Load and validate the active versioned deployment record |
-| GAME-502 | P0 | Create typed public and wallet clients |
-| GAME-503 | P0 | Add typed contract reads, writes, error mapping, and receipt tracking |
-| GAME-504 | P0 | Build wallet-aware onboarding and main menu |
-| GAME-505 | P0 | Build `Play Against Friend` address input and validation |
-| GAME-506 | P0 | Build create-match transaction flow and invite link |
-| GAME-507 | P0 | Build join route, invited-wallet checks, and join transaction |
-| GAME-508 | P0 | Build waiting, cancelled, expired, and unavailable match states |
-| GAME-509 | P0 | Implement event-triggered targeted refetches |
-| GAME-510 | P0 | Refetch on reconnect, focus, account change, and chain change |
-| GAME-511 | P1 | Add transaction replacement, revert, drop, and retry handling |
-| GAME-512 | P1 | Add explorer links and match identity display |
+| ID | Priority | Status | Work |
+| --- | --- | --- | --- |
+| GAME-501 | P0 | Complete | Load and validate the active versioned deployment record |
+| GAME-502 | P0 | Complete | Create typed public and wallet clients |
+| GAME-503 | P0 | Complete | Add typed contract reads, writes, error mapping, and receipt tracking |
+| GAME-504 | P0 | Complete | Build wallet-aware onboarding and main menu |
+| GAME-505 | P0 | Complete | Build `Play Against Friend` address input and validation |
+| GAME-506 | P0 | Complete | Build create-match transaction flow and invite link |
+| GAME-507 | P0 | Complete | Build join route, invited-wallet checks, and join transaction |
+| GAME-508 | P0 | Complete | Build waiting, cancelled, expired, and unavailable match states |
+| GAME-509 | P0 | Complete | Implement event-triggered targeted refetches |
+| GAME-510 | P0 | Complete | Refetch on reconnect, focus, account change, and chain change |
+| GAME-511 | P1 | Complete | Add transaction replacement, revert, drop, and retry handling |
+| GAME-512 | P1 | Complete | Add explorer links and match identity display |
 
 Exit criteria:
 
@@ -486,6 +490,47 @@ Exit criteria:
 - duplicate transaction submission is prevented;
 - events are deduplicated and followed by authoritative reads;
 - refresh reconstructs the correct match phase.
+
+Exit status:
+
+- met on June 11, 2026 (`src/onchain/friendMatchFlow.test.tsx` drives two
+  wallets through create → invite link → join against a shared mock contract
+  from the UI; the committed Arbitrum Sepolia deployment record stays
+  `pending` until Phase 10 deploys a contract, so live-chain writes unlock
+  with that record).
+
+Realized structure:
+
+- deployment resolution (GAME-501): `resolveDeployment` /
+  `resolveActiveDeployment` in `src/onchain/deployments.ts` validate the
+  versioned record behind every menu, create, and match route; unknown and
+  invalid ids degrade to recoverable states;
+- typed clients (GAME-502/503): `src/onchain/client/` wraps viem behind
+  `BattleshipReadClient` / `BattleshipWriteClient` (`battleshipClient.ts`),
+  maps the raw `getMatch` struct to the resolver's view (`mapping.ts`),
+  decodes wallet/RPC/revert error chains to player copy (`decodeError.ts`,
+  `src/copy/errors.ts`), and tracks every write through
+  wallet → pending → confirmed/reverted/replaced/dropped (`txTracker.ts`,
+  GAME-511) with simulation before the wallet prompt; the wallet provider
+  exposes its viem clients through the session context;
+- screens (GAME-504..506): `/` wallet-aware onboarding
+  (`src/onchain/menu/EntryScreen.tsx`), `/menu` Command Deck
+  (`MainMenuScreen.tsx`), `/match/new` strict friend invite with address
+  validation, clipboard paste, duplicate-submit guard, and post-receipt
+  navigation to the versioned match route (`CreateFriendMatchScreen.tsx`);
+  opponent selection is folded into the menu while one mode exists;
+- match route (GAME-507/508/512): `MatchRouteShell` loads authoritative state
+  through `useMatchView`, renders join (deadline-aware), creator
+  waiting/invite-link/cancel, expired, cancelled, forfeited, not-found, and
+  retryable error states (`src/onchain/match/MatchLifecyclePanels.tsx`), plus
+  match identity and Arbiscan links (`explorer.ts`); the `demo-*` URL harness
+  remains for phase visualization only;
+- refetch policy (GAME-509/510): `useMatchView` follows deduplicated contract
+  events (block hash + log index) with `getMatch` reads and refetches on
+  focus, visibility return, reconnect, account epoch, and chain changes;
+- practice stays wallet-free: `/practice` unchanged, reachable from
+  onboarding Skip, and its `Play Against Friend` button now routes to
+  `/match/new`.
 
 Specifications:
 

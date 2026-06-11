@@ -71,7 +71,7 @@ export const matchRouteCopy = {
     `Deployment ${deploymentId} · Match ${matchId}`,
   backToPractice: 'Back to Practice',
   shellFootnote:
-    'Mocked on-chain phases for the empty shell (phase derived from the URL matchId). Real contract wiring lands in later phases.',
+    'Demo phase preview (phase derived from the URL matchId). Real match ids load contract state.',
 } as const
 
 /** Copy for deployment resolution outcomes on the match route. */
@@ -80,7 +80,114 @@ export const deploymentCopy = {
   unknownBody: (deploymentId: string) =>
     `This invite points to an unknown deployment (${deploymentId}). ` +
     'It may target a different network or a retired contract version.',
+  invalidTitle: 'Deployment record invalid',
+  invalidBody: (deploymentId: string) =>
+    `The deployment record for ${deploymentId} failed validation. ` +
+    'This build cannot offer on-chain actions against it.',
   pendingNote:
     'This deployment is registered, but its contract is not live yet. ' +
-    'On-chain actions unlock in a later phase.',
+    'On-chain actions unlock once the contract is deployed.',
+} as const
+
+/** Wallet-aware entry onboarding (GAME-504, Flow 1 in docs/user-flows.md). */
+export const onboardingCopy = {
+  title: 'Encrypted Battleship',
+  kicker: 'Tactical FHE Naval Ops',
+  slides: [
+    { heading: 'Hide your fleet with Fhenix', body: 'Place your fleet in secret.' },
+    { heading: 'Every move is a transaction', body: 'Attack by sending on-chain moves.' },
+    { heading: 'Outplay your friend on-chain', body: 'Only final results are revealed.' },
+  ],
+  next: 'Continue',
+  skip: 'Skip',
+} as const
+
+/** Main menu (GAME-504, "Command Deck" in docs/copy-deck.md). */
+export const menuCopy = {
+  kicker: 'Main Menu',
+  title: 'Command Deck',
+  playFriend: 'Play Against Friend',
+  playFriendNote: 'Invite a specific wallet.',
+  practice: 'Practice vs Bot',
+  practiceNote: 'Local match, no wallet needed.',
+  joinHint: 'Have an invite link? Open it to join your friend’s match.',
+  deploymentPendingNote:
+    'On-chain matches unlock once the game contract is deployed. Practice is available now.',
+} as const
+
+/** Friend match creation (GAME-505/506, Flow 5 in docs/user-flows.md). */
+export const createMatchCopy = {
+  kicker: 'Play Against Friend',
+  title: 'Invite Friend',
+  addressLabel: 'Friend Wallet Address',
+  addressPlaceholder: '0x…',
+  paste: 'Paste Address',
+  pasteFailed: 'Clipboard unavailable. Type the address instead.',
+  create: 'Create Match',
+  creating: 'Creating Match',
+  back: 'Back',
+  helper: 'Only this wallet can join the match.',
+  validationEmpty: 'Enter a wallet address.',
+  validationInvalid: 'Invalid address.',
+  validationSelf: 'You cannot invite yourself.',
+  created: 'Match Created',
+} as const
+
+/** Invite link sharing + creator waiting state (GAME-506/508, Flow 7). */
+export const inviteCopy = {
+  waitingTitle: 'Waiting for Friend',
+  waitingBody: 'Send the invite link. The match starts after your friend joins.',
+  invitedLabel: 'Invited wallet',
+  linkLabel: 'Match Link',
+  copy: 'Copy Invite Link',
+  copied: 'Invite link copied',
+  copyFailed: 'Could not copy. Long-press the link to copy it.',
+  share: 'Share Invite',
+  cancelMatch: 'Cancel Match',
+  cancelling: 'Cancelling Match',
+} as const
+
+/** Invited-wallet join flow (GAME-507, Flow 8). */
+export const joinCopy = {
+  title: 'Join Match',
+  invitedBody: 'You are invited to this match. Join to place your fleet.',
+  creatorLabel: 'Created by',
+  join: 'Join Match',
+  joining: 'Joining Match',
+  wrongWallet: 'This invite is for another wallet.',
+} as const
+
+/** Terminal / blocked lifecycle states on the match route (GAME-508). */
+export const matchStateCopy = {
+  waitingForOpponentSpectator: 'This match is waiting for the invited player.',
+  spectatorActiveBody: 'This match is between other players.',
+  cancelledBody: 'This match was cancelled. Create a new match to play.',
+  forfeitedBody: 'This match ended by forfeit.',
+  expiredTitle: 'Invite expired',
+  expiredBody: 'The join deadline passed before your friend joined.',
+  expiredJoinBody: 'The join deadline for this invite has passed.',
+  unavailableBody: 'Match state could not be loaded.',
+  retry: 'Retry',
+  loading: 'Checking Match',
+  backToMenu: 'Back to Menu',
+} as const
+
+/** Transaction lifecycle states (GAME-503/511, docs/copy-deck.md). */
+export const txCopy = {
+  confirmInWallet: 'Confirm in Wallet',
+  pending: 'Transaction Pending',
+  confirmed: 'Transaction Confirmed',
+  failed: 'Transaction Failed',
+  retry: 'Try Again',
+  replacedNote: 'Your wallet replaced the transaction. Tracking the new one.',
+} as const
+
+/** Explorer links + match identity display (GAME-512). */
+export const explorerCopy = {
+  matchIdLabel: 'Match ID',
+  networkLabel: 'Network',
+  networkName: 'Arbitrum Sepolia',
+  contractLabel: 'Contract',
+  viewContract: 'View contract on explorer',
+  viewTx: 'View transaction on explorer',
 } as const

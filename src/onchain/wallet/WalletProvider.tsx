@@ -285,6 +285,10 @@ function WalletSessionBridge({ children }: { children: ReactNode }) {
     balanceStatus,
     handoffRestored,
     accountEpoch,
+    // Typed contract clients are built over these (GAME-502). The structural
+    // *Like types are the subset of the viem API the client layer uses.
+    publicClient: publicClient as unknown as WalletContextValue['publicClient'],
+    walletClient: walletClient as unknown as WalletContextValue['walletClient'],
     actions: {
       connect,
       disconnect,

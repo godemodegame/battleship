@@ -9,6 +9,8 @@ import {
   isDeploymentReady,
   isKnownDeployment,
   listDeploymentIds,
+  resolveActiveDeployment,
+  resolveDeployment,
   validateDeploymentRecord,
   type DeploymentRecord,
 } from './deployments'
@@ -92,5 +94,37 @@ describe('deployment manifest reader (GAME-109)', () => {
 
   it('falls back to the default active deployment id when env is unset', () => {
     expect(getActiveDeploymentId()).toBe(DEFAULT_DEPLOYMENT_ID)
+  })
+})
+
+describe('resolveDeployment (GAME-501)', () => {
+  it('resolves the committed MVP deployment as known but not ready', () => {
+    const res = resolveDeployment(DEFAULT_DEPLOYMENT_ID)
+    expect(res.ok).toBe(true)
+    if (res.ok) {
+      expect(res.record.deploymentId).toBe(DEFAULT_DEPLOYMENT_ID)
+      expect(res.ready).toBe(false)
+    }
+  })
+
+  it('reports unknown ids with a reason instead of throwing', () => {
+    const res = resolveDeployment('retired-v0')
+    expect(res.ok).toBe(false)
+    if (!res.ok) {
+      expect(res.reason).toBe('unknown')
+      expect(res.problems.length).toBeGreaterThan(0)
+    }
+  })
+
+  it('treats empty / missing ids as unknown', () => {
+    expect(resolveDeployment('').ok).toBe(false)
+    expect(resolveDeployment(null).ok).toBe(false)
+    expect(resolveDeployment(undefined).ok).toBe(false)
+  })
+
+  it('resolves the active deployment for this build', () => {
+    const res = resolveActiveDeployment()
+    expect(res.deploymentId).toBe(getActiveDeploymentId())
+    expect(res.ok).toBe(true)
   })
 })

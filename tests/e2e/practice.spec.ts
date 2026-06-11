@@ -1,11 +1,21 @@
 import { expect, test, type Page } from '@playwright/test'
 
 async function openReady(page: Page) {
-  await page.goto('/')
+  // `/` is the wallet-aware entry since Phase 5 (GAME-504); practice lives at
+  // its explicit route and must stay playable without a wallet.
+  await page.goto('/practice')
   await expect(page.getByRole('heading', { name: /Encrypted Battleship/i }))
     .toBeVisible({ timeout: 30_000 })
   await expect(page.getByText('Loading Battlefield')).toBeHidden({ timeout: 30_000 })
 }
+
+test('entry onboarding keeps practice reachable without a wallet', async ({ page }) => {
+  await page.goto('/')
+  await expect(page.getByTestId('entry-screen')).toBeVisible({ timeout: 30_000 })
+  await page.getByTestId('entry-skip').click()
+  await expect(page.getByRole('button', { name: 'Practice vs Bot' }))
+    .toBeVisible({ timeout: 30_000 })
+})
 
 async function storeValue<T>(page: Page, selector: string): Promise<T> {
   return page.evaluate((path) => {

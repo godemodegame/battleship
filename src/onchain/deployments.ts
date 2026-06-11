@@ -136,3 +136,42 @@ export function getActiveDeploymentId(): string {
       : undefined
   return env && env.length > 0 ? env : DEFAULT_DEPLOYMENT_ID
 }
+
+/**
+ * Outcome of resolving + validating one deployment id (GAME-501).
+ *
+ * - `ok: false, reason: 'unknown'` — the id is not in the manifest (retired or
+ *   foreign invite link).
+ * - `ok: false, reason: 'invalid'` — the record exists but fails validation
+ *   (wrong chain, malformed address); the build must not offer writes against it.
+ * - `ok: true` — well-formed record; `ready` says whether a live contract
+ *   address exists (`status: 'active'`), i.e. whether on-chain actions may be
+ *   offered at all.
+ */
+export type DeploymentResolution =
+  | { ok: true; deploymentId: string; record: DeploymentRecord; ready: boolean }
+  | { ok: false; deploymentId: string; reason: 'unknown' | 'invalid'; problems: string[] }
+
+/** Resolve and validate a deployment id from a route or invite link. */
+export function resolveDeployment(deploymentId: string | undefined | null): DeploymentResolution {
+  const id = deploymentId ?? ''
+  const record = getDeployment(id)
+  if (!record) {
+    return { ok: false, deploymentId: id, reason: 'unknown', problems: ['deployment id not in manifest'] }
+  }
+  const problems = validateDeploymentRecord(record)
+  if (problems.length > 0) {
+    return { ok: false, deploymentId: id, reason: 'invalid', problems }
+  }
+  return { ok: true, deploymentId: id, record, ready: isDeploymentReady(record) }
+}
+
+/**
+ * Resolve and validate the build's active deployment record (GAME-501). Menu
+ * and create-match flows must call this before offering any on-chain action,
+ * so an env-selected id that is unknown or malformed degrades to a visible
+ * recoverable state instead of a phantom contract.
+ */
+export function resolveActiveDeployment(): DeploymentResolution {
+  return resolveDeployment(getActiveDeploymentId())
+}
