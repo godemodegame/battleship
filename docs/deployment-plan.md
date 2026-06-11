@@ -2,8 +2,8 @@
 
 ## Purpose
 
-This document defines the path from the current local Vite practice build to a
-public Arbitrum Sepolia demo.
+This document defines the path from the implemented Phase 9 release candidate
+to a public Arbitrum Sepolia demo.
 
 It covers frontend hosting, contract deployment, Privy origins, environment
 variables, deployment records, release checks, rollback, and contract
@@ -13,18 +13,14 @@ redeployment.
 
 The repository currently has:
 
-- one Vite React application;
-- `npm run dev`, `npm run build`, and `npm run preview`;
-- static runtime assets under `public/`;
-- no router or SPA rewrite config;
-- no Privy package or environment variables;
-- no contract package, ABI, deployment script, or deployment record;
-- no Vercel project config;
-- no CI workflow;
-- no public deployment.
-
-Commands and paths in this document that refer to contracts are required target
-interfaces. They are not available until the contract package is implemented.
+- routed Vite React practice and on-chain applications;
+- Privy external-wallet configuration and public environment variables;
+- Hardhat/CoFHE contract package, generated ABI, deploy/validate scripts, and a
+  pending immutable deployment id;
+- Vercel SPA rewrite configuration and GitHub Actions CI;
+- release artifact/config verification and a funded two-wallet testnet
+  regression command;
+- no active public deployment yet.
 
 ## Deployment Decisions
 
@@ -45,7 +41,7 @@ interfaces. They are not available until the contract package is implemented.
 
 | Environment | Frontend | Wallet/on-chain scope | Contract |
 | --- | --- | --- | --- |
-| Local | Vite dev server | Practice; optional Privy development app; local CoFHE mocks later | Local Hardhat/CoFHE mock |
+| Local | Vite dev server | Practice; optional Privy development app; browser/CoFHE mocks | Local Hardhat/CoFHE mock |
 | PR preview | Vercel preview URL | Practice and visual review by default | None or read-only configured test contract |
 | Staging | Stable owned staging domain | Full Privy and funded two-wallet E2E | Dedicated Arbitrum Sepolia staging deployment |
 | Production demo | Production custom domain | Public testnet demo | Versioned Arbitrum Sepolia release deployment |
@@ -199,7 +195,7 @@ The plugin currently provides the `arb-sepolia` network for chain id `421614`.
 Pin compatible versions of:
 
 - `@cofhe/hardhat-plugin`;
-- `@cofhe/sdk`;
+- `cofhejs 0.3.1`;
 - `@cofhe/mock-contracts`;
 - `@fhenixprotocol/cofhe-contracts`;
 - Solidity compiler and Hardhat.

@@ -37,9 +37,12 @@ with the practice/on-chain boundary from Phase 1 in place:
 - `src/lib/sfx.ts` owns synthesized sound and the only persisted setting
   (`localStorage.eb-muted`).
 
-There is no Privy provider, contract client, event sync, CoFHE client, or query
-cache yet. A versioned deployment manifest reader exists, but no contract is
-deployed, so its single record is reserved (`status: 'pending'`).
+The on-chain path now includes the lazy Privy/viem bridge, typed contract
+clients, event-triggered authoritative refetch, scoped CoFHE worker client,
+encrypted placement store, public battle adapter, pending-receipt recovery,
+and terminal summaries. The versioned manifest is stored in
+`src/onchain/deploymentManifest.json`; its single record remains
+`status: 'pending'` until Phase 10 deploys the public contract.
 
 In practice mode, the local store is intentionally authoritative. It knows both
 fleets and calls `applyAttack()` directly. That authority must never be reused
@@ -94,21 +97,20 @@ The MVP frontend should not include:
 - chat;
 - complex account profile pages.
 
-## Recommended Frontend Stack
+## Implemented Frontend Stack
 
-Recommended MVP stack:
+Current MVP stack:
 
 - Vite React;
 - TypeScript;
 - React Three Fiber;
 - Three.js;
 - Privy React SDK for wallet-only login, connection, and session state;
-- wagmi through Privy's integration if React contract hooks are useful;
-- viem;
-- `@cofhe/sdk`;
+- viem clients assembled from Privy's active external wallet;
+- `cofhejs` `0.3.1` behind a dedicated web worker;
 - Zustand;
-- React Router or TanStack Router;
-- GLB assets for runtime 3D models.
+- React Router;
+- FBX ship/board assets and GLB VFX assets.
 
 Vite React is the recommended first implementation because the MVP is a browser-first interactive game and does not require SSR, API routes, or server-rendered content.
 

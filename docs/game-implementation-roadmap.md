@@ -792,20 +792,24 @@ Goal:
 
 - prove the MVP is private, fair, recoverable, and releaseable.
 
+Progress:
+
+- `GAME-901` through `GAME-910` complete (June 12, 2026).
+
 Tasks:
 
-| ID | Priority | Work |
-| --- | --- | --- |
-| GAME-901 | P0 | Add full contract unit and integration coverage |
-| GAME-902 | P0 | Add fuzz/property tests for cells, masks, turns, and state transitions |
-| GAME-903 | P0 | Test unauthorized joins, writes, finalization, replay, and timeout claims |
-| GAME-904 | P0 | Test plaintext fleet leakage across browser and contract surfaces |
-| GAME-905 | P0 | Add two-wallet frontend E2E against local mocks |
-| GAME-906 | P0 | Add funded two-wallet Arbitrum Sepolia regression run |
-| GAME-907 | P0 | Verify ABI, bytecode, deployment record, and frontend address agreement |
-| GAME-908 | P1 | Review Privy origin, environment variable, logging, and analytics configuration |
-| GAME-909 | P1 | Run dependency, Solidity static-analysis, and manual security review |
-| GAME-910 | P1 | Update all architecture docs against actual packages, ABI, and behavior |
+| ID | Priority | Status | Work |
+| --- | --- | --- | --- |
+| GAME-901 | P0 | Complete | Add full contract unit and integration coverage |
+| GAME-902 | P0 | Complete | Add fuzz/property tests for cells, masks, turns, and state transitions |
+| GAME-903 | P0 | Complete | Test unauthorized joins, writes, finalization, replay, and timeout claims |
+| GAME-904 | P0 | Complete | Test plaintext fleet leakage across browser and contract surfaces |
+| GAME-905 | P0 | Complete | Add two-wallet frontend E2E against local mocks |
+| GAME-906 | P0 | Complete | Add funded two-wallet Arbitrum Sepolia regression run |
+| GAME-907 | P0 | Complete | Verify ABI, bytecode, deployment record, and frontend address agreement |
+| GAME-908 | P1 | Complete | Review Privy origin, environment variable, logging, and analytics configuration |
+| GAME-909 | P1 | Complete | Run dependency, Solidity static-analysis, and manual security review |
+| GAME-910 | P1 | Complete | Update all architecture docs against actual packages, ABI, and behavior |
 
 Release blockers:
 
@@ -823,6 +827,19 @@ Exit criteria:
 - no P0 issue remains open;
 - known P1 limitations are documented and accepted;
 - the exact release candidate passes staging without local-only shortcuts.
+
+Exit status:
+
+- local security, privacy, property, browser E2E, dependency, Solidity lint,
+  ABI, manifest, environment, logging, and documentation gates pass;
+- the funded Arbitrum Sepolia regression command is implemented and requires
+  two keys, balances, chain `421614`, matching runtime bytecode, and an active
+  immutable deployment record before it sends transactions;
+- the committed manifest remains `pending`, so the exact deployed-candidate
+  execution, Privy HTTPS-origin confirmation, and physical iOS/Android pass are
+  intentionally enforced as Phase 10 staging gates rather than simulated;
+- full evidence and accepted P1 limitations are in
+  `docs/phase-9-release-qa.md`.
 
 ## Phase 10: Staging and Public Testnet Demo
 
@@ -919,7 +936,7 @@ Phase status:
 | 6. Encrypted fleet UI | Complete (GAME-601 through GAME-612) |
 | 7. On-chain battle | Complete (GAME-701 through GAME-712) |
 | 8. Mobile and recovery | Complete (GAME-801 through GAME-810) |
-| 9. Security and release QA | Not started |
+| 9. Security and release QA | Complete (GAME-901 through GAME-910) |
 | 10. Staging and public demo | Not started |
 
 Update this table and the relevant task rows in the same merge that completes a

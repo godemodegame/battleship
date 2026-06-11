@@ -10,9 +10,11 @@ All project documentation, game UI text, player-facing copy, errors, labels, and
 
 ## Current Build Status
 
-The repository contains a playable local practice build. It is a complete
-player-versus-bot slice of the game running entirely in the browser with no
-backend, wallet, or chain interaction.
+The repository contains the complete local practice game and the implemented
+on-chain friend-match client/contract stack through Phase 9. Practice remains
+wallet-free. On-chain routes support Privy external wallets, Arbitrum Sepolia,
+strict friend invites, encrypted fleet submission, contract-derived battle
+results, recovery, and terminal states.
 
 Playable now:
 
@@ -21,14 +23,19 @@ Playable now:
 - manual and automatic fleet placement with the classic no-touch rule;
 - practice match against a local bot with `Easy`, `Normal`, and `Hard`
   difficulties;
-- attack projectile, miss, hit, and sunk effects with synthesized sound.
+- attack projectile, miss, hit, and sunk effects with synthesized sound;
+- wallet-aware `/match/new` and `/match/:deploymentId/:matchId` routes;
+- typed contract clients and a Hardhat `BattleshipGame` package with CoFHE
+  encrypted fleet validation and shot resolution;
+- pending transaction recovery, mobile handoff recovery, reduced-motion and
+  graphics controls, adversarial/property/privacy tests, and two-wallet E2E.
 
-Future milestones (designed in the docs, not implemented):
+Still pending:
 
-- wallet connection (Privy) and Arbitrum Sepolia network guard;
-- smart contract package and on-chain friend matches;
-- Fhenix/CoFHE encrypted fleet state;
-- automated tests and production deployment.
+- an immutable active Arbitrum Sepolia deployment record;
+- a stable Vercel staging origin and matching Privy origin allowlist;
+- funded two-wallet staging execution and physical iOS/Android acceptance;
+- the Phase 10 public testnet demo.
 
 ### Run Locally
 
@@ -39,13 +46,16 @@ npm run dev
 
 Vite prints a local URL (the dev server also listens on the LAN so a phone on
 the same network can open it). `npm run build` type-checks and produces a
-production bundle; `npm run preview` serves that bundle.
+production bundle; `npm run preview` serves that bundle. Copy `.env.example`
+to `.env.local` to enable wallet routes. Without `VITE_PRIVY_APP_ID`, practice
+mode still works and on-chain routes show a configuration message.
 
 ## Documentation
 
 Current build documentation:
 
 - [Game Implementation Roadmap](docs/game-implementation-roadmap.md) - active engineering sequence from the local practice build to the public Privy/CoFHE friend-match MVP.
+- [Phase 9 Release QA](docs/phase-9-release-qa.md) - security evidence, release commands, accepted limitations, and Phase 10 gates.
 - [Current Playable Build](docs/current-playable-build.md) - what the game does today, how to run it, and how the prototype maps to the on-chain target.
 - [Local Game Engine](docs/local-game-engine.md) - exact rules implemented by the local engine: board indexing, fleet, placement, attacks, and turn passing.
 - [Practice Mode and Bot AI](docs/practice-mode-and-bot-ai.md) - the local practice bot: difficulty behavior, public-information targeting, and migration paths.

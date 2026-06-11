@@ -6,7 +6,7 @@ The smart contract manages PvP matches for a Battleship-style game. It is respon
 
 The contract must be the main source of truth. The frontend, 3D client, indexer, or mobile app must not be able to decide whether a shot was a hit, whose turn it is, or who won the match.
 
-## Implementation Status (Phase 4)
+## Implementation Status (Phases 4-9)
 
 `contracts/contracts/BattleshipGame.sol` implements this design. The exact
 ABI is in `docs/contract-api.md`, the storage model in
@@ -29,6 +29,10 @@ preferences expressed below, decided by measurement:
   results are posted on-chain by the CoFHE network itself - finalization
   functions are permissionless triggers that read the posted plaintext, and
   no client ever supplies a result value or signature.
+
+Phase 9 pins this behavior with property, adversarial, ABI-surface privacy,
+cross-match isolation, and full lifecycle tests. The generated ABI and runtime
+bytecode hash are release-gated.
 
 ## Network
 
@@ -54,7 +58,10 @@ Fhenix is responsible for:
 - revealing only the minimum required turn result;
 - keeping unattacked board cells hidden.
 
-The client must use `@cofhe/sdk` to encrypt data before sending it to the contract, manage permits, and work with authorized decryption. The Solidity contract must use `FHE.sol` from CoFHE contracts to work with encrypted types and FHE operations.
+The client uses `cofhejs 0.3.1` to encrypt data before sending it to the
+contract. The Solidity contract uses `FHE.sol` from CoFHE contracts to work
+with encrypted types and FHE operations. The current public-result flow does
+not require a browser-held decrypt permit.
 
 ## Privacy Model
 

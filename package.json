@@ -8,7 +8,9 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:e2e": "VITE_E2E_MOCKS=1 vite",
     "build": "tsc -b && vite build",
+    "build:e2e": "VITE_E2E_MOCKS=1 tsc -b && VITE_E2E_MOCKS=1 vite build",
     "preview": "vite preview",
     "test": "vitest run --passWithNoTests",
     "test:watch": "vitest",
@@ -17,7 +19,12 @@
     "test:ci": "npm run build && npm run test:unit && npm run test:screen",
     "test:e2e": "playwright test --pass-with-no-tests",
     "test:e2e:install": "playwright install chromium",
-    "test:contracts": "npm --prefix contracts test"
+    "test:contracts": "npm --prefix contracts test",
+    "verify:release": "node scripts/verify-release.mjs && node scripts/check-release-config.mjs"
+  },
+  "overrides": {
+    "uuid": "11.1.1",
+    "ws": "8.21.0"
   },
   "dependencies": {
     "@privy-io/react-auth": "^3.29.2",

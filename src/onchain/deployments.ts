@@ -14,6 +14,7 @@
  */
 
 import { ARBITRUM_SEPOLIA_CHAIN_ID } from './wallet/network'
+import deploymentManifest from './deploymentManifest.json'
 
 export type Address = `0x${string}`
 
@@ -48,15 +49,7 @@ export interface DeploymentRecord {
  * deployed in Phase 3/10. New deployments append new records and never edit or
  * reuse an existing `deploymentId`.
  */
-const MANIFEST: ReadonlyArray<DeploymentRecord> = [
-  {
-    deploymentId: DEFAULT_DEPLOYMENT_ID,
-    chainId: MVP_CHAIN_ID,
-    contractName: 'BattleshipGame',
-    address: null,
-    status: 'pending',
-  },
-]
+const MANIFEST = deploymentManifest as ReadonlyArray<DeploymentRecord>
 
 const ADDRESS_RE = /^0x[0-9a-fA-F]{40}$/
 

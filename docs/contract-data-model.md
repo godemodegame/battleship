@@ -48,6 +48,10 @@ Phase 4 froze the encrypted model after the CoFHE feasibility measurements
 - the MVP sunk reveal is the final attacked cell (`sunkMask` bit) plus the
   public `sunkShipId`; full sunk-geometry reveal stays post-MVP.
 
+Phase 9 adds seeded state-transition properties, cross-match isolation,
+read-surface allowlisting, and assertions that only attacked public mask bits
+leave storage.
+
 ## Design Goals
 
 The data model must support:

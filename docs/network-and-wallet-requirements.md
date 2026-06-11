@@ -2,11 +2,10 @@
 
 ## Purpose
 
-This document fixes the wallet and network decisions for the first on-chain
-Battleship milestone before web3 packages are added.
-
-The current playable build has no wallet or chain integration. These
-requirements apply to the future friend-match flow.
+This document records the wallet and network requirements implemented for the
+friend-match flow. Phase 2 added Privy and the Arbitrum Sepolia guard; Phases
+5 through 9 connected those clients to every contract write, recovery path,
+security test, and release check.
 
 ## Decision Summary
 

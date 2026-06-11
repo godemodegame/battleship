@@ -30,8 +30,8 @@ export default defineConfig({
   ],
   webServer: {
     command: process.env.CI
-      ? 'npm run preview -- --host 127.0.0.1 --port 4173'
-      : 'npm run dev -- --host 127.0.0.1 --port 4173',
+      ? 'npm run build:e2e && npm run preview -- --host 127.0.0.1 --port 4173'
+      : 'npm run dev:e2e -- --host 127.0.0.1 --port 4173',
     url: 'http://127.0.0.1:4173',
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,

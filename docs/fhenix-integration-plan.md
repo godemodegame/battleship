@@ -6,7 +6,7 @@ This document defines how the game should integrate Fhenix/CoFHE for private on-
 
 The game requires hidden fleet placement and private board state while keeping match rules fully on-chain. Fhenix/CoFHE is the privacy layer that allows the contract to store and compute over encrypted data without revealing the player's hidden board.
 
-## Implementation Status (Phase 4)
+## Implementation Status (Phases 4-9)
 
 The contract side of this plan is implemented in
 `contracts/contracts/BattleshipGame.sol` (GAME-401..412). Measurements and
@@ -40,6 +40,10 @@ during implementation that supersede assumptions below:
 - the mock environment cannot exercise the zk-verifier guarantee that
   encrypted inputs bind to the submitting account and chain; that property
   is validated on Arbitrum Sepolia (GAME-906).
+
+Phases 6 through 9 added the scoped web-worker client, encrypted placement UI,
+private-state clearing, browser leakage tests, adversarial contract tests, and
+the guarded funded Arbitrum Sepolia regression command.
 
 ## Goals
 

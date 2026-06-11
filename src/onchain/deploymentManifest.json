@@ -1,0 +1,9 @@
+[
+  {
+    "deploymentId": "arb-sepolia-v1",
+    "chainId": 421614,
+    "contractName": "BattleshipGame",
+    "address": null,
+    "status": "pending"
+  }
+]

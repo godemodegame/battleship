@@ -35,9 +35,9 @@ The MVP architecture should not include:
 - chat;
 - complex tournament infrastructure.
 
-## Recommended MVP Stack
+## Implemented MVP Stack
 
-Recommended frontend stack:
+Frontend stack:
 
 - React;
 - Vite React for the first MVP implementation;
@@ -45,20 +45,19 @@ Recommended frontend stack:
 - Three.js under React Three Fiber;
 - Privy React SDK for wallet login, external wallet connection, and session
   state;
-- wagmi through Privy's integration if React contract hooks are useful;
-- viem for contract reads and writes;
-- `@cofhe/sdk` for Fhenix/CoFHE browser integration;
-- Zustand or a small local store for UI and match state.
+- viem for contract reads and writes, assembled from Privy's wallet provider;
+- `cofhejs 0.3.1` for Fhenix/CoFHE browser integration;
+- Zustand for practice, placement, and device UI state.
 
 Next.js can be considered later if the project needs broader website or content features.
 
-Recommended contract stack:
+Contract stack:
 
 - Solidity;
 - `@fhenixprotocol/cofhe-contracts`;
 - `FHE.sol`;
-- Hardhat or Foundry;
-- CoFHE Hardhat or Foundry plugin;
+- Hardhat `2.28.6`;
+- `cofhe-hardhat-plugin 0.3.1`;
 - CoFHE mock contracts for local testing.
 
 Recommended network:
@@ -67,9 +66,9 @@ Recommended network:
 - chain id `421614`;
 - Fhenix plugin name `arb-sepolia`.
 
-Recommended runtime asset format:
+Runtime asset formats:
 
-- `.glb` for 3D models;
+- FBX for ship/board/prop models and GLB for VFX;
 - compressed textures;
 - mobile-friendly LODs where needed.
 
@@ -98,8 +97,8 @@ flowchart TD
   WebApp --> UI["Tactical UI Layer"]
   WebApp --> Wallet["Wallet Layer"]
   Wallet --> Privy["Privy React SDK"]
-  Privy --> Viem["wagmi + viem"]
-  WebApp --> CofheSDK["@cofhe/sdk"]
+  Privy --> Viem["Privy provider + viem"]
+  WebApp --> CofheSDK["cofhejs web worker"]
   CofheSDK --> CoFHE["Fhenix / CoFHE Infrastructure"]
   Viem --> Contracts["Battleship Smart Contracts"]
   Contracts --> Arbitrum["Arbitrum Sepolia"]
@@ -256,7 +255,8 @@ The wallet layer should expose viem-shaped clients to the Fhenix SDK.
 
 ## Fhenix Client Layer
 
-The Fhenix client layer wraps `@cofhe/sdk`.
+The Fhenix client layer wraps `cofhejs 0.3.1` behind
+`src/onchain/fhenix/cofhe.worker.ts`.
 
 Core responsibilities:
 

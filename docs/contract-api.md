@@ -70,6 +70,11 @@ the implementation that supersede earlier proposals in this document:
   always exit through `forfeit`. `claimTimeoutWin` stays closed during
   `ResolvingShot`, and `RESOLVING_TIMEOUT` only paces retry UI.
 
+Phase 9 verifies the committed ABI byte-for-byte against the generated
+frontend module, allowlists every callable function/event, rejects private
+fleet getters, and compares active deployment records with the compiled
+runtime bytecode hash.
+
 ## Scope
 
 The MVP API focuses on:

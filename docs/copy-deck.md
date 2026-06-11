@@ -6,10 +6,10 @@ This document centralizes player-facing English copy for the mobile-first 3D ful
 
 Implementation should treat this document as the starting source for UI labels, status messages, errors, confirmation sheets, onboarding text, and accessibility labels.
 
-The playable repository currently uses a smaller practice-mode copy set because
-wallet, network, contract, and Fhenix flows are not implemented yet. See
-`docs/copy-implementation-sync.md` for the exact shipped strings and the rules
-for introducing this target copy as features arrive.
+The playable repository now includes practice, wallet, network, friend-match,
+encrypted placement, battle, recovery, and terminal copy. Runtime strings live
+in `src/copy/`; `docs/copy-implementation-sync.md` records intentional
+differences from this broader product deck.
 
 ## Copy Rules
 
