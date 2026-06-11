@@ -23,6 +23,7 @@ import type { MatchPhase } from '../phaseResolver'
 import type { Address } from '../renderModel'
 import type { WalletContextValue } from '../wallet/WalletSessionContext'
 import { TxStatusLine } from '../match/TxStatusLine'
+import { pendingTxScope } from '../client/pendingTxStore'
 import { useTrackedWrite } from '../client/useTrackedWrite'
 import { BattleGrid } from './BattleGrid'
 import { buildPublicBattleModel, TOTAL_SHIPS } from './publicBattleModel'
@@ -98,10 +99,21 @@ export function OnchainBattlePanel({
   const viewer = wallet.session.address
   const [selectedCell, setSelectedCell] = useState<number | null>(null)
   const [confirmForfeit, setConfirmForfeit] = useState(false)
-  const attackWrite = useTrackedWrite()
-  const resolveWrite = useTrackedWrite()
-  const forfeitWrite = useTrackedWrite()
-  const timeoutWrite = useTrackedWrite()
+  // Persist in-flight hashes per write kind so a suspended browser re-attaches
+  // to the receipt after resume (GAME-802).
+  const txScope = (kind: string) =>
+    viewer
+      ? pendingTxScope({
+          deploymentId: match.deploymentId,
+          matchId: match.matchIdBig,
+          address: viewer,
+          kind,
+        })
+      : null
+  const attackWrite = useTrackedWrite(txScope('attack'))
+  const resolveWrite = useTrackedWrite(txScope('resolve'))
+  const forfeitWrite = useTrackedWrite(txScope('forfeit'))
+  const timeoutWrite = useTrackedWrite(txScope('timeout'))
   const fx = useShotFx(match, viewer)
 
   const model = useMemo(

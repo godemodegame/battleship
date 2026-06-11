@@ -32,6 +32,23 @@ export interface LowBalanceNoticeProps {
 /** Recommended public faucet for Arbitrum Sepolia testnet ETH. */
 export const FAUCET_URL = 'https://sepoliafaucet.com/'
 
+/**
+ * Below this the wallet probably cannot finish a multi-transaction match
+ * (create/join + fleet + shots + finalizations), so a non-blocking warning is
+ * shown (GAME-804). 0.0001 ETH ≈ dozens of Arbitrum Sepolia transactions.
+ */
+export const LOW_BALANCE_THRESHOLD_WEI = 100_000_000_000_000n
+
+/** Inline, non-blocking warning for a connected wallet running low on gas. */
+export function LowBalanceWarning({ balanceWei }: { balanceWei: bigint | null }) {
+  return (
+    <p className="footnote warn" data-testid="low-balance-warning" role="status">
+      {walletCopy.lowBalanceWarnBody}
+      {balanceWei !== null && <span> · {balanceWei.toString()} wei</span>}
+    </p>
+  )
+}
+
 export function LowBalanceNotice({ session, onFund, balanceWei }: LowBalanceNoticeProps) {
   const handleFund = () => {
     if (onFund) {

@@ -65,7 +65,26 @@ export function decodeTxError(err: unknown): ErrorCode {
       return 'transaction-dropped'
     }
   }
+  if (isRpcTransportError(err)) return 'rpc-unreachable'
   return 'unknown'
+}
+
+/** True when the failure is the RPC transport itself (offline, down, timeout). */
+export function isRpcTransportError(err: unknown): boolean {
+  for (const node of causeChain(err)) {
+    if (
+      node.name === 'HttpRequestError' ||
+      node.name === 'TimeoutError' ||
+      node.name === 'WebSocketRequestError' ||
+      // fetch() network failures surface as TypeError("Failed to fetch" / "Load failed")
+      (node.name === 'TypeError' &&
+        typeof (node as { message?: unknown }).message === 'string' &&
+        /fetch|load failed|network/i.test((node as { message: string }).message))
+    ) {
+      return true
+    }
+  }
+  return false
 }
 
 /** Map a read-path failure onto `match-not-found` or a recoverable load error. */
@@ -74,5 +93,6 @@ export function decodeReadError(err: unknown): ErrorCode {
   if (revertName && mapContractError(revertName) === 'match-not-found') {
     return 'match-not-found'
   }
+  if (isRpcTransportError(err)) return 'rpc-unreachable'
   return 'match-load-failed'
 }

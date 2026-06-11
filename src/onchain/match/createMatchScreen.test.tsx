@@ -36,15 +36,15 @@ function mockClipboard(text = '') {
 }
 
 describe('CreateFriendMatchScreen (GAME-505/506)', () => {
-  it('asks a disconnected visitor to connect instead of showing the form', () => {
+  it('asks a disconnected visitor to connect instead of showing the form', async () => {
     renderApp({ route: '/match/new', wallet: makeWalletValue() })
-    expect(screen.getByTestId('create-connect-prompt')).toBeTruthy()
+    expect(await screen.findByTestId('create-connect-prompt')).toBeTruthy()
     expect(screen.queryByTestId('create-match-form')).toBeNull()
   })
 
-  it('shows the pending-deployment note when no live contract exists', () => {
+  it('shows the pending-deployment note when no live contract exists', async () => {
     renderApp({ route: '/match/new', wallet: connectedWalletValue(CREATOR) })
-    expect(screen.getByTestId('create-deployment-pending')).toBeTruthy()
+    expect(await screen.findByTestId('create-deployment-pending')).toBeTruthy()
     expect(screen.queryByTestId('create-match-form')).toBeNull()
   })
 
@@ -56,7 +56,7 @@ describe('CreateFriendMatchScreen (GAME-505/506)', () => {
       clients: fake.clientsFor(CREATOR),
     })
 
-    const create = screen.getByTestId('create-match')
+    const create = await screen.findByTestId('create-match')
 
     await userEvent.click(create)
     expect(screen.getByTestId('address-validation-error').textContent).toBe(
@@ -84,7 +84,7 @@ describe('CreateFriendMatchScreen (GAME-505/506)', () => {
       clients: fake.clientsFor(CREATOR),
     })
 
-    await userEvent.click(screen.getByTestId('paste-address'))
+    await userEvent.click(await screen.findByTestId('paste-address'))
     await waitFor(() =>
       expect((screen.getByTestId('invited-address-input') as HTMLInputElement).value).toBe(
         INVITED,
@@ -102,7 +102,7 @@ describe('CreateFriendMatchScreen (GAME-505/506)', () => {
       clients: fake.clientsFor(CREATOR),
     })
 
-    await userEvent.type(screen.getByTestId('invited-address-input'), INVITED)
+    await userEvent.type(await screen.findByTestId('invited-address-input'), INVITED)
     await userEvent.click(screen.getByTestId('create-match'))
 
     // Confirmed write → navigate to /match/:deploymentId/:matchId.
@@ -130,7 +130,7 @@ describe('CreateFriendMatchScreen (GAME-505/506)', () => {
       clients: { resolution: readyResolution(), readClient: fake.readClient, writeClient },
     })
 
-    await userEvent.type(screen.getByTestId('invited-address-input'), INVITED)
+    await userEvent.type(await screen.findByTestId('invited-address-input'), INVITED)
     const button = screen.getByTestId('create-match')
     await userEvent.click(button)
     // Busy state disables the button; a forced second click is also ignored.
@@ -154,7 +154,7 @@ describe('CreateFriendMatchScreen (GAME-505/506)', () => {
       clients: { resolution: readyResolution(), readClient: fake.readClient, writeClient },
     })
 
-    await userEvent.type(screen.getByTestId('invited-address-input'), INVITED)
+    await userEvent.type(await screen.findByTestId('invited-address-input'), INVITED)
     await userEvent.click(screen.getByTestId('create-match'))
 
     await waitFor(() =>

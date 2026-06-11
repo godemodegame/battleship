@@ -42,7 +42,7 @@ describe('two-wallet friend match flow (Phase 5 exit criterion)', () => {
       clients: contract.clientsFor(CREATOR),
     })
 
-    await userEvent.type(screen.getByTestId('invited-address-input'), INVITED)
+    await userEvent.type(await screen.findByTestId('invited-address-input'), INVITED)
     await userEvent.click(screen.getByTestId('create-match'))
 
     await waitFor(() => expect(screen.getByTestId('invite-panel')).toBeTruthy())

@@ -2,8 +2,10 @@ import { useEffect, useMemo, useState } from 'react'
 import { FLEET, cellLabel } from '../../game/constants'
 import { isFleetComplete, shipCells } from '../../game/board'
 import { encryptedPlacementCopy } from '../../copy/en'
+import { perf } from '../../lib/perf'
 import { errorMessage, type ErrorCode } from '../../copy/errors'
 import type { TxState } from '../client/txTracker'
+import { pendingTxScope } from '../client/pendingTxStore'
 import { useTrackedWrite } from '../client/useTrackedWrite'
 import type { BattleshipWriteClient } from '../client/battleshipClient'
 import type { ChainMatchView } from '../client/mapping'
@@ -65,8 +67,19 @@ export function EncryptedFleetPanel({
   const clearFleet = usePlacementStore((state) => state.clearFleet)
   const bindScope = usePlacementStore((state) => state.bindScope)
 
-  const submitWrite = useTrackedWrite()
-  const validationWrite = useTrackedWrite()
+  // Persisted per write kind for suspension recovery (GAME-802). Only public
+  // identifiers enter the scope; never ciphertext or fleet data.
+  const txScope = (kind: string) =>
+    wallet.session.address
+      ? pendingTxScope({
+          deploymentId: match.deploymentId,
+          matchId: match.matchIdBig,
+          address: wallet.session.address,
+          kind,
+        })
+      : null
+  const submitWrite = useTrackedWrite(txScope('submit-fleet'))
+  const validationWrite = useTrackedWrite(txScope('validation'))
   const [encryptionProgress, setEncryptionProgress] =
     useState<CofheProgress>('initializing')
   const [encryptionError, setEncryptionError] = useState<ErrorCode | null>(null)
@@ -143,11 +156,14 @@ export function EncryptedFleetPanel({
     setEncrypting(true)
     submitWrite.reset()
     let encrypted: Awaited<ReturnType<typeof cofhe.client.encryptFleet>> | null = null
+    // GAME-809: encryption duration, recorded locally only (no payload data).
+    const stopEncryptTimer = perf.start('encrypt-fleet')
     try {
       encrypted = await cofhe.client.encryptFleet(
         encodeFleetSegments(fleet),
         setEncryptionProgress,
       )
+      stopEncryptTimer()
 
       const currentPlacementKey = usePlacementStore.getState().scopeKey
       if (

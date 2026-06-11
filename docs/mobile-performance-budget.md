@@ -14,8 +14,11 @@ Budgets are checked against the measured baseline of the current build
 
 Production build (`npm run build`) plus runtime assets:
 
-- JS bundle: 1.11 MB minified, ~314 KB gzipped (one chunk; three.js and
-  React dominate);
+- JS bundle (June 11, 2026, after GAME-808 code splitting): ~19 KB entry
+  chunk (7.5 KB gzipped) plus split vendor chunks - three.js ~839 KB loads
+  only with the practice scene, viem ~495 KB and the Privy bridge load lazily
+  with wallet use, react ~185 KB is shared (the earlier baseline was one
+  1.11 MB chunk);
 - CSS: ~9 KB;
 - models (`public/models/`): ~1.6 MB (seventeen FBX, three GLB);
 - textures (`public/textures/`): ~5.0 MB (eleven 2048x2048 JPGs and six
@@ -83,22 +86,26 @@ Scene complexity in battle:
 - No post-processing passes (bloom, SSAO) without a graphics-mode system
   (below) to gate them.
 
-## Graphics Quality Modes (Planned)
+## Graphics Quality Modes (Implemented - GAME-807)
 
-Not implemented yet - the renderer currently runs one fixed quality. Before
-adding heavier visuals, introduce three modes, applied at `Canvas` creation
-in `src/three/Scene.tsx`:
+Implemented in `src/ui/settingsStore.ts` and applied at `Canvas` creation in
+`src/three/Scene.tsx` (the player picks Auto/Low/Medium/High on the practice
+menu; Auto resolves to Medium on coarse-pointer devices and High on desktop):
 
 | Mode | dpr | Antialias | Shadows | Ocean |
 | --- | --- | --- | --- | --- |
-| Low | 1 | off | off | flat color, no shader waves |
+| Low | 1 | off | off | static shader (time frozen) |
 | Medium | 1.5 | on | 1024 map | current shader |
-| High (current behavior) | up to 2 | on | 1024 map | current shader |
+| High | up to 2 | on | 1024 map | current shader |
 
-- Default: Medium on phones, High on desktop; auto-drop a level after
-  sustained frame-rate floor violations.
-- Mode selection must be possible without reloading models (it only touches
-  renderer flags, light config, and the ocean material).
+- Default: Auto (Medium on phones, High on desktop). Automatic level dropping
+  after sustained floor violations remains future work.
+- A quality change recreates only the WebGL context (renderer flags, lights,
+  ocean material); models stay in the shared loader cache and are not
+  re-downloaded.
+- Reduced motion (system preference or the in-app Motion setting) freezes the
+  ocean, cuts the camera between poses instead of damping, accelerates VFX
+  4x, and collapses CSS animation via `[data-motion='reduced']`.
 
 ## Battery and Thermal Expectations
 

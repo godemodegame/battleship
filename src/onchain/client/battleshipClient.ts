@@ -150,6 +150,11 @@ export interface PublicClientLike {
     onLogs: (logs: unknown[]) => void
     onError?: (error: Error) => void
   }): () => void
+  /**
+   * Deployed bytecode lookup for stale-deployment detection (GAME-804).
+   * Optional: viem public clients provide it; minimal fakes may omit it.
+   */
+  getCode?(params: { address: HexAddress }): Promise<string | undefined>
 }
 
 export interface WalletClientLike {

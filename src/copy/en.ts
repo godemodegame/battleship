@@ -6,6 +6,16 @@
  * strings here English-only per the roadmap Definition of Done.
  */
 
+/** App-shell connectivity + asset loading states (GAME-805). */
+export const appShellCopy = {
+  offlineBanner: 'You are offline. Reconnect to continue playing.',
+  loadingTitle: 'Loading Battlefield',
+  loadingModels: (progress: number) => `Loading Models — ${progress}%`,
+  loadErrorTitle: 'Battlefield Unavailable',
+  loadErrorBody: 'A required 3D asset failed to load. Check your connection and retry.',
+  loadErrorRetry: 'Retry Loading',
+} as const
+
 /** Match-phase banner labels, keyed to the resolved `MatchPhase` kinds. */
 export const phaseCopy = {
   walletRequired: 'Connect wallet to continue',
@@ -58,7 +68,13 @@ export const walletCopy = {
   lowBalanceHeading: 'Add testnet ETH',
   lowBalanceBody:
     'This wallet has no Arbitrum Sepolia ETH. Fund it from a faucet to pay for gas.',
+  // GAME-804: non-blocking warning when the balance may not cover a full match.
+  lowBalanceWarnBody:
+    'This wallet is low on Arbitrum Sepolia ETH. Top up before a long match.',
   addEthAction: 'Get Arbitrum Sepolia ETH',
+  // GAME-804: the active wallet has no usable EIP-1193 provider.
+  unsupportedWalletBody:
+    'This wallet could not be used in this browser. Disconnect and choose another wallet.',
   // GAME-210 (internal label only; not user-visible unless debug).
   restoredFromHandoff: 'Returned from wallet',
 } as const
@@ -254,6 +270,8 @@ export const txCopy = {
   failed: 'Transaction Failed',
   retry: 'Try Again',
   replacedNote: 'Your wallet replaced the transaction. Tracking the new one.',
+  // GAME-802: shown while re-attaching to a broadcast write after a resume.
+  resuming: 'Resuming a pending transaction from your last session.',
 } as const
 
 /** Explorer links + match identity display (GAME-512). */

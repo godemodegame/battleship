@@ -7,6 +7,14 @@ import { useStore } from '../practice/practiceStore'
 import { BOARD_SIZE } from '../game/constants'
 import { cellPosition, useNormalizedModel } from './models'
 import { COMIC_SFX_URL, comicFlightFor } from '../lib/comicSfx'
+import { useReducedMotion } from '../ui/settingsStore'
+
+/**
+ * GAME-807: under reduced motion every effect runs this many times faster, so
+ * results stay visible (and completion callbacks still fire) while the time
+ * anything moves on screen is minimized.
+ */
+const REDUCED_MOTION_SPEED = 4
 
 const sequence = (folder: string, name: string, count: number) =>
   Array.from(
@@ -100,9 +108,11 @@ function VfxInstance({ spec, position }: { spec: EffectSpec; position: THREE.Vec
   const groundMaterial = useRef<THREE.MeshBasicMaterial>(null)
   const light = useRef<THREE.PointLight>(null)
 
+  const reducedMotion = useReducedMotion()
+
   useFrame((_, dt) => {
     const duration = VFX_DURATION[spec.kind]
-    elapsed.current += dt
+    elapsed.current += reducedMotion ? dt * REDUCED_MOTION_SPEED : dt
     const t = Math.min(1, elapsed.current / duration)
 
     if (spec.kind === 'hit') {
@@ -267,10 +277,13 @@ function Projectile({ spec, from, to }: { spec: ProjectileSpec; from: THREE.Vect
     comicTexture.generateMipmaps = true
   }, [comicTexture])
 
+  const reducedMotion = useReducedMotion()
+
   useFrame(({ clock }) => {
     if (!group.current) return
     if (start.current === null) start.current = clock.elapsedTime
-    const t = Math.min(1, (clock.elapsedTime - start.current) / 0.62)
+    const flightSeconds = reducedMotion ? 0.62 / REDUCED_MOTION_SPEED : 0.62
+    const t = Math.min(1, (clock.elapsedTime - start.current) / flightSeconds)
     const pos = curve.getPoint(t)
     group.current.position.copy(pos)
     if (comic.current) {

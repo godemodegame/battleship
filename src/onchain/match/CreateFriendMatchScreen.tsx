@@ -12,6 +12,7 @@ import { useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { createMatchCopy, deploymentCopy, matchStateCopy, walletCopy } from '../../copy/en'
 import { useBattleshipClients } from '../client/useBattleshipClients'
+import { pendingTxScope } from '../client/pendingTxStore'
 import { isTxBusy } from '../client/txTracker'
 import { useTrackedWrite } from '../client/useTrackedWrite'
 import { getActiveDeploymentId } from '../deployments'
@@ -20,7 +21,7 @@ import type { HexAddress } from '../phaseResolver'
 import { useWalletSession } from '../wallet/WalletSessionContext'
 import { WalletSessionBar } from '../wallet/WalletSessionBar'
 import { WrongNetworkPanel } from '../wallet/WrongNetworkPanel'
-import { LowBalanceNotice, FAUCET_URL } from '../wallet/LowBalanceNotice'
+import { LowBalanceNotice, LowBalanceWarning, FAUCET_URL } from '../wallet/LowBalanceNotice'
 import { TxStatusLine } from './TxStatusLine'
 
 const ADDRESS_RE = /^0x[0-9a-fA-F]{40}$/
@@ -45,7 +46,17 @@ export function CreateFriendMatchScreen() {
   const location = useLocation()
   const deploymentId = getActiveDeploymentId()
   const clients = useBattleshipClients(deploymentId)
-  const tx = useTrackedWrite()
+  // No match id exists yet; 'new' scopes creation recovery (GAME-802).
+  const tx = useTrackedWrite(
+    wallet.session.address
+      ? pendingTxScope({
+          deploymentId,
+          matchId: 'new',
+          address: wallet.session.address,
+          kind: 'create',
+        })
+      : null,
+  )
 
   // Rematch routes here with the previous opponent prefilled (GAME-711). A
   // rematch is a brand-new contract match; only the address carries over.
@@ -127,6 +138,17 @@ export function CreateFriendMatchScreen() {
       {session.isConnected && session.isCorrectChain && resolution.ok && !resolution.ready && (
         <p className="footnote" data-testid="create-deployment-pending">
           {deploymentCopy.pendingNote}
+        </p>
+      )}
+
+      {/* GAME-804: non-blocking warning when the balance may not last a match. */}
+      {session.isConnected && session.isCorrectChain && wallet.balanceStatus === 'low' && (
+        <LowBalanceWarning balanceWei={wallet.balance} />
+      )}
+
+      {session.isConnected && wallet.lastError === 'unsupported-wallet' && (
+        <p className="error-note" role="alert" data-testid="unsupported-wallet">
+          {walletCopy.unsupportedWalletBody}
         </p>
       )}
 

@@ -18,6 +18,31 @@
   -webkit-tap-highlight-color: transparent;
 }
 
+/* GAME-806: visible keyboard focus on every interactive element. */
+:focus-visible {
+  outline: 2px solid var(--cyan);
+  outline-offset: 2px;
+}
+
+/* GAME-807: honor reduced motion (system preference or in-app setting). */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+[data-motion='reduced'] *,
+[data-motion='reduced'] *::before,
+[data-motion='reduced'] *::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
+}
+
 .sr-only {
   position: absolute !important;
   width: 1px !important;
@@ -110,6 +135,8 @@ body,
   padding: 14px 18px;
   border-radius: 6px;
   cursor: pointer;
+  /* GAME-806: 44px minimum touch target on every action. */
+  min-height: 44px;
   transition: transform 0.08s ease, box-shadow 0.15s ease, background 0.15s ease;
 }
 
@@ -148,6 +175,8 @@ body,
 .btn.small {
   padding: 10px 12px;
   font-size: 13px;
+  /* Small buttons keep the 44px touch height (GAME-806). */
+  min-height: 44px;
 }
 
 .btn.wide {
@@ -161,8 +190,9 @@ body,
 
 .icon-btn {
   appearance: none;
-  width: 42px;
-  height: 42px;
+  /* GAME-806: 44x44 minimum touch target. */
+  width: 44px;
+  height: 44px;
   border-radius: 6px;
   border: 1px solid var(--line);
   background: var(--glass);
@@ -274,9 +304,49 @@ body,
 .footnote {
   margin: 4px 0 0;
   text-align: center;
-  font-size: 11px;
-  color: rgba(232, 247, 255, 0.42);
+  font-size: 12px;
+  /* GAME-806: lifted from 0.42 alpha for readable contrast on the dark glass. */
+  color: rgba(232, 247, 255, 0.66);
   letter-spacing: 0.04em;
+}
+
+/* GAME-804: non-blocking warning tone (low balance, degraded states). */
+.footnote.warn {
+  color: var(--amber);
+}
+
+/* GAME-809: local perf readout (?perf=1), kept out of the way of play. */
+.perf-overlay {
+  position: absolute;
+  bottom: calc(4px + var(--sab));
+  left: 6px;
+  z-index: 50;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  max-width: 90vw;
+  padding: 4px 8px;
+  border-radius: 4px;
+  background: rgba(7, 8, 13, 0.8);
+  color: var(--cyan);
+  font: 600 10px/1.5 ui-monospace, monospace;
+  pointer-events: none;
+}
+
+/* GAME-805: fixed connectivity banner, safe-area aware. */
+.offline-banner {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 40;
+  padding: calc(8px + var(--sat)) 16px 8px;
+  text-align: center;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  color: var(--ink);
+  background: var(--amber);
 }
 
 /* ---------- wallet (Phase 2) ---------- */
@@ -418,8 +488,9 @@ body,
 }
 
 .status-sub {
-  font-size: 11px;
-  color: rgba(232, 247, 255, 0.55);
+  font-size: 12px;
+  /* GAME-806: contrast lift. */
+  color: rgba(232, 247, 255, 0.72);
   letter-spacing: 0.04em;
 }
 
@@ -748,7 +819,10 @@ body,
 }
 
 .placement-grid {
-  width: min(70vw, 320px);
+  /* GAME-806: maximize cell touch size. A 10x10 board cannot reach 44px per
+     cell on phones; cells are the documented game-board exception and are
+     sized as large as the viewport allows (~34px at 390px width). */
+  width: min(88vw, 360px);
   aspect-ratio: 1;
   align-self: center;
   display: grid;
@@ -858,7 +932,8 @@ body,
 }
 
 .battle-grid {
-  width: min(70vw, 320px);
+  /* GAME-806: same touch-size maximization as the placement grid. */
+  width: min(88vw, 360px);
   aspect-ratio: 1;
   display: grid;
   grid-template-columns: repeat(10, 1fr);

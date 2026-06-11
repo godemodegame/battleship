@@ -13,6 +13,12 @@ import { Board, BoardBase, SelectionFrame } from './Board'
 import { Ship } from './Ships'
 import { FxLayer, preloadVfx } from './Effects'
 import { preloadAll, useNormalizedModel } from './models'
+import {
+  qualityProfile,
+  resolveQualityLevel,
+  useReducedMotion,
+  useSettingsStore,
+} from '../ui/settingsStore'
 
 preloadAll()
 preloadVfx()
@@ -39,7 +45,7 @@ function usePoseKey(): keyof typeof POSES {
   return focus === 'enemy' ? 'attack' : 'defend'
 }
 
-function CameraRig() {
+function CameraRig({ reducedMotion }: { reducedMotion: boolean }) {
   const camera = useThree((s) => s.camera) as THREE.PerspectiveCamera
   const size = useThree((s) => s.size)
   const poseKey = usePoseKey()
@@ -57,14 +63,20 @@ function CameraRig() {
 
   useFrame((_, dt) => {
     const pose = POSES[poseKey]
-    easing.damp3(camera.position, pose.position, 0.55, dt)
-    easing.damp3(target.current, pose.target, 0.55, dt)
+    if (reducedMotion) {
+      // GAME-807: cut between poses instead of swinging the camera.
+      camera.position.set(...pose.position)
+      target.current.set(...pose.target)
+    } else {
+      easing.damp3(camera.position, pose.position, 0.55, dt)
+      easing.damp3(target.current, pose.target, 0.55, dt)
+    }
     camera.lookAt(target.current)
   })
   return null
 }
 
-function Lights() {
+function Lights({ shadows = true }: { shadows?: boolean }) {
   return (
     <>
       <ambientLight color="#26384a" intensity={0.55} />
@@ -72,7 +84,7 @@ function Lights() {
         color="#cfeefc"
         intensity={2.4}
         position={[7, 13, 6]}
-        castShadow
+        castShadow={shadows}
         shadow-mapSize={[1024, 1024]}
         shadow-camera-left={-13}
         shadow-camera-right={13}
@@ -300,20 +312,29 @@ function HomeScene() {
 export function GameCanvas() {
   const screen = useStore((s) => s.screen)
   const model = usePracticeBattleModel()
+  // GAME-807: quality mode drives renderer flags per the performance budget;
+  // reduced motion swaps damped camera moves for cuts and freezes the ocean.
+  const quality = useSettingsStore((s) => s.quality)
+  const reducedMotion = useReducedMotion()
+  const level = resolveQualityLevel(quality)
+  const profile = qualityProfile(quality)
   return (
     <Canvas
-      shadows
-      dpr={[1, 2]}
+      // antialias/shadow toggles need a fresh WebGL context; models stay in
+      // the shared loader cache, so a quality change does not re-download.
+      key={level}
+      shadows={profile.shadows}
+      dpr={[1, profile.dpr]}
       camera={{ position: POSES.home.position, fov: 55, near: 0.5, far: 90 }}
-      gl={{ antialias: true, powerPreference: 'high-performance' }}
+      gl={{ antialias: profile.antialias, powerPreference: 'high-performance' }}
       style={{ touchAction: 'none' }}
     >
       <color attach="background" args={['#07080D']} />
       <fog attach="fog" args={['#07080D', 16, 52]} />
-      <CameraRig />
-      <Lights />
+      <CameraRig reducedMotion={reducedMotion} />
+      <Lights shadows={profile.shadows} />
       <Suspense fallback={null}>
-        <Ocean />
+        <Ocean animated={profile.oceanAnimated && !reducedMotion} />
         {screen === 'home' ? <HomeScene /> : <BattleScene model={model} />}
       </Suspense>
     </Canvas>
