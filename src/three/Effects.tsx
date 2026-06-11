@@ -20,7 +20,12 @@ const SUNK_BREAK = '/textures/vfx/sunk-state-overlay/vfx-sunk-break-flash.webp'
 const SUNK_RESIDUAL = '/textures/vfx/sunk-state-overlay/vfx-sunk-residual-ink.webp'
 const IMPACT_CRACK = '/textures/vfx/shockwave-and-crack-decals/vfx-impact-crack-decal.webp'
 const SHOCKWAVE = '/textures/vfx/shockwave-and-crack-decals/vfx-shockwave-ring.webp'
-const PROJECTILE_TRAIL = '/textures/vfx/vfx-projectile-trail-mask.webp'
+const SMEAR_ARC = '/textures/vfx/smear-frame-cards/vfx-smear-arc.webp'
+const SMEAR_IMPACT = '/textures/vfx/smear-frame-cards/vfx-smear-impact.webp'
+const SMEAR_CAMERA_CUT = '/textures/vfx/smear-frame-cards/vfx-smear-camera-cut.webp'
+const SPEED_LINES = '/textures/vfx/vfx-speed-line-burst.webp'
+const HALFTONE_MASK = '/textures/vfx/halftone-and-edge-masks/vfx-halftone-breakup-mask.webp'
+const CHROMATIC_MASK = '/textures/vfx/halftone-and-edge-masks/vfx-chromatic-edge-mask.webp'
 
 const EFFECT_TEXTURES = [
   ...HIT_FRAMES,
@@ -30,6 +35,12 @@ const EFFECT_TEXTURES = [
   SUNK_RESIDUAL,
   IMPACT_CRACK,
   SHOCKWAVE,
+  SMEAR_ARC,
+  SMEAR_IMPACT,
+  SMEAR_CAMERA_CUT,
+  SPEED_LINES,
+  HALFTONE_MASK,
+  CHROMATIC_MASK,
 ]
 
 const VFX_DURATION = { hit: 0.85, miss: 1, sunk: 1.35 } as const
@@ -37,7 +48,7 @@ const VFX_LIGHT = { hit: '#FF3B30', miss: '#6fd9ff', sunk: '#FF2EA6' } as const
 const VFX_LIGHT_PEAK = { hit: 26, miss: 12, sunk: 30 } as const
 
 export function preloadVfx() {
-  for (const url of [...EFFECT_TEXTURES, PROJECTILE_TRAIL]) useTexture.preload(url)
+  for (const url of EFFECT_TEXTURES) useTexture.preload(url)
 }
 
 function frameAt(frames: string[], t: number) {
@@ -47,6 +58,12 @@ function frameAt(frames: string[], t: number) {
 function setMap(material: THREE.SpriteMaterial | THREE.MeshBasicMaterial | null, texture: THREE.Texture | undefined) {
   if (!material || !texture || material.map === texture) return
   material.map = texture
+  material.needsUpdate = true
+}
+
+function setAlphaMap(material: THREE.SpriteMaterial | null, texture: THREE.Texture | undefined) {
+  if (!material || !texture || material.alphaMap === texture) return
+  material.alphaMap = texture
   material.needsUpdate = true
 }
 
@@ -73,8 +90,10 @@ function VfxInstance({ spec, position }: { spec: EffectSpec; position: THREE.Vec
   const done = useRef(false)
   const main = useRef<THREE.Sprite>(null)
   const secondary = useRef<THREE.Sprite>(null)
+  const accent = useRef<THREE.Sprite>(null)
   const mainMaterial = useRef<THREE.SpriteMaterial>(null)
   const secondaryMaterial = useRef<THREE.SpriteMaterial>(null)
+  const accentMaterial = useRef<THREE.SpriteMaterial>(null)
   const ground = useRef<THREE.Mesh>(null)
   const groundMaterial = useRef<THREE.MeshBasicMaterial>(null)
   const light = useRef<THREE.PointLight>(null)
@@ -90,6 +109,11 @@ function VfxInstance({ spec, position }: { spec: EffectSpec; position: THREE.Vec
       setMap(mainMaterial.current, textures.get(frameAt(HIT_FRAMES, flashT)))
       setMap(secondaryMaterial.current, textures.get(frameAt(SMOKE_FRAMES, smokeT)))
       setMap(groundMaterial.current, textures.get(SHOCKWAVE))
+      setMap(accentMaterial.current, textures.get(t < 0.18 ? SPEED_LINES : SMEAR_IMPACT))
+      setAlphaMap(
+        accentMaterial.current,
+        textures.get(t < 0.18 ? HALFTONE_MASK : CHROMATIC_MASK),
+      )
       if (main.current) {
         const pop = 0.5 + 0.85 * Math.sin(Math.min(1, flashT / 0.3) * Math.PI * 0.5)
         main.current.scale.set(2.65 * pop, 2.65 * pop, 1)
@@ -105,8 +129,21 @@ function VfxInstance({ spec, position }: { spec: EffectSpec; position: THREE.Vec
       }
       if (ground.current) ground.current.scale.setScalar(0.45 + 1.7 * Math.min(1, t / 0.45))
       if (groundMaterial.current) groundMaterial.current.opacity = 0.85 * (1 - THREE.MathUtils.smoothstep(t, 0.25, 0.62))
+      if (accent.current) {
+        const accentScale = t < 0.18 ? 4.2 : 2.9
+        accent.current.scale.setScalar(accentScale)
+        accent.current.material.rotation = t < 0.18 ? 0 : -0.18
+      }
+      if (accentMaterial.current) {
+        accentMaterial.current.opacity =
+          t < 0.18
+            ? 0.5 * (1 - THREE.MathUtils.smoothstep(t, 0.08, 0.18))
+            : 0.65 * (1 - THREE.MathUtils.smoothstep(t, 0.18, 0.42))
+      }
     } else if (spec.kind === 'miss') {
       setMap(mainMaterial.current, textures.get(frameAt(MISS_FRAMES, t)))
+      setMap(accentMaterial.current, textures.get(SMEAR_ARC))
+      setAlphaMap(accentMaterial.current, textures.get(HALFTONE_MASK))
       if (main.current) {
         const pop = 0.65 + 0.55 * Math.sin(Math.min(1, t / 0.35) * Math.PI * 0.5)
         main.current.scale.set(2.2 * pop, 2.2 * pop, 1)
@@ -115,10 +152,21 @@ function VfxInstance({ spec, position }: { spec: EffectSpec; position: THREE.Vec
       if (mainMaterial.current) mainMaterial.current.opacity = 1 - THREE.MathUtils.smoothstep(t, 0.78, 1)
       if (secondary.current) secondary.current.visible = false
       if (ground.current) ground.current.visible = false
+      if (accent.current) {
+        accent.current.scale.setScalar(2.1 + t * 0.8)
+        accent.current.material.rotation = t * 0.35
+      }
+      if (accentMaterial.current) {
+        accentMaterial.current.opacity =
+          0.42 * THREE.MathUtils.smoothstep(t, 0.05, 0.18) *
+          (1 - THREE.MathUtils.smoothstep(t, 0.35, 0.68))
+      }
     } else {
       setMap(mainMaterial.current, textures.get(SUNK_BREAK))
       setMap(secondaryMaterial.current, textures.get(SMOKE_FRAMES[Math.min(7, Math.floor(t * 8))]))
       setMap(groundMaterial.current, textures.get(t < 0.42 ? IMPACT_CRACK : SUNK_RESIDUAL))
+      setMap(accentMaterial.current, textures.get(SMEAR_CAMERA_CUT))
+      setAlphaMap(accentMaterial.current, textures.get(CHROMATIC_MASK))
       if (main.current) {
         const pop = 0.65 + 0.65 * Math.sin(Math.min(1, t / 0.25) * Math.PI * 0.5)
         main.current.scale.set(3 * pop, 2 * pop, 1)
@@ -131,6 +179,13 @@ function VfxInstance({ spec, position }: { spec: EffectSpec; position: THREE.Vec
       if (secondaryMaterial.current) secondaryMaterial.current.opacity = 0.8 * (1 - THREE.MathUtils.smoothstep(t, 0.72, 1))
       if (ground.current) ground.current.scale.setScalar(1.25 + t * 0.35)
       if (groundMaterial.current) groundMaterial.current.opacity = 0.95 * (1 - THREE.MathUtils.smoothstep(t, 0.82, 1))
+      if (accent.current) {
+        accent.current.scale.set(4.5, 2.8, 1)
+        accent.current.material.rotation = -0.22
+      }
+      if (accentMaterial.current) {
+        accentMaterial.current.opacity = 0.58 * (1 - THREE.MathUtils.smoothstep(t, 0.12, 0.32))
+      }
     }
 
     if (light.current) {
@@ -163,6 +218,15 @@ function VfxInstance({ spec, position }: { spec: EffectSpec; position: THREE.Vec
           toneMapped={false}
         />
       </sprite>
+      <sprite ref={accent} position-y={0.7} renderOrder={22}>
+        <spriteMaterial
+          ref={accentMaterial}
+          transparent
+          depthWrite={false}
+          depthTest={false}
+          toneMapped={false}
+        />
+      </sprite>
       <mesh ref={ground} rotation-x={-Math.PI / 2} position-y={0.025} renderOrder={19}>
         <planeGeometry args={[1, 1]} />
         <meshBasicMaterial
@@ -182,10 +246,7 @@ function VfxInstance({ spec, position }: { spec: EffectSpec; position: THREE.Vec
 /** Glowing shell arcing from the firing board onto the target cell. */
 function Projectile({ spec, from, to }: { spec: ProjectileSpec; from: THREE.Vector3; to: THREE.Vector3 }) {
   const model = useNormalizedModel('attack-projectile', 0.6)
-  const trailTexture = useTexture(PROJECTILE_TRAIL)
   const group = useRef<THREE.Group>(null)
-  const trail = useRef<THREE.Sprite>(null)
-  const trailMaterial = useRef<THREE.SpriteMaterial>(null)
   const start = useRef<number | null>(null)
   const curve = useMemo(() => {
     const peak = from.clone().lerp(to, 0.5)
@@ -193,13 +254,7 @@ function Projectile({ spec, from, to }: { spec: ProjectileSpec; from: THREE.Vect
     return new THREE.QuadraticBezierCurve3(from, peak, to)
   }, [from, to])
 
-  useMemo(() => {
-    trailTexture.colorSpace = THREE.SRGBColorSpace
-    trailTexture.minFilter = THREE.LinearFilter
-    trailTexture.magFilter = THREE.LinearFilter
-  }, [trailTexture])
-
-  useFrame(({ clock, camera }) => {
+  useFrame(({ clock }) => {
     if (!group.current) return
     if (start.current === null) start.current = clock.elapsedTime
     const t = Math.min(1, (clock.elapsedTime - start.current) / 0.62)
@@ -209,30 +264,10 @@ function Projectile({ spec, from, to }: { spec: ProjectileSpec; from: THREE.Vect
     group.current.lookAt(ahead)
     group.current.visible = t < 1
 
-    if (trailMaterial.current) {
-      const screenPos = pos.clone().project(camera)
-      const screenAhead = ahead.clone().project(camera)
-      trailMaterial.current.rotation = Math.atan2(screenAhead.y - screenPos.y, screenAhead.x - screenPos.x)
-      trailMaterial.current.opacity = Math.sin(t * Math.PI) * 0.95
-    }
-    if (trail.current) {
-      const pulse = 0.9 + Math.sin(t * Math.PI * 8) * 0.08
-      trail.current.scale.set(4.2 * pulse, 1.35 * pulse, 1)
-    }
   })
 
   return (
     <group ref={group} key={spec.id}>
-      <sprite ref={trail} renderOrder={18}>
-        <spriteMaterial
-          ref={trailMaterial}
-          map={trailTexture}
-          transparent
-          depthWrite={false}
-          depthTest={false}
-          toneMapped={false}
-        />
-      </sprite>
       <group rotation-y={-Math.PI / 2}>
         <primitive object={model} />
       </group>
