@@ -6,6 +6,14 @@ This document defines the security and fair play model for the mobile-first 3D f
 
 The game has hidden information, wallet transactions, encrypted state, and turn-based PvP. The security model must protect hidden fleets, prevent unfair moves, and keep the smart contract as the source of truth.
 
+## Implementation Status
+
+Phase 9 validates this model with seeded property tests, adversarial contract
+tests, ABI-surface privacy checks, an end-to-end browser leakage test,
+dependency/static-analysis gates, and manual review. No P0 security issue is
+open. Accepted P1 tooling and external staging limitations are recorded in
+`docs/phase-9-release-qa.md`.
+
 ## Security Goals
 
 The MVP must protect:

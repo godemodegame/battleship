@@ -1,0 +1,125 @@
+/**
+ * Funded two-wallet Arbitrum Sepolia regression (GAME-906).
+ *
+ * This deliberately performs a small real-chain lifecycle: creator creates a
+ * strict friend match, the invited wallet joins, and the creator cancels. It
+ * verifies chain id, deployment bytecode, record hash, wallet separation, and
+ * balances before spending gas.
+ *
+ * Required environment:
+ *   ARBITRUM_SEPOLIA_RPC_URL
+ *   CREATOR_PRIVATE_KEY
+ *   OPPONENT_PRIVATE_KEY
+ *   DEPLOYMENT_RECORD=deployments/421614/<deploymentId>.json
+ */
+
+import { readFileSync } from 'node:fs'
+import { isAbsolute, join } from 'node:path'
+import {
+  Contract,
+  JsonRpcProvider,
+  Wallet,
+  formatEther,
+  keccak256,
+  type InterfaceAbi,
+  type Log,
+} from 'ethers'
+
+import { validateRecordSchema, type DeploymentRecord } from './deploymentRecord'
+
+const MIN_BALANCE = 100_000_000_000_000n
+let activeProvider: JsonRpcProvider | null = null
+
+function required(name: string): string {
+  const value = process.env[name]
+  if (!value) throw new Error(`Set ${name} before running the funded regression`)
+  return value
+}
+
+async function main(): Promise<void> {
+  const contractsDir = join(__dirname, '..')
+  const rpcUrl = required('ARBITRUM_SEPOLIA_RPC_URL')
+  const recordArg = required('DEPLOYMENT_RECORD')
+  const recordPath = isAbsolute(recordArg) ? recordArg : join(contractsDir, recordArg)
+  const record = JSON.parse(readFileSync(recordPath, 'utf8')) as DeploymentRecord
+  const problems = validateRecordSchema(record)
+  if (problems.length) throw new Error(`Invalid deployment record: ${problems.join('; ')}`)
+  if (record.chainId !== 421614) throw new Error(`Expected chain 421614, got ${record.chainId}`)
+
+  const abi = JSON.parse(
+    readFileSync(join(contractsDir, 'abi', `${record.contractName}.json`), 'utf8'),
+  ) as InterfaceAbi
+  const provider = new JsonRpcProvider(rpcUrl)
+  activeProvider = provider
+  const network = await provider.getNetwork()
+  if (Number(network.chainId) !== record.chainId) {
+    throw new Error(`RPC chain ${network.chainId} does not match record ${record.chainId}`)
+  }
+
+  const code = await provider.getCode(record.address)
+  if (code === '0x') throw new Error(`No bytecode at ${record.address}`)
+  const codeHash = `keccak256:${keccak256(code)}`
+  if (codeHash !== record.deployedBytecodeKeccak256) {
+    throw new Error(`On-chain bytecode hash ${codeHash} does not match the record`)
+  }
+
+  const creator = new Wallet(required('CREATOR_PRIVATE_KEY'), provider)
+  const opponent = new Wallet(required('OPPONENT_PRIVATE_KEY'), provider)
+  if (creator.address.toLowerCase() === opponent.address.toLowerCase()) {
+    throw new Error('Creator and opponent keys resolve to the same address')
+  }
+
+  const [creatorBalance, opponentBalance] = await Promise.all([
+    provider.getBalance(creator.address),
+    provider.getBalance(opponent.address),
+  ])
+  if (creatorBalance < MIN_BALANCE || opponentBalance < MIN_BALANCE) {
+    throw new Error(
+      `Both wallets need at least ${formatEther(MIN_BALANCE)} ETH; ` +
+        `creator=${formatEther(creatorBalance)}, opponent=${formatEther(opponentBalance)}`,
+    )
+  }
+
+  const creatorGame = new Contract(record.address, abi, creator)
+  const opponentGame = new Contract(record.address, abi, opponent)
+  const createReceipt = await (await creatorGame.createMatch(opponent.address)).wait()
+  if (!createReceipt) throw new Error('createMatch receipt missing')
+
+  let matchId: bigint | null = null
+  for (const log of createReceipt.logs as Log[]) {
+    try {
+      const parsed = creatorGame.interface.parseLog(log)
+      if (parsed?.name === 'MatchCreated') {
+        matchId = parsed.args.matchId as bigint
+        break
+      }
+    } catch {
+      // Ignore logs emitted by CoFHE/system contracts.
+    }
+  }
+  if (matchId === null) throw new Error('MatchCreated event missing')
+
+  const joinReceipt = await (await opponentGame.joinMatch(matchId)).wait()
+  if (!joinReceipt) throw new Error('joinMatch receipt missing')
+  const joined = await creatorGame.getMatch(matchId)
+  if (Number(joined.status) !== 2 || joined.opponent.toLowerCase() !== opponent.address.toLowerCase()) {
+    throw new Error('Joined match state does not identify the invited opponent')
+  }
+
+  const cancelReceipt = await (await creatorGame.cancelMatch(matchId)).wait()
+  if (!cancelReceipt) throw new Error('cancelMatch receipt missing')
+  const cancelled = await creatorGame.getMatch(matchId)
+  if (Number(cancelled.status) !== 8) throw new Error('Match did not reach Cancelled')
+
+  console.log(`Funded regression passed for match ${matchId}`)
+  console.log(`create ${createReceipt.hash}`)
+  console.log(`join   ${joinReceipt.hash}`)
+  console.log(`cancel ${cancelReceipt.hash}`)
+}
+
+void main()
+  .catch((error) => {
+    console.error(error)
+    process.exitCode = 1
+  })
+  .finally(() => activeProvider?.destroy())

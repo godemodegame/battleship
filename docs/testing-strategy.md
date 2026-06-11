@@ -18,8 +18,12 @@ The concrete plan is `docs/local-prototype-test-plan.md`: unit tests for
 tests, React screen smoke tests, and Playwright canvas/regression runs.
 The milestone completed on June 10, 2026.
 
-Everything below this section describes the on-chain MVP milestones that
-follow.
+The on-chain milestones through Phase 9 are also implemented. The release
+suite now includes full encrypted lifecycle coverage, seeded contract and
+frontend properties, adversarial authorization/replay/timeout tests, browser
+and contract fleet-leakage tests, a two-page Playwright friend flow, release
+artifact/config checks, dependency audits, and Solidity lint. Exact evidence
+is listed in `docs/phase-9-release-qa.md`.
 
 ## Testing Goals
 

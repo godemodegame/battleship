@@ -9,11 +9,22 @@
   "scripts": {
     "compile": "hardhat compile",
     "test": "hardhat test",
+    "lint:sol": "solhint 'contracts/BattleshipGame.sol' 'contracts/test/**/*.sol' --max-warnings 0",
     "clean": "hardhat clean",
     "generate:abi": "hardhat compile && ts-node --files scripts/generate-abi.ts",
     "deploy:local": "hardhat run scripts/deploy.ts --network localhost",
     "deploy:arb-sepolia": "hardhat run scripts/deploy.ts --network arbitrumSepolia",
-    "validate:deployment": "ts-node --files scripts/validate-deployment.ts"
+    "validate:deployment": "ts-node --files scripts/validate-deployment.ts",
+    "regression:arb-sepolia": "ts-node --files scripts/testnet-regression.ts"
+  },
+  "overrides": {
+    "cookie": "0.7.2",
+    "elliptic": "6.6.1",
+    "serialize-javascript": "7.0.5",
+    "tmp": "0.2.7",
+    "undici": "6.26.0",
+    "uuid": "11.1.1",
+    "ws": "8.21.0"
   },
   "devDependencies": {
     "@fhenixprotocol/cofhe-contracts": "0.0.13",
@@ -29,6 +40,7 @@
     "cofhejs": "0.3.1",
     "ethers": "6.16.0",
     "hardhat": "2.28.6",
+    "solhint": "^6.2.1",
     "ts-node": "10.9.2",
     "typescript": "5.9.3"
   }

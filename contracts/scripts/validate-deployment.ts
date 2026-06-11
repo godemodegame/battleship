@@ -4,7 +4,8 @@
  * Checks a committed deployment record against:
  *   1. the record schema (always);
  *   2. the committed ABI snapshot in contracts/abi/ (always);
- *   3. the live chain when an RPC URL is given: chain id, runtime bytecode
+ *   3. the compiled artifact runtime bytecode (always);
+ *   4. the live chain when an RPC URL is given: chain id, runtime bytecode
  *      presence at the address, and the bytecode keccak256 hash.
  *
  * Usage:
@@ -53,6 +54,33 @@ async function main(): Promise<void> {
     problems.push(
       `committed ABI snapshot abi/${record.contractName}.json is missing or unreadable`,
     )
+  }
+
+  try {
+    const artifact = JSON.parse(
+      readFileSync(
+        join(
+          contractsDir,
+          'artifacts',
+          'contracts',
+          `${record.contractName}.sol`,
+          `${record.contractName}.json`,
+        ),
+        'utf8',
+      ),
+    ) as { deployedBytecode?: string }
+    if (!artifact.deployedBytecode || artifact.deployedBytecode === '0x') {
+      problems.push(`compiled artifact for ${record.contractName} has no runtime bytecode`)
+    } else {
+      const artifactHash = `keccak256:${keccak256(artifact.deployedBytecode)}`
+      if (artifactHash !== record.deployedBytecodeKeccak256) {
+        problems.push(
+          `bytecode hash mismatch: record has ${record.deployedBytecodeKeccak256}, artifact has ${artifactHash}`,
+        )
+      }
+    }
+  } catch {
+    problems.push(`compiled artifact for ${record.contractName} is missing or unreadable`)
   }
 
   if (rpcUrl) {
