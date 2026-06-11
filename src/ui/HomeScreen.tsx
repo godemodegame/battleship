@@ -3,6 +3,8 @@ import { useStore } from '../practice/practiceStore'
 import type { Difficulty } from '../game/types'
 import { MuteButton } from './common'
 import { haptics } from '../lib/haptics'
+import { useWalletSession } from '../onchain/wallet/WalletSessionContext'
+import { WalletSessionBar } from '../onchain/wallet/WalletSessionBar'
 
 const DIFFICULTIES: { id: Difficulty; label: string }[] = [
   { id: 'easy', label: 'Easy' },
@@ -12,6 +14,7 @@ const DIFFICULTIES: { id: Difficulty; label: string }[] = [
 
 export function HomeScreen() {
   const navigate = useNavigate()
+  const wallet = useWalletSession()
   const difficulty = useStore((s) => s.difficulty)
   const setDifficulty = useStore((s) => s.setDifficulty)
   const startPlacement = useStore((s) => s.startPlacement)
@@ -23,6 +26,18 @@ export function HomeScreen() {
       <div className="home-top">
         <MuteButton />
       </div>
+
+      {/* Practice is the hub: surface the connected wallet so disconnect stays
+          reachable here. A disconnected player connects through the friend-match
+          flow, so no connect button clutters the pure-practice menu. */}
+      {wallet.session.isConnected && (
+        <WalletSessionBar
+          session={wallet.session}
+          onConnect={wallet.actions.connect}
+          onDisconnect={wallet.actions.disconnect}
+          configMissing={wallet.configMissing}
+        />
+      )}
       <div className="title-lockup">
         <span className="title-kicker">Tactical FHE Naval Ops</span>
         <h1>

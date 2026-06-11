@@ -2,9 +2,10 @@
  * Wallet-aware entry route (GAME-504, Flow 1 in docs/user-flows.md).
  *
  * `/` shows the short onboarding only while no wallet is connected; a
- * connected wallet is routed straight to the main menu and never replays
- * onboarding. Connect Wallet is the final onboarding action (Privy is the only
- * connection surface); Skip keeps local practice reachable without a wallet.
+ * connected wallet is routed straight to the practice hub (which doubles as the
+ * menu) and never replays onboarding. Connect Wallet is the final onboarding
+ * action (Privy is the only connection surface); Skip keeps local practice
+ * reachable without a wallet.
  */
 
 import { Link, Navigate } from 'react-router-dom'
@@ -15,7 +16,7 @@ export function EntryScreen() {
   const wallet = useWalletSession()
 
   if (wallet.session.isConnected) {
-    return <Navigate to="/menu" replace />
+    return <Navigate to="/practice" replace />
   }
 
   const connecting = wallet.session.status === 'connecting'

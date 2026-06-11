@@ -192,7 +192,7 @@ export function CreateFriendMatchScreen() {
       )}
 
       <div className="home-actions">
-        <Link className="btn ghost" data-testid="create-back" to="/menu">
+        <Link className="btn ghost" data-testid="create-back" to="/practice">
           {matchStateCopy.backToMenu}
         </Link>
       </div>

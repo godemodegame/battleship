@@ -390,11 +390,6 @@ export function MatchRouteShell() {
       )}
 
       <div className="home-actions">
-        {!hasDemoMarker && wallet.session.isConnected && (
-          <Link className="btn ghost" data-testid="back-to-menu" to="/menu">
-            {matchStateCopy.backToMenu}
-          </Link>
-        )}
         <Link className="btn primary" to="/practice">
           {matchRouteCopy.backToPractice}
         </Link>

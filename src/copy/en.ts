@@ -102,19 +102,6 @@ export const onboardingCopy = {
   skip: 'Skip',
 } as const
 
-/** Main menu (GAME-504, "Command Deck" in docs/copy-deck.md). */
-export const menuCopy = {
-  kicker: 'Main Menu',
-  title: 'Command Deck',
-  playFriend: 'Play Against Friend',
-  playFriendNote: 'Invite a specific wallet.',
-  practice: 'Practice vs Bot',
-  practiceNote: 'Local match, no wallet needed.',
-  joinHint: 'Have an invite link? Open it to join your friend’s match.',
-  deploymentPendingNote:
-    'On-chain matches unlock once the game contract is deployed. Practice is available now.',
-} as const
-
 /** Friend match creation (GAME-505/506, Flow 5 in docs/user-flows.md). */
 export const createMatchCopy = {
   kicker: 'Play Against Friend',
@@ -169,7 +156,7 @@ export const matchStateCopy = {
   unavailableBody: 'Match state could not be loaded.',
   retry: 'Retry',
   loading: 'Checking Match',
-  backToMenu: 'Back to Menu',
+  backToMenu: 'Back',
 } as const
 
 /** Transaction lifecycle states (GAME-503/511, docs/copy-deck.md). */

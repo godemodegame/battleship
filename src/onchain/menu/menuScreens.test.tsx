@@ -33,17 +33,21 @@ describe('EntryScreen (GAME-504)', () => {
     expect(wallet.actions.connect).toHaveBeenCalledOnce()
   })
 
-  it('skips onboarding entirely for a connected wallet and lands on the menu', () => {
+  it('skips onboarding for a connected wallet and lands on the practice hub', () => {
     renderApp({ route: '/', wallet: connectedWalletValue(CREATOR) })
     expect(screen.queryByTestId('entry-screen')).toBeNull()
-    expect(screen.getByTestId('main-menu')).toBeTruthy()
-    expect(screen.getByRole('heading', { name: 'Command Deck' })).toBeTruthy()
+    // Practice doubles as the menu; the connected wallet bar is shown there so
+    // disconnect stays reachable.
+    expect(screen.getByRole('button', { name: 'Practice vs Bot' })).toBeTruthy()
+    expect(screen.getByTestId('wallet-address').textContent).toBe('0xaaaa…0001')
   })
 
   it('keeps practice reachable through Skip without a wallet', async () => {
     renderApp({ route: '/', wallet: makeWalletValue() })
     await userEvent.click(screen.getByTestId('entry-skip'))
     expect(screen.getByRole('button', { name: 'Practice vs Bot' })).toBeTruthy()
+    // No wallet bar clutters the pure-practice menu when disconnected.
+    expect(screen.queryByTestId('wallet-address')).toBeNull()
   })
 
   it('shows the config-missing note instead of a connect button', () => {
@@ -53,37 +57,17 @@ describe('EntryScreen (GAME-504)', () => {
   })
 })
 
-describe('MainMenuScreen (GAME-504)', () => {
-  it('returns disconnected visitors to the entry route', () => {
-    renderApp({ route: '/menu', wallet: makeWalletValue() })
-    expect(screen.queryByTestId('main-menu')).toBeNull()
-    expect(screen.getByTestId('entry-screen')).toBeTruthy()
-  })
-
-  it('shows wallet identity and routes Play Against Friend to match creation', async () => {
-    renderApp({ route: '/menu', wallet: connectedWalletValue(CREATOR) })
-    expect(screen.getByTestId('wallet-address').textContent).toBe('0xaaaa…0001')
-    await userEvent.click(screen.getByTestId('menu-play-friend'))
+describe('practice hub wallet bar (GAME-504)', () => {
+  it('routes Play Against Friend from the practice hub to match creation', async () => {
+    renderApp({ route: '/practice', wallet: connectedWalletValue(CREATOR) })
+    await userEvent.click(screen.getByRole('button', { name: 'Play Against Friend' }))
     expect(screen.getByTestId('create-match-screen')).toBeTruthy()
   })
 
-  it('notes that on-chain play is locked while the deployment is pending', () => {
-    // No client override: the committed manifest's record has no live contract.
-    renderApp({ route: '/menu', wallet: connectedWalletValue(CREATOR) })
-    expect(screen.getByTestId('menu-deployment-pending')).toBeTruthy()
-  })
-
-  it('surfaces the wrong-network panel for a connected wallet on another chain', () => {
-    const wallet = makeWalletValue({
-      session: {
-        status: 'wrong-network',
-        address: CREATOR,
-        chainId: 1,
-        isCorrectChain: false,
-        isConnected: true,
-      },
-    })
-    renderApp({ route: '/menu', wallet })
-    expect(screen.getByTestId('wrong-network-panel')).toBeTruthy()
+  it('lets a connected wallet disconnect from the practice hub', async () => {
+    const wallet = connectedWalletValue(CREATOR)
+    renderApp({ route: '/practice', wallet })
+    await userEvent.click(screen.getByTestId('wallet-disconnect'))
+    expect(wallet.actions.disconnect).toHaveBeenCalledOnce()
   })
 })

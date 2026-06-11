@@ -514,11 +514,13 @@ Realized structure:
   GAME-511) with simulation before the wallet prompt; the wallet provider
   exposes its viem clients through the session context;
 - screens (GAME-504..506): `/` wallet-aware onboarding
-  (`src/onchain/menu/EntryScreen.tsx`), `/menu` Command Deck
-  (`MainMenuScreen.tsx`), `/match/new` strict friend invite with address
-  validation, clipboard paste, duplicate-submit guard, and post-receipt
-  navigation to the versioned match route (`CreateFriendMatchScreen.tsx`);
-  opponent selection is folded into the menu while one mode exists;
+  (`src/onchain/menu/EntryScreen.tsx`) routing a connected wallet to the
+  practice hub, which doubles as the menu (`Play Against Friend` + the
+  connected wallet bar with disconnect on `/practice`), and `/match/new`
+  strict friend invite with address validation, clipboard paste,
+  duplicate-submit guard, and post-receipt navigation to the versioned match
+  route (`CreateFriendMatchScreen.tsx`); opponent selection and a separate
+  menu route are folded into the practice hub while one on-chain mode exists;
 - match route (GAME-507/508/512): `MatchRouteShell` loads authoritative state
   through `useMatchView`, renders join (deadline-aware), creator
   waiting/invite-link/cancel, expired, cancelled, forfeited, not-found, and

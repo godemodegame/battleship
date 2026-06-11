@@ -241,17 +241,17 @@ rather than the local plaintext `MatchState`.
 Implemented routes (Phase 5):
 
 - `/` - wallet-aware entry route with conditional onboarding; a connected
-  wallet is routed straight to `/menu` (`src/onchain/menu/EntryScreen.tsx`).
-- `/menu` - main menu after wallet connection
-  (`src/onchain/menu/MainMenuScreen.tsx`). Opponent selection is folded into
-  the menu for the MVP: `Play Against Friend` is the only live mode, so a
-  dedicated `/play` hop would have one button.
+  wallet is routed straight to `/practice` (`src/onchain/menu/EntryScreen.tsx`).
+- `/practice` - local practice, playable without a wallet, and the menu hub:
+  it carries `Play Against Friend`, bot difficulty, How It Works, and (when a
+  wallet is connected) the wallet bar with disconnect. A separate `/menu`
+  Command Deck was removed as redundant — the practice home already lists every
+  MVP entry point, and `Play Against Friend` is the only live on-chain mode.
 - `/match/new` - create a friend match
   (`src/onchain/match/CreateFriendMatchScreen.tsx`).
 - `/match/:deploymentId/:matchId` - versioned shared match route for join,
   placement, waiting, battle, resolving, and game over
   (`src/onchain/MatchRouteShell.tsx`).
-- `/practice` - local practice, playable without a wallet.
 
 Post-MVP routes (not implemented):
 
