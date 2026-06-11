@@ -4,6 +4,7 @@ import { cellLabel } from '../game/constants'
 import type { BoardState, Side } from '../game/types'
 import { MuteButton } from './common'
 import { haptics } from '../lib/haptics'
+import { COMIC_SFX_URL } from '../lib/comicSfx'
 
 function FleetStrip({ board, label, enemy }: { board: BoardState; label: string; enemy?: boolean }) {
   return (
@@ -62,8 +63,20 @@ export function BattleHUD() {
       </div>
 
       {toast && (
-        <div key={toast.id} className={`toast tone-${toast.tone}`}>
-          {toast.text}
+        <div
+          key={toast.id}
+          className={`toast ${toast.comic ? `comic-toast comic-${toast.comic}` : ''} tone-${toast.tone}`}
+          role="status"
+          aria-live="polite"
+        >
+          {toast.comic ? (
+            <>
+              <img src={COMIC_SFX_URL[toast.comic]} alt="" aria-hidden="true" />
+              <span className="sr-only">{toast.text}</span>
+            </>
+          ) : (
+            toast.text
+          )}
         </div>
       )}
 

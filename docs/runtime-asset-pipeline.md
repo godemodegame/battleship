@@ -25,6 +25,8 @@ Runtime assets (served statically by Vite, loaded by the game at startup):
 
 - `public/models/` - all FBX and GLB models;
 - `public/textures/` - one JPG color texture per FBX model.
+- `public/textures/comic-sfx/` - optimized transparent WebP combat words used
+  by projectile and result animations.
 
 Runtime model files are byte-identical copies of the source files. Texture
 copies may be downscaled for mobile delivery; the six destroyed-ship maps
@@ -133,7 +135,7 @@ All assets load up front; there is no lazy loading:
 - `preloadAll` (`src/three/models.ts`) preloads every FBX model and texture
   via `useFBX.preload`/`useTexture.preload`;
 - `preloadVfx` (`src/three/Effects.tsx`) preloads the three GLBs via
-  `useGLTF.preload`;
+  `useGLTF.preload` and all combat comic textures via `useTexture.preload`;
 - both run at module import in `src/three/Scene.tsx`;
 - `LoadingOverlay` (`src/ui/common.tsx`) blocks the UI with a progress bar
   until `useProgress` reports everything loaded, per the rule that the field
@@ -180,7 +182,8 @@ Current payload (the baseline to defend):
 
 - `public/models/` - about 1.6 MB (seventeen FBX + three GLB);
 - `public/textures/` - about 5.0 MB (eleven 2048x2048 and six 1024x1024
-  JPGs - the bulk of the payload);
+  JPGs plus about 236 KB of transparent comic SFX WebP files - the JPGs
+  remain the bulk of the payload);
 - everything loads before first interaction.
 
 Before adding or replacing an asset:
