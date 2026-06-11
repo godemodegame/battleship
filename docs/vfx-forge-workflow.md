@@ -24,6 +24,12 @@ builds them procedurally in the game's neo-noir palette, honoring the
 polycount targets in `assets/3d-models/README.md`. The prompt files in
 `assets/3d-models/prompts/vfx-*.md` remain the visual spec.
 
+The active runtime now uses optimized graphic-animation textures specified in
+`assets/vfx-prompts/README.md`. That pack covers hit flash cards, ink smoke,
+water flipbooks, projectile trails, smear frames, decals, speed lines, and
+shader breakup masks. Runtime WebPs live under `public/textures/vfx/`; the
+procedural GLBs remain available as legacy/reference assets.
+
 Geometry is deterministic: a seeded RNG (mulberry32 in `vfx-app/src/proc.js`)
 means rebuilding and re-exporting produces byte-identical geometry for a
 given seed. Diff noise in re-exports indicates a real change.
@@ -117,3 +123,4 @@ In the game (`npm run dev` at the repo root):
 - `vfx-app/README.md` - the studio tool itself.
 - `docs/runtime-asset-pipeline.md` - overall asset flow and budgets.
 - `assets/3d-models/prompts/vfx-*.md` - visual specs for the three effects.
+- `assets/vfx-prompts/README.md` - graphic-animation texture prompt pack.
