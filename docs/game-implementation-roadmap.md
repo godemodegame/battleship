@@ -546,22 +546,32 @@ Goal:
 
 - connect the existing placement experience to encrypted contract state.
 
+Progress:
+
+- `GAME-601` complete (June 11, 2026): the transient on-chain placement store
+  (`src/onchain/placement/placementStore.ts`) reuses the pure placement
+  helpers from `src/game/board.ts`, binds all plaintext to one
+  (address, chain, deployment, match) scope, wipes on any scope change or
+  disconnect, exposes `clearFleet` for post-submission plaintext clearing,
+  and is never persisted or exposed as a browser global; tests cover scope
+  wiping, editing, completion, and practice-store isolation.
+
 Tasks:
 
-| ID | Priority | Work |
-| --- | --- | --- |
-| GAME-601 | P0 | Create a transient on-chain placement store separate from practice state |
-| GAME-602 | P0 | Reuse local placement and no-touch validation for immediate UX |
-| GAME-603 | P0 | Encode the completed fleet using the Phase 4 decision |
-| GAME-604 | P0 | Initialize CoFHE client only after wallet and network readiness |
-| GAME-605 | P0 | Run encryption/proof generation in workers when supported |
-| GAME-606 | P0 | Submit encrypted fleet and track the receipt |
-| GAME-607 | P0 | Clear plaintext cells, inputs, and account-bound encryption state after success |
-| GAME-608 | P0 | Recover `ValidatingPlacement` after refresh or mobile handoff |
-| GAME-609 | P0 | Display valid, invalid, waiting-for-opponent, and ready states |
-| GAME-610 | P0 | Prevent cross-account or cross-chain encrypted input reuse |
-| GAME-611 | P1 | Add encryption progress, retry, and actionable error states |
-| GAME-612 | P1 | Verify no fleet data appears in storage, URLs, logs, analytics, or screenshots |
+| ID | Priority | Status | Work |
+| --- | --- | --- | --- |
+| GAME-601 | P0 | Complete | Create a transient on-chain placement store separate from practice state |
+| GAME-602 | P0 | Not started | Reuse local placement and no-touch validation for immediate UX |
+| GAME-603 | P0 | Not started | Encode the completed fleet using the Phase 4 decision |
+| GAME-604 | P0 | Not started | Initialize CoFHE client only after wallet and network readiness |
+| GAME-605 | P0 | Not started | Run encryption/proof generation in workers when supported |
+| GAME-606 | P0 | Not started | Submit encrypted fleet and track the receipt |
+| GAME-607 | P0 | Not started | Clear plaintext cells, inputs, and account-bound encryption state after success |
+| GAME-608 | P0 | Not started | Recover `ValidatingPlacement` after refresh or mobile handoff |
+| GAME-609 | P0 | Not started | Display valid, invalid, waiting-for-opponent, and ready states |
+| GAME-610 | P0 | Not started | Prevent cross-account or cross-chain encrypted input reuse |
+| GAME-611 | P1 | Not started | Add encryption progress, retry, and actionable error states |
+| GAME-612 | P1 | Not started | Verify no fleet data appears in storage, URLs, logs, analytics, or screenshots |
 
 Owner fleet rule:
 
@@ -775,7 +785,7 @@ Phase status:
 | 3. Contract public lifecycle | Complete (GAME-301 through GAME-311) |
 | 4. CoFHE encrypted rules | Complete (GAME-401 through GAME-412) |
 | 5. Friend-match frontend | Complete (GAME-501 through GAME-512) |
-| 6. Encrypted fleet UI | Not started |
+| 6. Encrypted fleet UI | In progress (GAME-601 complete) |
 | 7. On-chain battle | Not started |
 | 8. Mobile and recovery | Not started |
 | 9. Security and release QA | Not started |

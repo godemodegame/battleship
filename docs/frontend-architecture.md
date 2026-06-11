@@ -534,19 +534,25 @@ This store should be rebuilt from contract reads.
 
 ## Placement Store
 
+Implemented in `src/onchain/placement/placementStore.ts` (GAME-601).
+
 Tracks temporary local placement state:
 
 - selected ship;
 - ship orientation;
-- local fleet cells;
-- local placement validity;
-- encryption progress.
+- local fleet placements (validated through the pure `src/game/board.ts`
+  helpers; completion is exposed through `completedFleet`);
+- encryption progress (added when encrypted submission lands, GAME-606/611).
 
-Privacy rule:
+Privacy rule (enforced by the store and its tests):
 
-- clear this store after `submitFleet` succeeds;
-- clear this store on wallet account change;
-- do not persist this store.
+- all plaintext is bound to one (address, chainId, deploymentId, matchId)
+  scope via `bindScope`; any scope change — account switch, chain switch,
+  another match, disconnect — wipes the fleet;
+- `clearFleet` wipes plaintext after `submitFleet` succeeds while keeping the
+  scope binding;
+- the store is never persisted and never exposed as a browser global; it
+  never imports the practice store, attack engine, or bot.
 
 ## Battle Store
 
