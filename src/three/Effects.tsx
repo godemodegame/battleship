@@ -1,78 +1,143 @@
 import * as THREE from 'three'
-import { useEffect, useMemo, useRef } from 'react'
+import { useMemo, useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
-import { useGLTF } from '@react-three/drei'
+import { useTexture } from '@react-three/drei'
 import type { EffectSpec, ProjectileSpec } from '../practice/practiceStore'
 import { useStore } from '../practice/practiceStore'
 import { BOARD_SIZE } from '../game/constants'
 import { cellPosition, useNormalizedModel } from './models'
 
-const VFX_URL = {
-  hit: '/models/vfx-hit-impact.glb',
-  miss: '/models/vfx-miss-water-plume.glb',
-  sunk: '/models/vfx-sunk-wreck-marker.glb',
-} as const
+const sequence = (folder: string, name: string, count: number) =>
+  Array.from(
+    { length: count },
+    (_, index) => `/textures/vfx/${folder}/${name}-${String(index + 1).padStart(2, '0')}.webp`,
+  )
 
-const VFX_SCALE = { hit: 2.3, miss: 2.0, sunk: 1.9 } as const
+const HIT_FRAMES = sequence('hit-flash', 'vfx-hit-flash', 6)
+const SMOKE_FRAMES = sequence('ink-smoke', 'vfx-ink-smoke', 8)
+const MISS_FRAMES = sequence('miss-splash', 'vfx-miss-splash', 8)
+const SUNK_BREAK = '/textures/vfx/sunk-state-overlay/vfx-sunk-break-flash.webp'
+const SUNK_RESIDUAL = '/textures/vfx/sunk-state-overlay/vfx-sunk-residual-ink.webp'
+const IMPACT_CRACK = '/textures/vfx/shockwave-and-crack-decals/vfx-impact-crack-decal.webp'
+const SHOCKWAVE = '/textures/vfx/shockwave-and-crack-decals/vfx-shockwave-ring.webp'
+const PROJECTILE_TRAIL = '/textures/vfx/vfx-projectile-trail-mask.webp'
+
+const EFFECT_TEXTURES = [
+  ...HIT_FRAMES,
+  ...SMOKE_FRAMES,
+  ...MISS_FRAMES,
+  SUNK_BREAK,
+  SUNK_RESIDUAL,
+  IMPACT_CRACK,
+  SHOCKWAVE,
+]
+
+const VFX_DURATION = { hit: 0.85, miss: 1, sunk: 1.35 } as const
 const VFX_LIGHT = { hit: '#FF3B30', miss: '#6fd9ff', sunk: '#FF2EA6' } as const
 const VFX_LIGHT_PEAK = { hit: 26, miss: 12, sunk: 30 } as const
 
 export function preloadVfx() {
-  for (const url of Object.values(VFX_URL)) useGLTF.preload(url)
+  for (const url of [...EFFECT_TEXTURES, PROJECTILE_TRAIL]) useTexture.preload(url)
+}
+
+function frameAt(frames: string[], t: number) {
+  return frames[Math.min(frames.length - 1, Math.floor(THREE.MathUtils.clamp(t, 0, 0.999) * frames.length))]
+}
+
+function setMap(material: THREE.SpriteMaterial | THREE.MeshBasicMaterial | null, texture: THREE.Texture | undefined) {
+  if (!material || !texture || material.map === texture) return
+  material.map = texture
+  material.needsUpdate = true
 }
 
 /**
- * Plays one baked `play` clip at a board cell. Geometry animation comes from
- * the GLB; opacity fade-out is driven here at runtime (core glTF cannot
- * animate opacity — see vfx-app/README.md).
+ * Plays generated graphic cards as deliberately stepped animation. The main
+ * card faces the camera while the crack/ring layer lies on the board surface.
  */
 function VfxInstance({ spec, position }: { spec: EffectSpec; position: THREE.Vector3 }) {
   const removeEffect = useStore((s) => s.removeEffect)
-  const { scene, animations } = useGLTF(VFX_URL[spec.kind])
-
-  const { clone, materials } = useMemo(() => {
-    const clone = scene.clone(true)
-    const materials: { material: THREE.Material & { opacity: number }; base: number }[] = []
-    clone.traverse((obj) => {
-      const mesh = obj as THREE.Mesh
-      if (!mesh.isMesh) return
-      const list = Array.isArray(mesh.material) ? mesh.material : [mesh.material]
-      mesh.material = (Array.isArray(mesh.material) ? list.map((m) => m.clone()) : list[0].clone()) as
-        | THREE.Material
-        | THREE.Material[]
-      const cloned = Array.isArray(mesh.material) ? mesh.material : [mesh.material]
-      for (const m of cloned) {
-        m.transparent = true
-        m.depthWrite = false
-        materials.push({ material: m as THREE.Material & { opacity: number }, base: (m as THREE.MeshStandardMaterial).opacity ?? 1 })
-      }
+  const loaded = useTexture(EFFECT_TEXTURES)
+  const textures = useMemo(() => {
+    const map = new Map<string, THREE.Texture>()
+    EFFECT_TEXTURES.forEach((url, index) => {
+      const texture = loaded[index]
+      texture.colorSpace = THREE.SRGBColorSpace
+      texture.minFilter = THREE.LinearFilter
+      texture.magFilter = THREE.LinearFilter
+      map.set(url, texture)
     })
-    return { clone, materials }
-  }, [scene])
+    return map
+  }, [loaded])
 
-  const mixer = useMemo(() => new THREE.AnimationMixer(clone), [clone])
-  const duration = animations[0]?.duration ?? 1
-
-  useEffect(() => {
-    const action = mixer.clipAction(animations[0])
-    action.setLoop(THREE.LoopOnce, 1)
-    action.clampWhenFinished = true
-    action.play()
-  }, [mixer, animations])
-
+  const elapsed = useRef(0)
   const done = useRef(false)
+  const main = useRef<THREE.Sprite>(null)
+  const secondary = useRef<THREE.Sprite>(null)
+  const mainMaterial = useRef<THREE.SpriteMaterial>(null)
+  const secondaryMaterial = useRef<THREE.SpriteMaterial>(null)
+  const ground = useRef<THREE.Mesh>(null)
+  const groundMaterial = useRef<THREE.MeshBasicMaterial>(null)
   const light = useRef<THREE.PointLight>(null)
+
   useFrame((_, dt) => {
-    mixer.update(dt)
-    const t = mixer.time / duration
-    const fade = t < 0.7 ? 1 : Math.max(0, 1 - (t - 0.7) / 0.3)
-    for (const { material, base } of materials) material.opacity = base * fade
+    const duration = VFX_DURATION[spec.kind]
+    elapsed.current += dt
+    const t = Math.min(1, elapsed.current / duration)
+
+    if (spec.kind === 'hit') {
+      const flashT = Math.min(1, t / 0.62)
+      const smokeT = THREE.MathUtils.clamp((t - 0.12) / 0.88, 0, 1)
+      setMap(mainMaterial.current, textures.get(frameAt(HIT_FRAMES, flashT)))
+      setMap(secondaryMaterial.current, textures.get(frameAt(SMOKE_FRAMES, smokeT)))
+      setMap(groundMaterial.current, textures.get(SHOCKWAVE))
+      if (main.current) {
+        const pop = 0.5 + 0.85 * Math.sin(Math.min(1, flashT / 0.3) * Math.PI * 0.5)
+        main.current.scale.set(2.65 * pop, 2.65 * pop, 1)
+      }
+      if (secondary.current) {
+        secondary.current.position.y = 0.35 + smokeT * 0.65
+        secondary.current.scale.setScalar(1.25 + smokeT * 0.75)
+      }
+      if (mainMaterial.current) mainMaterial.current.opacity = 1 - THREE.MathUtils.smoothstep(flashT, 0.7, 1)
+      if (secondaryMaterial.current) {
+        secondaryMaterial.current.opacity =
+          THREE.MathUtils.smoothstep(smokeT, 0, 0.16) * (1 - THREE.MathUtils.smoothstep(smokeT, 0.72, 1))
+      }
+      if (ground.current) ground.current.scale.setScalar(0.45 + 1.7 * Math.min(1, t / 0.45))
+      if (groundMaterial.current) groundMaterial.current.opacity = 0.85 * (1 - THREE.MathUtils.smoothstep(t, 0.25, 0.62))
+    } else if (spec.kind === 'miss') {
+      setMap(mainMaterial.current, textures.get(frameAt(MISS_FRAMES, t)))
+      if (main.current) {
+        const pop = 0.65 + 0.55 * Math.sin(Math.min(1, t / 0.35) * Math.PI * 0.5)
+        main.current.scale.set(2.2 * pop, 2.2 * pop, 1)
+        main.current.position.y = 0.35 + Math.sin(t * Math.PI) * 0.3
+      }
+      if (mainMaterial.current) mainMaterial.current.opacity = 1 - THREE.MathUtils.smoothstep(t, 0.78, 1)
+      if (secondary.current) secondary.current.visible = false
+      if (ground.current) ground.current.visible = false
+    } else {
+      setMap(mainMaterial.current, textures.get(SUNK_BREAK))
+      setMap(secondaryMaterial.current, textures.get(SMOKE_FRAMES[Math.min(7, Math.floor(t * 8))]))
+      setMap(groundMaterial.current, textures.get(t < 0.42 ? IMPACT_CRACK : SUNK_RESIDUAL))
+      if (main.current) {
+        const pop = 0.65 + 0.65 * Math.sin(Math.min(1, t / 0.25) * Math.PI * 0.5)
+        main.current.scale.set(3 * pop, 2 * pop, 1)
+      }
+      if (secondary.current) {
+        secondary.current.position.y = 0.3 + t * 0.75
+        secondary.current.scale.setScalar(1.35 + t * 0.85)
+      }
+      if (mainMaterial.current) mainMaterial.current.opacity = 1 - THREE.MathUtils.smoothstep(t, 0.28, 0.58)
+      if (secondaryMaterial.current) secondaryMaterial.current.opacity = 0.8 * (1 - THREE.MathUtils.smoothstep(t, 0.72, 1))
+      if (ground.current) ground.current.scale.setScalar(1.25 + t * 0.35)
+      if (groundMaterial.current) groundMaterial.current.opacity = 0.95 * (1 - THREE.MathUtils.smoothstep(t, 0.82, 1))
+    }
+
     if (light.current) {
-      // Sharp flash that decays over the first third of the clip.
       const flash = Math.max(0, 1 - t / 0.35)
       light.current.intensity = VFX_LIGHT_PEAK[spec.kind] * flash * flash
     }
-    if (t >= 1.02 && !done.current) {
+    if (t >= 1 && !done.current) {
       done.current = true
       removeEffect(spec.id)
     }
@@ -80,7 +145,35 @@ function VfxInstance({ spec, position }: { spec: EffectSpec; position: THREE.Vec
 
   return (
     <group position={position}>
-      <primitive object={clone} scale={VFX_SCALE[spec.kind]} />
+      <sprite ref={main} position-y={0.65} renderOrder={21}>
+        <spriteMaterial
+          ref={mainMaterial}
+          transparent
+          depthWrite={false}
+          depthTest={false}
+          toneMapped={false}
+        />
+      </sprite>
+      <sprite ref={secondary} position-y={0.45} renderOrder={20}>
+        <spriteMaterial
+          ref={secondaryMaterial}
+          transparent
+          depthWrite={false}
+          depthTest={false}
+          toneMapped={false}
+        />
+      </sprite>
+      <mesh ref={ground} rotation-x={-Math.PI / 2} position-y={0.025} renderOrder={19}>
+        <planeGeometry args={[1, 1]} />
+        <meshBasicMaterial
+          ref={groundMaterial}
+          transparent
+          depthWrite={false}
+          depthTest={false}
+          toneMapped={false}
+          side={THREE.DoubleSide}
+        />
+      </mesh>
       <pointLight ref={light} color={VFX_LIGHT[spec.kind]} intensity={0} distance={6} position-y={0.6} />
     </group>
   )
@@ -89,7 +182,10 @@ function VfxInstance({ spec, position }: { spec: EffectSpec; position: THREE.Vec
 /** Glowing shell arcing from the firing board onto the target cell. */
 function Projectile({ spec, from, to }: { spec: ProjectileSpec; from: THREE.Vector3; to: THREE.Vector3 }) {
   const model = useNormalizedModel('attack-projectile', 0.6)
+  const trailTexture = useTexture(PROJECTILE_TRAIL)
   const group = useRef<THREE.Group>(null)
+  const trail = useRef<THREE.Sprite>(null)
+  const trailMaterial = useRef<THREE.SpriteMaterial>(null)
   const start = useRef<number | null>(null)
   const curve = useMemo(() => {
     const peak = from.clone().lerp(to, 0.5)
@@ -97,21 +193,46 @@ function Projectile({ spec, from, to }: { spec: ProjectileSpec; from: THREE.Vect
     return new THREE.QuadraticBezierCurve3(from, peak, to)
   }, [from, to])
 
-  useFrame(({ clock }) => {
+  useMemo(() => {
+    trailTexture.colorSpace = THREE.SRGBColorSpace
+    trailTexture.minFilter = THREE.LinearFilter
+    trailTexture.magFilter = THREE.LinearFilter
+  }, [trailTexture])
+
+  useFrame(({ clock, camera }) => {
     if (!group.current) return
     if (start.current === null) start.current = clock.elapsedTime
-    // Matches FLIGHT_MS in the store so impact lands with the projectile.
     const t = Math.min(1, (clock.elapsedTime - start.current) / 0.62)
     const pos = curve.getPoint(t)
     group.current.position.copy(pos)
     const ahead = curve.getPoint(Math.min(1, t + 0.02))
     group.current.lookAt(ahead)
     group.current.visible = t < 1
+
+    if (trailMaterial.current) {
+      const screenPos = pos.clone().project(camera)
+      const screenAhead = ahead.clone().project(camera)
+      trailMaterial.current.rotation = Math.atan2(screenAhead.y - screenPos.y, screenAhead.x - screenPos.x)
+      trailMaterial.current.opacity = Math.sin(t * Math.PI) * 0.95
+    }
+    if (trail.current) {
+      const pulse = 0.9 + Math.sin(t * Math.PI * 8) * 0.08
+      trail.current.scale.set(4.2 * pulse, 1.35 * pulse, 1)
+    }
   })
 
   return (
     <group ref={group} key={spec.id}>
-      {/* normalized hull runs along +X; lookAt aims +Z, so yaw the model */}
+      <sprite ref={trail} renderOrder={18}>
+        <spriteMaterial
+          ref={trailMaterial}
+          map={trailTexture}
+          transparent
+          depthWrite={false}
+          depthTest={false}
+          toneMapped={false}
+        />
+      </sprite>
       <group rotation-y={-Math.PI / 2}>
         <primitive object={model} />
       </group>
