@@ -2,6 +2,7 @@ import { useStore } from '../practice/practiceStore'
 import { FLEET } from '../game/constants'
 import { isFleetComplete } from '../game/board'
 import { MuteButton } from './common'
+import { haptics } from '../lib/haptics'
 
 export function PlacementScreen() {
   const placements = useStore((s) => s.placements)
@@ -41,7 +42,10 @@ export function PlacementScreen() {
               <button
                 key={def.slot}
                 className={`chip ${placed ? 'placed' : ''} ${active ? 'active' : ''}`}
-                onClick={() => selectSlot(active ? null : def.slot)}
+                onClick={() => {
+                  haptics.prime()
+                  selectSlot(active ? null : def.slot)
+                }}
               >
                 <span className="chip-cells">
                   {Array.from({ length: def.length }, (_, i) => (
@@ -65,7 +69,14 @@ export function PlacementScreen() {
             Clear
           </button>
         </div>
-        <button className="btn primary wide" onClick={confirmFleet} disabled={!complete}>
+        <button
+          className="btn primary wide"
+          onClick={() => {
+            haptics.prime()
+            confirmFleet()
+          }}
+          disabled={!complete}
+        >
           Confirm Fleet
         </button>
       </div>

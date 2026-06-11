@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import {
   resolveMatchPhase,
@@ -9,6 +10,7 @@ import { deploymentCopy, matchRouteCopy, walletCopy } from '../copy/en'
 import { useWalletSession } from './wallet/WalletSessionContext'
 import { WalletSessionBar } from './wallet/WalletSessionBar'
 import { WrongNetworkPanel } from './wallet/WrongNetworkPanel'
+import { LowBalanceNotice, FAUCET_URL } from './wallet/LowBalanceNotice'
 
 /** Demo addresses (match the ones used in phaseResolver.test.ts for consistency). */
 const DEMO_CREATOR = '0x1111111111111111111111111111111111111111' as const
@@ -196,6 +198,16 @@ export function MatchRouteShell() {
   const phase = resolveMatchPhase(resolverInput)
   const ready = isDeploymentReady(deployment)
 
+  // GAME-210: consume the transient handoff-restore signal after the route has
+  // had a chance to react (e.g. trigger a refetch in later phases). Real flows
+  // will also call prepareHandoff() right before a write that may open a mobile
+  // wallet (connect is already instrumented in the provider).
+  useEffect(() => {
+    if (!hasDemoMarker && wallet.handoffRestored) {
+      wallet.actions.clearHandoffRestore()
+    }
+  }, [hasDemoMarker, wallet.handoffRestored, wallet.actions])
+
   return (
     <div className="overlay home" data-game-slice="onchain-shell-103" data-testid="match-route-shell">
       <div className="title-lockup">
@@ -230,6 +242,26 @@ export function MatchRouteShell() {
         />
       )}
 
+      {/* GAME-209: surface funding guidance for zero-balance wallets on real routes. */}
+      {!hasDemoMarker &&
+        wallet.session.isConnected &&
+        wallet.session.isCorrectChain &&
+        wallet.balanceStatus === 'zero' && (
+          <LowBalanceNotice
+            session={wallet.session}
+            balanceWei={wallet.balance}
+            onFund={() => {
+              // GAME-209 + GAME-210: record handoff intent (so visibility/focus resume
+              // can restore the /match/* route after the user returns from the faucet tab
+              // or a wallet interaction on mobile), then perform the actual funding action.
+              wallet.actions.prepareHandoff()
+              if (typeof window !== 'undefined') {
+                window.open(FAUCET_URL, '_blank', 'noopener,noreferrer')
+              }
+            }}
+          />
+        )}
+
       <div className="home-actions">
         <Link className="btn primary" to="/practice">
           {matchRouteCopy.backToPractice}
@@ -240,6 +272,12 @@ export function MatchRouteShell() {
           </p>
         )}
         <p className="footnote">{matchRouteCopy.shellFootnote}</p>
+        {/* Expose handoff restore signal for tests / visual verification (GAME-210). */}
+        {!hasDemoMarker && wallet.handoffRestored && (
+          <p className="footnote" data-testid="handoff-restored">
+            {walletCopy.restoredFromHandoff}
+          </p>
+        )}
       </div>
     </div>
   )

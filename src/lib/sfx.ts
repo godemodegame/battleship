@@ -1,8 +1,9 @@
 /**
  * Tiny synthesized sound effects — no audio assets needed.
  * On iOS Safari the AudioContext must be created + resumed from a user gesture.
- * We prime a context + silent buffer on first touch/click anywhere, and also
- * attempt resume on any play attempt. Respects the persisted mute toggle.
+ * We prime a context + silent buffer on first touch/click anywhere (unconditionally,
+ * so haptics can share it), and also attempt resume on play. The sound mute only
+ * suppresses sfx output; haptics use the same context independently.
  */
 let ctx: AudioContext | null = null
 let muted = localStorage.getItem('eb-muted') === '1'
@@ -15,7 +16,7 @@ function createCtx(): AudioContext | null {
 }
 
 function primeAudio() {
-  if (primed || muted) return
+  if (primed) return
   if (!ctx) ctx = createCtx()
   if (!ctx) return
 
@@ -25,6 +26,8 @@ function primeAudio() {
     }
     // Play a silent buffer during the gesture — this is required to fully
     // unlock Web Audio on iOS Safari for subsequent async plays.
+    // We prime regardless of the sound mute flag so that independent haptics
+    // (and unmuting later) can use the context.
     try {
       const buf = ctx!.createBuffer(1, 1, 22050)
       const src = ctx!.createBufferSource()
@@ -43,21 +46,25 @@ function primeAudio() {
 function installGestureUnlock() {
   if (typeof window === 'undefined' || primed) return
 
-  const events = ['touchstart', 'touchend', 'pointerdown', 'click'] as const
-  const opts: AddEventListenerOptions = { once: true, capture: true, passive: true }
+  const events = ['touchstart', 'touchend', 'pointerdown', 'click', 'mousedown'] as const
+  // Use minimal options for reliable add/remove matching across browsers (esp. Safari).
+  // Capture is critical so we run before r3f/canvas handlers.
+  const addOpts: AddEventListenerOptions = { capture: true, passive: true }
+  const removeOpts: AddEventListenerOptions = { capture: true }
 
   const handler = () => {
+    // Always try to prime on any of these; the primed flag prevents repeated work.
     primeAudio()
-    // Remove all listeners (the 'once' helps, but be explicit)
-    for (const ev of events) {
+    // Remove listeners for all event types so we don't keep them around.
+    for (const type of events) {
       try {
-        window.removeEventListener(ev, handler, opts)
+        window.removeEventListener(type, handler, removeOpts)
       } catch {}
     }
   }
 
   for (const ev of events) {
-    window.addEventListener(ev, handler, opts)
+    window.addEventListener(ev, handler, addOpts)
   }
 }
 
@@ -65,7 +72,9 @@ function installGestureUnlock() {
 installGestureUnlock()
 
 function audio(): AudioContext | null {
-  if (muted) return null
+  // Always return a ctx (if possible) even when sound is muted. The muted flag
+  // only suppresses actual tone/noise output. This allows haptics to use the
+  // shared AudioContext for iOS Safari Taptic fallback independently.
   if (!ctx) {
     ctx = createCtx()
     if (!ctx) return null
@@ -78,6 +87,14 @@ function audio(): AudioContext | null {
   return ctx
 }
 
+/** Returns a primed AudioContext (or null). Used by haptics for iOS Safari Taptic fallback.
+ * Priming is independent of the sound mute so haptics work when sound is off.
+ */
+export function ensureAudio(): AudioContext | null {
+  primeAudio()
+  return audio()
+}
+
 function tone(
   freq: number,
   opts: {
@@ -88,6 +105,7 @@ function tone(
     delay?: number
   } = {},
 ) {
+  if (muted) return
   primeAudio() // ensure we are unlocked if this call is the first gesture
   const ac = audio()
   if (!ac) return
@@ -107,6 +125,7 @@ function tone(
 }
 
 function noise(opts: { duration?: number; gain?: number; from?: number; to?: number; delay?: number } = {}) {
+  if (muted) return
   primeAudio() // ensure we are unlocked if this call is the first gesture
   const ac = audio()
   if (!ac) return

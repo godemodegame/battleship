@@ -229,8 +229,8 @@ Goal:
 
 Progress:
 
-- P0 slice `GAME-201` through `GAME-207` complete (Privy + viem, no wagmi).
-- P1 `GAME-208`–`GAME-211` not started (separate branch).
+- All P0 (`GAME-201`–`GAME-207`) and P1 (`GAME-208`–`GAME-211`) complete.
+- Wallet session, network guard, write guard, account-epoch cleanup, balance/funding notice, and mobile handoff restore infrastructure landed and tested.
 
 Tasks:
 
@@ -243,10 +243,10 @@ Tasks:
 | GAME-205 | P0 | Complete | Implement the Arbitrum Sepolia `421614` network guard |
 | GAME-206 | P0 | Complete | Block every contract write when account, chain, or client readiness fails |
 | GAME-207 | P0 | Complete | Implement wrong-network switch and rejection recovery |
-| GAME-208 | P1 | Not started | Implement account-change and session-expiry cleanup |
-| GAME-209 | P1 | Not started | Add Arbitrum Sepolia balance check and funding guidance |
-| GAME-210 | P1 | Not started | Restore intended route after mobile wallet handoff |
-| GAME-211 | P1 | Not started | Test MetaMask and Coinbase Wallet on desktop and mobile |
+| GAME-208 | P1 | Complete | Implement account-change and session-expiry cleanup |
+| GAME-209 | P1 | Complete | Add Arbitrum Sepolia balance check and funding guidance |
+| GAME-210 | P1 | Complete | Restore intended route after mobile wallet handoff |
+| GAME-211 | P1 | Complete | Test MetaMask and Coinbase Wallet on desktop and mobile |
 
 Realized structure:
 
@@ -674,7 +674,7 @@ Phase status:
 | --- | --- |
 | 0. Stabilize local practice | Complete (June 10, 2026) |
 | 1. Separate modes | Complete (GAME-101 through GAME-110) |
-| 2. Privy and network | In progress (P0 GAME-201–207 complete; P1 208–211 pending) |
+| 2. Privy and network | Complete (GAME-201 through GAME-211) |
 | 3. Contract public lifecycle | Complete (GAME-301 through GAME-311) |
 | 4. CoFHE encrypted rules | Not started |
 | 5. Friend-match frontend | Not started |

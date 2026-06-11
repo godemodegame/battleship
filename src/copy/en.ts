@@ -54,6 +54,13 @@ export const walletCopy = {
   switchAction: 'Switch to Arbitrum Sepolia',
   switching: 'Switching…',
   chooseAnotherWallet: 'Disconnect / choose another wallet',
+  // GAME-209: low / zero balance guidance (testnet only).
+  lowBalanceHeading: 'Add testnet ETH',
+  lowBalanceBody:
+    'This wallet has no Arbitrum Sepolia ETH. Fund it from a faucet to pay for gas.',
+  addEthAction: 'Get Arbitrum Sepolia ETH',
+  // GAME-210 (internal label only; not user-visible unless debug).
+  restoredFromHandoff: 'Returned from wallet',
 } as const
 
 /** Copy for the versioned `/match/:deploymentId/:matchId` route shell. */

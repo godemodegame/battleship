@@ -21,6 +21,13 @@ export interface WalletActions {
   disconnect: () => void
   /** Ask the active wallet to switch to Arbitrum Sepolia (421614). */
   switchToArbitrumSepolia: () => void
+  /**
+   * Record the current route as the intended target before a mobile wallet
+   * interaction may background or hand off the browser (GAME-210).
+   */
+  prepareHandoff: () => void
+  /** Clear a transient "restored from handoff" signal after the UI has reacted. */
+  clearHandoffRestore: () => void
 }
 
 export interface WalletContextValue {
@@ -37,6 +44,29 @@ export interface WalletContextValue {
   lastError: ErrorCode | null
   /** True when `VITE_PRIVY_APP_ID` is unset, so connection is unavailable. */
   configMissing: boolean
+  /**
+   * Current balance in wei for the active address on the reported chain, or null
+   * when unknown / no wallet. Fetched via the public client (GAME-209).
+   */
+  balance: bigint | null
+  /**
+   * Convenience status derived from balance for funding guidance UI.
+   * 'zero' triggers visible testnet funding guidance.
+   */
+  balanceStatus: 'unknown' | 'zero' | 'ok'
+  /**
+   * Transient signal set when the app resumed from a mobile wallet handoff
+   * (visibility/focus with a pending marker). Consumer routes can react and
+   * then call clearHandoffRestore(). (GAME-210)
+   */
+  handoffRestored: boolean
+  /**
+   * Monotonically increasing value that changes whenever the active EVM address
+   * changes or the session fully disconnects. Use as a dependency or key to
+   * reset account-scoped transient state (placement forms, selected targets,
+   * CoFHE permits, pending receipts). (GAME-208)
+   */
+  accountEpoch: number
   actions: WalletActions
 }
 
@@ -48,10 +78,16 @@ export const DISCONNECTED_CONTEXT: WalletContextValue = {
   canWrite: false,
   lastError: null,
   configMissing: false,
+  balance: null,
+  balanceStatus: 'unknown',
+  handoffRestored: false,
+  accountEpoch: 0,
   actions: {
     connect: noop,
     disconnect: noop,
     switchToArbitrumSepolia: noop,
+    prepareHandoff: noop,
+    clearHandoffRestore: noop,
   },
 }
 

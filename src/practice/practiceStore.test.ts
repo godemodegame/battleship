@@ -26,6 +26,28 @@ vi.mock('../lib/sfx', () => ({
   },
 }))
 
+vi.mock('../lib/haptics', () => ({
+  haptics: {
+    prime: vi.fn(),
+    tap: vi.fn(),
+    select: vi.fn(),
+    confirm: vi.fn(),
+    place: vi.fn(),
+    deny: vi.fn(),
+    fire: vi.fn(),
+    light: vi.fn(),
+    medium: vi.fn(),
+    heavy: vi.fn(),
+    success: vi.fn(),
+    error: vi.fn(),
+    miss: vi.fn(),
+    hit: vi.fn(),
+    sunk: vi.fn(),
+    win: vi.fn(),
+    lose: vi.fn(),
+  },
+}))
+
 import { matchSummary, resetPracticeState, setPracticeRandomSource, useStore } from './practiceStore'
 
 const twoCellShip: Placement[] = [

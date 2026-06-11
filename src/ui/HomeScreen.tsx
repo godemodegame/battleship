@@ -2,6 +2,7 @@ import { useNavigate } from 'react-router-dom'
 import { useStore } from '../practice/practiceStore'
 import type { Difficulty } from '../game/types'
 import { MuteButton } from './common'
+import { haptics } from '../lib/haptics'
 
 const DIFFICULTIES: { id: Difficulty; label: string }[] = [
   { id: 'easy', label: 'Easy' },
@@ -65,7 +66,13 @@ export function HomeScreen() {
           </div>
         </div>
 
-        <button className="btn primary" onClick={startPlacement}>
+        <button
+          className="btn primary"
+          onClick={() => {
+            haptics.prime()
+            startPlacement()
+          }}
+        >
           Practice vs Bot
         </button>
         <button className="btn" disabled title="On-chain PvP coming soon">

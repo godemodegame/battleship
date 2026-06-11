@@ -14,7 +14,7 @@
  * WalletConnect surface (`docs/network-and-wallet-requirements.md`).
  */
 
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import {
   PrivyProvider,
   usePrivy,
@@ -43,6 +43,7 @@ import {
   getArbitrumSepoliaRpcUrl,
   getPrivyAppId,
 } from './privyConfig'
+import { clearHandoffIntent, consumeHandoffIntent, saveHandoffIntent } from './handoff'
 
 const CONFIG_MISSING_CONTEXT: WalletContextValue = {
   ...DISCONNECTED_CONTEXT,
@@ -66,6 +67,11 @@ function WalletSessionBridge({ children }: { children: ReactNode }) {
   const [connecting, setConnecting] = useState(false)
   const [lastError, setLastError] = useState<ErrorCode | null>(null)
   const [walletClient, setWalletClient] = useState<WalletClient | null>(null)
+  const [balance, setBalance] = useState<bigint | null>(null)
+  const [handoffRestored, setHandoffRestored] = useState(false)
+  const [accountEpoch, setAccountEpoch] = useState(0)
+
+  const prevAddressRef = useRef<string | null>(null)
 
   const chainId = parseChainId(wallet?.chainId)
   const address = wallet?.address ?? null
@@ -112,6 +118,92 @@ function WalletSessionBridge({ children }: { children: ReactNode }) {
     if (wallet) setConnecting(false)
   }, [wallet])
 
+  // Fetch balance for funding guidance when we have a usable address on the
+  // correct chain. Re-fetches when address or chain readiness changes.
+  // Balance is advisory (GAME-209); it does not hard-block the write guard.
+  const readyForBalance = Boolean(address && isSupportedChainForBalance(chainId))
+  const balanceKey = readyForBalance ? address : null
+  useEffect(() => {
+    let cancelled = false
+    if (!balanceKey || !publicClient) {
+      setBalance(null)
+      return
+    }
+    publicClient
+      .getBalance({ address: balanceKey as `0x${string}` })
+      .then((b) => {
+        if (!cancelled) setBalance(b)
+      })
+      .catch(() => {
+        if (!cancelled) setBalance(null)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [balanceKey, publicClient])
+
+  function isSupportedChainForBalance(id: number | null): boolean {
+    return id === ARBITRUM_SEPOLIA_CHAIN_ID
+  }
+
+  // GAME-208: account-change and session-expiry cleanup.
+  // When the active EVM address changes (or we fully disconnect), bump the epoch
+  // so account-scoped consumers can reset forms, selected targets, CoFHE state, etc.
+  // Also clear lastError so a new account does not inherit a previous rejection.
+  useEffect(() => {
+    const prev = prevAddressRef.current
+    const next = address ?? null
+    if (prev !== next) {
+      prevAddressRef.current = next
+      setLastError(null)
+      setBalance(null)
+      // increment epoch for any consumer that keys state on it
+      setAccountEpoch((e) => e + 1)
+      if (!next) {
+        // full disconnect / session expiry path: also clear handoff markers
+        clearHandoffIntent()
+      }
+    }
+  }, [address])
+
+  // GAME-210: mobile wallet handoff restore on visibility/focus return.
+  // If a marker exists when the page becomes visible again (wallet app returned
+  // or tab woke from suspension), consume it and raise the transient signal.
+  // The consuming route (e.g. MatchRouteShell) can then ensure it is on the
+  // right path and drive refetches. The signal is cleared explicitly by UI.
+  useEffect(() => {
+    const onResume = () => {
+      const target = consumeHandoffIntent()
+      if (target) {
+        setHandoffRestored(true)
+        // If the current location does not match the saved target, navigate.
+        // Use a microtask to avoid racing with initial render.
+        if (typeof window !== 'undefined') {
+          const current = window.location.pathname + window.location.search
+          if (current !== target && target.startsWith('/match/')) {
+            // Safe navigation via history API; router will pick up the change.
+            // We avoid importing useNavigate here (provider is above <BrowserRouter>).
+            window.history.replaceState(null, '', target)
+            // Let a popstate listener or route effect react; for safety also dispatch.
+            window.dispatchEvent(new PopStateEvent('popstate'))
+          }
+        }
+      }
+    }
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') onResume()
+    }
+    window.addEventListener('focus', onResume)
+    document.addEventListener('visibilitychange', handleVisibility)
+    // Also run once on mount in case we resumed while the listener was not yet attached.
+    // (covers hard reload after a prior handoff in some mobile browsers)
+    onResume()
+    return () => {
+      window.removeEventListener('focus', onResume)
+      document.removeEventListener('visibilitychange', handleVisibility)
+    }
+  }, [])
+
   const session = deriveWalletSession({
     ready,
     authenticated,
@@ -127,9 +219,20 @@ function WalletSessionBridge({ children }: { children: ReactNode }) {
     walletClientReady: Boolean(walletClient),
   })
 
+  const balanceStatus: 'unknown' | 'zero' | 'ok' =
+    balance === null ? 'unknown' : balance === 0n ? 'zero' : 'ok'
+
   const connect = useCallback(() => {
     setLastError(null)
     setConnecting(true)
+    // Before we may hand off on mobile, record the current on-chain route so we
+    // can return the user to it after the wallet app (GAME-210).
+    try {
+      if (typeof window !== 'undefined') {
+        const p = window.location.pathname + window.location.search
+        if (p.startsWith('/match/')) saveHandoffIntent(p)
+      }
+    } catch {}
     // Privy owns wallet discovery + connection. `login` opens the connect UI;
     // with wallet-only login methods this is the wallet selection modal.
     try {
@@ -143,6 +246,7 @@ function WalletSessionBridge({ children }: { children: ReactNode }) {
   const disconnect = useCallback(() => {
     setLastError(null)
     setConnecting(false)
+    clearHandoffIntent()
     void logout()
   }, [logout])
 
@@ -158,13 +262,36 @@ function WalletSessionBridge({ children }: { children: ReactNode }) {
     })
   }, [wallet])
 
+  const prepareHandoff = useCallback(() => {
+    try {
+      if (typeof window !== 'undefined') {
+        const p = window.location.pathname + window.location.search
+        if (p.startsWith('/match/')) saveHandoffIntent(p)
+      }
+    } catch {}
+  }, [])
+
+  const clearHandoffRestore = useCallback(() => {
+    setHandoffRestored(false)
+  }, [])
+
   const value: WalletContextValue = {
     session,
     writeBlockedReason: canWrite ? null : blockedReason,
     canWrite,
     lastError,
     configMissing: false,
-    actions: { connect, disconnect, switchToArbitrumSepolia },
+    balance,
+    balanceStatus,
+    handoffRestored,
+    accountEpoch,
+    actions: {
+      connect,
+      disconnect,
+      switchToArbitrumSepolia,
+      prepareHandoff,
+      clearHandoffRestore,
+    },
   }
 
   return (
