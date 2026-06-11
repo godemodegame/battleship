@@ -1,11 +1,12 @@
 import * as THREE from 'three'
-import { useMemo, useRef } from 'react'
+import { useEffect, useMemo, useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
 import { useTexture } from '@react-three/drei'
 import type { EffectSpec, ProjectileSpec } from '../practice/practiceStore'
 import { useStore } from '../practice/practiceStore'
 import { BOARD_SIZE } from '../game/constants'
 import { cellPosition, useNormalizedModel } from './models'
+import { COMIC_SFX_URL, comicFlightFor } from '../lib/comicSfx'
 
 const sequence = (folder: string, name: string, count: number) =>
   Array.from(
@@ -49,6 +50,7 @@ const VFX_LIGHT_PEAK = { hit: 26, miss: 12, sunk: 30 } as const
 
 export function preloadVfx() {
   for (const url of EFFECT_TEXTURES) useTexture.preload(url)
+  for (const url of Object.values(COMIC_SFX_URL)) useTexture.preload(url)
 }
 
 function frameAt(frames: string[], t: number) {
@@ -246,7 +248,11 @@ function VfxInstance({ spec, position }: { spec: EffectSpec; position: THREE.Vec
 /** Glowing shell arcing from the firing board onto the target cell. */
 function Projectile({ spec, from, to }: { spec: ProjectileSpec; from: THREE.Vector3; to: THREE.Vector3 }) {
   const model = useNormalizedModel('attack-projectile', 0.6)
+  const comicName = comicFlightFor(spec.id)
+  const comicTexture = useTexture(COMIC_SFX_URL[comicName])
   const group = useRef<THREE.Group>(null)
+  const comic = useRef<THREE.Sprite>(null)
+  const comicMaterial = useRef<THREE.SpriteMaterial>(null)
   const start = useRef<number | null>(null)
   const curve = useMemo(() => {
     const peak = from.clone().lerp(to, 0.5)
@@ -254,29 +260,61 @@ function Projectile({ spec, from, to }: { spec: ProjectileSpec; from: THREE.Vect
     return new THREE.QuadraticBezierCurve3(from, peak, to)
   }, [from, to])
 
+  useEffect(() => {
+    comicTexture.colorSpace = THREE.SRGBColorSpace
+    comicTexture.minFilter = THREE.LinearFilter
+    comicTexture.magFilter = THREE.LinearFilter
+    comicTexture.generateMipmaps = true
+  }, [comicTexture])
+
   useFrame(({ clock }) => {
     if (!group.current) return
     if (start.current === null) start.current = clock.elapsedTime
     const t = Math.min(1, (clock.elapsedTime - start.current) / 0.62)
     const pos = curve.getPoint(t)
     group.current.position.copy(pos)
+    if (comic.current) {
+      comic.current.position.copy(pos)
+      comic.current.position.y += 0.8
+    }
     const ahead = curve.getPoint(Math.min(1, t + 0.02))
     group.current.lookAt(ahead)
     group.current.visible = t < 1
-
+    if (comic.current) {
+      comic.current.visible = t < 1
+      const fadeIn = THREE.MathUtils.smoothstep(t, 0.02, 0.12)
+      const fadeOut = 1 - THREE.MathUtils.smoothstep(t, 0.72, 0.98)
+      const pop = 0.72 + 0.28 * Math.sin(Math.min(1, t / 0.24) * Math.PI * 0.5)
+      const width =
+        comicName === 'zip' ? 2.1 : comicName === 'thoom' ? 3 : comicName === 'fwoosh' ? 2.8 : 2.5
+      comic.current.scale.set(width * pop, (width / 1.5) * pop, 1)
+      if (comicMaterial.current) comicMaterial.current.opacity = fadeIn * fadeOut
+    }
   })
 
   return (
-    <group ref={group} key={spec.id}>
-      <group rotation-y={-Math.PI / 2}>
-        <primitive object={model} />
+    <>
+      <group ref={group} key={spec.id}>
+        <group rotation-y={-Math.PI / 2}>
+          <primitive object={model} />
+        </group>
+        <pointLight color="#FFB000" intensity={6} distance={4.5} />
+        <mesh>
+          <sphereGeometry args={[0.12, 12, 12]} />
+          <meshBasicMaterial color="#FFD27A" transparent opacity={0.8} />
+        </mesh>
       </group>
-      <pointLight color="#FFB000" intensity={6} distance={4.5} />
-      <mesh>
-        <sphereGeometry args={[0.12, 12, 12]} />
-        <meshBasicMaterial color="#FFD27A" transparent opacity={0.8} />
-      </mesh>
-    </group>
+      <sprite ref={comic} renderOrder={30}>
+        <spriteMaterial
+          ref={comicMaterial}
+          map={comicTexture}
+          transparent
+          depthWrite={false}
+          depthTest={false}
+          toneMapped={false}
+        />
+      </sprite>
+    </>
   )
 }
 

@@ -6,6 +6,7 @@ import { chooseBotTarget } from '../game/bot'
 import type { Difficulty, MatchState, Orientation, Placement, Side } from '../game/types'
 import { sfx } from '../lib/sfx'
 import { resultCopy } from '../copy/en'
+import { comicResultFor, type ComicResultSfx } from '../lib/comicSfx'
 
 export type Screen = 'home' | 'placement' | 'battle' | 'gameover'
 
@@ -31,6 +32,7 @@ export interface Toast {
   id: number
   text: string
   tone: 'cyan' | 'red' | 'amber'
+  comic?: ComicResultSfx
 }
 
 interface AppState {
@@ -109,13 +111,16 @@ export function resetPracticeState() {
 
 function shotToast(result: 'miss' | 'hit' | 'sunk', by: Side, label: string | undefined): Toast {
   const yours = by === 'player'
-  if (result === 'miss') return { id: nextId++, text: resultCopy.miss, tone: 'cyan' }
-  if (result === 'hit') return { id: nextId++, text: resultCopy.hit, tone: yours ? 'amber' : 'red' }
+  const id = nextId++
+  const comic = comicResultFor(result, id)
+  if (result === 'miss') return { id, text: resultCopy.miss, tone: 'cyan', comic }
+  if (result === 'hit') return { id, text: resultCopy.hit, tone: yours ? 'amber' : 'red', comic }
   const ship = label ?? 'ship'
   return {
-    id: nextId++,
+    id,
     text: yours ? resultCopy.sunkEnemy(ship) : resultCopy.sunkYours(ship),
     tone: yours ? 'amber' : 'red',
+    comic,
   }
 }
 
