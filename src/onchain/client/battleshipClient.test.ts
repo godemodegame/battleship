@@ -182,6 +182,156 @@ describe('createBattleshipReadClient (GAME-502/503)', () => {
   })
 })
 
+describe('battle reads (GAME-701/705/708)', () => {
+  const rawMove = (moveId: number) => ({
+    moveId,
+    attacker: CREATOR,
+    defender: INVITED,
+    cellIndex: moveId,
+    result: 1,
+    sunkShipId: 0,
+    submittedAt: 1n,
+    resolvedAt: 2n,
+    finalized: true,
+  })
+
+  it('getMoveHistory reads one page for short histories', async () => {
+    const readContract = vi.fn(async () => [rawMove(1), rawMove(2)])
+    const publicClient = makePublicClient({
+      readContract: readContract as PublicClientLike['readContract'],
+    })
+    const moves = await readClientFor(publicClient).getMoveHistory!(7n, 2)
+    expect(moves.map((m) => m.moveId)).toEqual([1, 2])
+    expect(moves[0].result).toBe('Miss')
+    expect(readContract).toHaveBeenCalledTimes(1)
+    expect(readContract).toHaveBeenCalledWith(
+      expect.objectContaining({ functionName: 'getMoveHistory', args: [7n, 0, 50] }),
+    )
+  })
+
+  it('getMoveHistory pages past the contract limit of 50', async () => {
+    const readContract = vi.fn(async (params: { args: readonly unknown[] }) => {
+      const offset = params.args[1] as number
+      const count = offset === 0 ? 50 : 10
+      return Array.from({ length: count }, (_, i) => rawMove(offset + i + 1))
+    })
+    const publicClient = makePublicClient({
+      readContract: readContract as PublicClientLike['readContract'],
+    })
+    const moves = await readClientFor(publicClient).getMoveHistory!(7n, 60)
+    expect(moves).toHaveLength(60)
+    expect(moves.at(-1)!.moveId).toBe(60)
+    expect(readContract).toHaveBeenCalledTimes(2)
+  })
+
+  it('getPendingShot maps the pending struct and null when absent', async () => {
+    const rawPending = {
+      exists: true,
+      moveId: 5,
+      attacker: CREATOR,
+      defender: INVITED,
+      cellIndex: 33,
+      resultCtHash: 1n,
+      sunkShipCtHash: 2n,
+      submittedAt: 9n,
+    }
+    const publicClient = makePublicClient({
+      readContract: vi.fn(async () => rawPending) as PublicClientLike['readContract'],
+    })
+    const pending = await readClientFor(publicClient).getPendingShot!(7n)
+    expect(pending).toEqual({
+      exists: true,
+      moveId: 5,
+      attacker: CREATOR,
+      defender: INVITED,
+      cellIndex: 33,
+      submittedAt: 9,
+    })
+
+    const absent = makePublicClient({
+      readContract: vi.fn(async () => ({
+        ...rawPending,
+        exists: false,
+      })) as PublicClientLike['readContract'],
+    })
+    await expect(readClientFor(absent).getPendingShot!(7n)).resolves.toBeNull()
+  })
+})
+
+describe('battle writes (GAME-704/705/710/712)', () => {
+  const okReceipt = () =>
+    makePublicClient({
+      waitForTransactionReceipt: vi.fn(async () => ({
+        status: 'success' as const,
+        transactionHash: TX_HASH,
+        logs: [],
+      })),
+    })
+
+  it('attack simulates and submits the cell index', async () => {
+    const publicClient = okReceipt()
+    const result = await writeClientFor(publicClient).attack!(7n, 42, () => {})
+    expect(result).toEqual({ ok: true, hash: TX_HASH })
+    expect(publicClient.simulateContract).toHaveBeenCalledWith(
+      expect.objectContaining({ functionName: 'attack', args: [7n, 42], account: CREATOR }),
+    )
+  })
+
+  it('attack maps NotYourTurn and CellAlreadyAttacked reverts', async () => {
+    for (const [name, code] of [
+      ['NotYourTurn', 'not-your-turn'],
+      ['CellAlreadyAttacked', 'cell-already-attacked'],
+      ['PendingShotExists', 'shot-resolving'],
+    ] as const) {
+      const publicClient = makePublicClient({
+        simulateContract: vi.fn(async () => {
+          throw revertError(name)
+        }),
+      })
+      const result = await writeClientFor(publicClient).attack!(7n, 1, () => {})
+      expect(result).toEqual({ ok: false, error: code })
+    }
+  })
+
+  it('exposes finalizeAttack, retryShotResolution, and claimTimeoutWin', async () => {
+    const publicClient = okReceipt()
+    const client = writeClientFor(publicClient)
+
+    await expect(client.finalizeAttack!(7n, 3, () => {})).resolves.toEqual({
+      ok: true,
+      hash: TX_HASH,
+    })
+    await expect(client.retryShotResolution!(7n, () => {})).resolves.toEqual({
+      ok: true,
+      hash: TX_HASH,
+    })
+    await expect(client.claimTimeoutWin!(7n, () => {})).resolves.toEqual({
+      ok: true,
+      hash: TX_HASH,
+    })
+
+    expect(publicClient.simulateContract).toHaveBeenCalledWith(
+      expect.objectContaining({ functionName: 'finalizeAttack', args: [7n, 3] }),
+    )
+    expect(publicClient.simulateContract).toHaveBeenCalledWith(
+      expect.objectContaining({ functionName: 'retryShotResolution', args: [7n] }),
+    )
+    expect(publicClient.simulateContract).toHaveBeenCalledWith(
+      expect.objectContaining({ functionName: 'claimTimeoutWin', args: [7n] }),
+    )
+  })
+
+  it('finalizeAttack maps a not-ready decryption onto retryable copy', async () => {
+    const publicClient = makePublicClient({
+      simulateContract: vi.fn(async () => {
+        throw revertError('DecryptionResultNotReady')
+      }),
+    })
+    const result = await writeClientFor(publicClient).finalizeAttack!(7n, 3, () => {})
+    expect(result).toEqual({ ok: false, error: 'decryption-not-ready' })
+  })
+})
+
 describe('extractCreatedMatchId', () => {
   it('extracts the id from a MatchCreated log of this contract', () => {
     expect(extractCreatedMatchId([matchCreatedLog(41n)], CONTRACT)).toBe(41n)

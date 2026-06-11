@@ -87,6 +87,13 @@ const CONTRACT_ERROR_CODES: Record<string, ErrorCode> = {
   DecryptionResultNotReady: 'decryption-not-ready',
   NoPendingPlacementValidation: 'finalization-failed',
   NoTimeoutAvailable: 'invalid-status',
+  // Phase 7 battle reverts (GAME-704/705/710).
+  InvalidCellIndex: 'invalid-status',
+  NoPendingShot: 'finalization-failed',
+  InvalidMoveId: 'finalization-failed',
+  MoveNotFound: 'finalization-failed',
+  InvalidShotResult: 'finalization-failed',
+  NotTimeoutClaimant: 'invalid-status',
 }
 
 export function mapContractError(name: string | null | undefined): ErrorCode {

@@ -9,7 +9,7 @@
  */
 
 import { useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { createMatchCopy, deploymentCopy, matchStateCopy, walletCopy } from '../../copy/en'
 import { useBattleshipClients } from '../client/useBattleshipClients'
 import { isTxBusy } from '../client/txTracker'
@@ -42,11 +42,17 @@ export function validateInvitedAddress(
 export function CreateFriendMatchScreen() {
   const wallet = useWalletSession()
   const navigate = useNavigate()
+  const location = useLocation()
   const deploymentId = getActiveDeploymentId()
   const clients = useBattleshipClients(deploymentId)
   const tx = useTrackedWrite()
 
-  const [address, setAddress] = useState('')
+  // Rematch routes here with the previous opponent prefilled (GAME-711). A
+  // rematch is a brand-new contract match; only the address carries over.
+  const prefill = (location.state as { invited?: string } | null)?.invited
+  const [address, setAddress] = useState(
+    typeof prefill === 'string' && ADDRESS_RE.test(prefill) ? prefill : '',
+  )
   const [validationError, setValidationError] = useState<string | null>(null)
   const [pasteNote, setPasteNote] = useState<string | null>(null)
 

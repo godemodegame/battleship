@@ -4,8 +4,12 @@ import {
   isJoinExpired,
   parseMatchIdParam,
   toChainMatchView,
+  toChainMoveView,
   toMatchPlayersView,
+  toPendingShotView,
   type RawMatchView,
+  type RawMoveView,
+  type RawPendingShotView,
   type RawPlayerPublicView,
 } from './mapping'
 
@@ -120,6 +124,68 @@ describe('toMatchPlayersView (GAME-608/609)', () => {
     expect(players.creator.publicBoard.hitMask).toBe(4n)
     expect(players.opponent.player).toBeNull()
     expect(players.opponent.placementStatus).toBe('None')
+  })
+})
+
+describe('toChainMoveView (GAME-701/708)', () => {
+  const rawMove = (over: Partial<RawMoveView> = {}): RawMoveView => ({
+    moveId: 3,
+    attacker: CREATOR,
+    defender: INVITED,
+    cellIndex: 42,
+    result: 2, // Hit
+    sunkShipId: 0,
+    submittedAt: 5_000n,
+    resolvedAt: 5_010n,
+    finalized: true,
+    ...over,
+  })
+
+  it('maps the raw struct with the ShotResult enum by index', () => {
+    const move = toChainMoveView(rawMove())
+    expect(move.moveId).toBe(3)
+    expect(move.attacker).toBe(CREATOR.toLowerCase())
+    expect(move.defender).toBe(INVITED.toLowerCase())
+    expect(move.cellIndex).toBe(42)
+    expect(move.result).toBe('Hit')
+    expect(move.submittedAt).toBe(5_000)
+    expect(move.resolvedAt).toBe(5_010)
+    expect(move.finalized).toBe(true)
+  })
+
+  it('maps every result index and degrades unknown indexes to None', () => {
+    expect(toChainMoveView(rawMove({ result: 0 })).result).toBe('None')
+    expect(toChainMoveView(rawMove({ result: 1 })).result).toBe('Miss')
+    expect(toChainMoveView(rawMove({ result: 3, sunkShipId: 4 })).result).toBe('Sunk')
+    expect(toChainMoveView(rawMove({ result: 4, sunkShipId: 10 })).result).toBe('Win')
+    expect(toChainMoveView(rawMove({ result: 99 })).result).toBe('None')
+  })
+})
+
+describe('toPendingShotView (GAME-705)', () => {
+  const rawPending = (over: Partial<RawPendingShotView> = {}): RawPendingShotView => ({
+    exists: true,
+    moveId: 6,
+    attacker: CREATOR,
+    defender: INVITED,
+    cellIndex: 17,
+    resultCtHash: 123n,
+    sunkShipCtHash: 456n,
+    submittedAt: 9_000n,
+    ...over,
+  })
+
+  it('maps an existing pending shot and drops the ciphertext handles', () => {
+    const pending = toPendingShotView(rawPending())!
+    expect(pending.moveId).toBe(6)
+    expect(pending.attacker).toBe(CREATOR.toLowerCase())
+    expect(pending.cellIndex).toBe(17)
+    expect('resultCtHash' in pending).toBe(false)
+    expect('sunkShipCtHash' in pending).toBe(false)
+  })
+
+  it('returns null when no shot is pending', () => {
+    expect(toPendingShotView(rawPending({ exists: false }))).toBeNull()
   })
 })
 

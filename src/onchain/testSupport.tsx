@@ -19,7 +19,14 @@ import type {
   BattleshipWriteClient,
   MatchEventRef,
 } from './client/battleshipClient'
-import type { ChainMatchView } from './client/mapping'
+import type {
+  ChainMatchView,
+  ChainMoveView,
+  ChainPendingShotView,
+  ChainPlayerView,
+  MatchPlayersView,
+  ShotResultName,
+} from './client/mapping'
 import type { TxState } from './client/txTracker'
 import {
   BattleshipClientsOverrideContext,
@@ -97,14 +104,42 @@ export function readyResolution(): DeploymentResolution {
 
 const DAY = 86_400
 
+export function emptyPlayerView(
+  player: HexAddress | null,
+  placementStatus: ChainPlayerView['placementStatus'] = player ? 'NotSubmitted' : 'None',
+): ChainPlayerView {
+  const valid = placementStatus === 'Valid'
+  return {
+    player,
+    joined: player !== null,
+    placementStatus,
+    fleetSubmitted: valid,
+    fleetValid: valid,
+    publicBoard: { attackedMask: 0n, missMask: 0n, hitMask: 0n, sunkMask: 0n },
+  }
+}
+
 export interface FakeContract {
   /** Current single match state (this fake hosts at most one match). */
   match: ChainMatchView | null
+  /** Public per-player boards, mirrored into getPlayers reads. */
+  players: MatchPlayersView | null
+  /** Public move history, oldest first. */
+  moves: ChainMoveView[]
+  pendingShot: ChainPendingShotView | null
+  /**
+   * Scripted "encrypted" outcomes consumed by finalizeAttack in order. The
+   * real contract reads these from CoFHE decrypt results; the fake scripts
+   * them so tests stay deterministic.
+   */
+  nextResults: Array<{ result: ShotResultName; sunkShipId?: number }>
   readClient: BattleshipReadClient
   writeClientFor(account: HexAddress): BattleshipWriteClient
   clientsFor(account: HexAddress | null): BattleshipClients
   /** Deliver an event to watchers (writes emit automatically). */
   emit(eventName: string): void
+  /** Jump the fake straight into a started battle (both fleets valid). */
+  startBattle(options?: { currentTurn?: HexAddress; turnDeadline?: number }): void
   getMatchCalls: number
 }
 
@@ -125,6 +160,10 @@ export function makeFakeContract(): FakeContract {
 
   const fake: FakeContract = {
     match: null,
+    players: null,
+    moves: [],
+    pendingShot: null,
+    nextResults: [],
     getMatchCalls: 0,
 
     emit(eventName: string) {
@@ -139,11 +178,63 @@ export function makeFakeContract(): FakeContract {
       for (const onEvents of watchers.values()) onEvents(events)
     },
 
+    startBattle(options = {}) {
+      const currentTurn = options.currentTurn ?? INVITED
+      const nowTs = Math.floor(Date.now() / 1000)
+      fake.match = {
+        deploymentId: DEPLOYMENT_ID,
+        matchId: '1',
+        matchIdBig: 1n,
+        status: 'InProgress',
+        matchType: 'Friend',
+        creator: CREATOR,
+        opponent: INVITED,
+        invitedOpponent: INVITED,
+        currentTurn,
+        winner: null,
+        createdAt: nowTs - 100,
+        joinedAt: nowTs - 90,
+        startedAt: nowTs - 10,
+        finishedAt: 0,
+        lastActionAt: nowTs - 10,
+        moveCount: 0,
+        pendingMoveId: 0,
+        deadlines: {
+          joinDeadline: 0,
+          placementDeadline: 0,
+          turnDeadline: options.turnDeadline ?? nowTs + DAY,
+          resolvingDeadline: 0,
+        },
+      }
+      fake.players = {
+        creator: emptyPlayerView(CREATOR, 'Valid'),
+        opponent: emptyPlayerView(INVITED, 'Valid'),
+      }
+      fake.moves = []
+      fake.pendingShot = null
+    },
+
     readClient: {
       async getMatch(matchId: bigint) {
         fake.getMatchCalls += 1
         if (!fake.match || fake.match.matchIdBig !== matchId) return null
         return { ...fake.match }
+      },
+      async getPlayers() {
+        const players = fake.players ?? {
+          creator: emptyPlayerView(fake.match?.creator ?? null),
+          opponent: emptyPlayerView(fake.match?.opponent ?? null),
+        }
+        return {
+          creator: { ...players.creator, publicBoard: { ...players.creator.publicBoard } },
+          opponent: { ...players.opponent, publicBoard: { ...players.opponent.publicBoard } },
+        }
+      },
+      async getMoveHistory() {
+        return fake.moves.map((move) => ({ ...move }))
+      },
+      async getPendingShot() {
+        return fake.pendingShot ? { ...fake.pendingShot } : null
       },
       watchMatch(_matchId: bigint, onEvents: (events: MatchEventRef[]) => void) {
         const key = `w${watcherSeq++}`
@@ -211,9 +302,147 @@ export function makeFakeContract(): FakeContract {
         async forfeit(matchId, onState) {
           walk(onState)
           if (fake.match && fake.match.matchIdBig === matchId) {
-            fake.match = { ...fake.match, status: 'Forfeited' }
+            const winner =
+              account === fake.match.creator ? fake.match.opponent : fake.match.creator
+            fake.match = {
+              ...fake.match,
+              status: 'Forfeited',
+              winner,
+              currentTurn: null,
+            }
             fake.emit('MatchForfeited')
           }
+          return { ok: true, hash: TX_HASH }
+        },
+
+        // ---- Phase 7 battle transitions, mirroring BattleshipGame.sol ----
+
+        async attack(matchId, cellIndex, onState) {
+          walk(onState)
+          const m = fake.match
+          if (!m || m.matchIdBig !== matchId || m.status !== 'InProgress') {
+            return { ok: false, error: 'invalid-status' }
+          }
+          if (m.currentTurn !== account) return { ok: false, error: 'not-your-turn' }
+          const defender = account === m.creator ? m.opponent! : m.creator!
+          const defenderSlot =
+            defender === m.creator ? fake.players!.creator : fake.players!.opponent
+          const bit = 1n << BigInt(cellIndex)
+          if (defenderSlot.publicBoard.attackedMask & bit) {
+            return { ok: false, error: 'cell-already-attacked' }
+          }
+          defenderSlot.publicBoard.attackedMask |= bit
+
+          const nowTs = Math.floor(Date.now() / 1000)
+          const moveId = m.moveCount + 1
+          fake.moves.push({
+            moveId,
+            attacker: account,
+            defender,
+            cellIndex,
+            result: 'None',
+            sunkShipId: 0,
+            submittedAt: nowTs,
+            resolvedAt: 0,
+            finalized: false,
+          })
+          fake.pendingShot = {
+            exists: true,
+            moveId,
+            attacker: account,
+            defender,
+            cellIndex,
+            submittedAt: nowTs,
+          }
+          fake.match = {
+            ...m,
+            status: 'ResolvingShot',
+            moveCount: moveId,
+            pendingMoveId: moveId,
+          }
+          fake.emit('ShotSubmitted')
+          return { ok: true, hash: TX_HASH }
+        },
+
+        async finalizeAttack(matchId, moveId, onState) {
+          walk(onState)
+          const m = fake.match
+          const pending = fake.pendingShot
+          if (!m || m.matchIdBig !== matchId || m.status !== 'ResolvingShot' || !pending) {
+            return { ok: false, error: 'invalid-status' }
+          }
+          if (moveId !== pending.moveId) return { ok: false, error: 'finalization-failed' }
+
+          const scripted = fake.nextResults.shift() ?? { result: 'Miss' as const }
+          const result = scripted.result
+          const sunkShipId =
+            result === 'Sunk' || result === 'Win' ? (scripted.sunkShipId ?? 1) : 0
+          const nowTs = Math.floor(Date.now() / 1000)
+
+          const move = fake.moves.find((entry) => entry.moveId === moveId)!
+          move.result = result
+          move.sunkShipId = sunkShipId
+          move.resolvedAt = nowTs
+          move.finalized = true
+
+          const defenderSlot =
+            pending.defender === m.creator ? fake.players!.creator : fake.players!.opponent
+          const bit = 1n << BigInt(pending.cellIndex)
+          if (result === 'Miss') {
+            defenderSlot.publicBoard.missMask |= bit
+          } else {
+            defenderSlot.publicBoard.hitMask |= bit
+            if (result !== 'Hit') defenderSlot.publicBoard.sunkMask |= bit
+          }
+
+          fake.pendingShot = null
+          if (result === 'Win') {
+            fake.match = {
+              ...m,
+              status: 'Finished',
+              winner: pending.attacker,
+              currentTurn: null,
+              pendingMoveId: 0,
+              finishedAt: nowTs,
+            }
+          } else {
+            fake.match = {
+              ...m,
+              status: 'InProgress',
+              currentTurn: result === 'Miss' ? pending.defender : pending.attacker,
+              pendingMoveId: 0,
+            }
+          }
+          fake.emit('ShotResolved')
+          return { ok: true, hash: TX_HASH }
+        },
+
+        async retryShotResolution(matchId, onState) {
+          walk(onState)
+          if (!fake.match || fake.match.matchIdBig !== matchId || !fake.pendingShot) {
+            return { ok: false, error: 'invalid-status' }
+          }
+          fake.emit('ShotResolutionRequested')
+          return { ok: true, hash: TX_HASH }
+        },
+
+        async claimTimeoutWin(matchId, onState) {
+          walk(onState)
+          const m = fake.match
+          if (!m || m.matchIdBig !== matchId || m.status !== 'InProgress') {
+            return { ok: false, error: 'invalid-status' }
+          }
+          if (m.currentTurn === account) return { ok: false, error: 'invalid-status' }
+          if (Math.floor(Date.now() / 1000) <= m.deadlines.turnDeadline) {
+            return { ok: false, error: 'invalid-status' }
+          }
+          fake.match = {
+            ...m,
+            status: 'Forfeited',
+            winner: account,
+            currentTurn: null,
+          }
+          fake.emit('TimeoutWinClaimed')
           return { ok: true, hash: TX_HASH }
         },
       }
