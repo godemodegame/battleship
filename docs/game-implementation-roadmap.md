@@ -772,7 +772,7 @@ Phase status:
 | 2. Privy and network | Complete (GAME-201 through GAME-211) |
 | 3. Contract public lifecycle | Complete (GAME-301 through GAME-311) |
 | 4. CoFHE encrypted rules | Complete (GAME-401 through GAME-412) |
-| 5. Friend-match frontend | Not started |
+| 5. Friend-match frontend | Complete (GAME-501 through GAME-512) |
 | 6. Encrypted fleet UI | Not started |
 | 7. On-chain battle | Not started |
 | 8. Mobile and recovery | Not started |
