@@ -619,22 +619,26 @@ Goal:
 
 - replace local battle authority with contract-derived attacks and results.
 
+Progress:
+
+- `GAME-701` through `GAME-712` complete (June 11, 2026).
+
 Tasks:
 
-| ID | Priority | Work |
-| --- | --- | --- |
-| GAME-701 | P0 | Decode public board attacked, miss, hit, and sunk masks |
-| GAME-702 | P0 | Feed contract-derived data into `PublicBattleRenderModel` |
-| GAME-703 | P0 | Enable target selection only for the active wallet's valid turn |
-| GAME-704 | P0 | Submit `attack(matchId, cellIndex)` and enter resolving state |
-| GAME-705 | P0 | Read pending shot and run allowed `decryptForTx` finalization |
-| GAME-706 | P0 | Process finalized moves idempotently by deployment and move id |
-| GAME-707 | P0 | Play projectile and result effects only from finalized public outcomes |
-| GAME-708 | P0 | Rebuild move history and boards after refresh |
-| GAME-709 | P0 | Implement contract-derived victory and defeat summary |
-| GAME-710 | P0 | Implement forfeit, cancellation, and timeout UI |
-| GAME-711 | P0 | Make rematch create a new contract match |
-| GAME-712 | P1 | Add permissionless pending-operation recovery UI |
+| ID | Priority | Status | Work |
+| --- | --- | --- | --- |
+| GAME-701 | P0 | Complete | Decode public board attacked, miss, hit, and sunk masks |
+| GAME-702 | P0 | Complete | Feed contract-derived data into `PublicBattleRenderModel` |
+| GAME-703 | P0 | Complete | Enable target selection only for the active wallet's valid turn |
+| GAME-704 | P0 | Complete | Submit `attack(matchId, cellIndex)` and enter resolving state |
+| GAME-705 | P0 | Complete | Read pending shot and run allowed `decryptForTx` finalization |
+| GAME-706 | P0 | Complete | Process finalized moves idempotently by deployment and move id |
+| GAME-707 | P0 | Complete | Play projectile and result effects only from finalized public outcomes |
+| GAME-708 | P0 | Complete | Rebuild move history and boards after refresh |
+| GAME-709 | P0 | Complete | Implement contract-derived victory and defeat summary |
+| GAME-710 | P0 | Complete | Implement forfeit, cancellation, and timeout UI |
+| GAME-711 | P0 | Complete | Make rematch create a new contract match |
+| GAME-712 | P1 | Complete | Add permissionless pending-operation recovery UI |
 
 Implementation rules:
 
@@ -649,6 +653,46 @@ Exit criteria:
 - every shot produces one finalized public result and one visual sequence;
 - refresh during `ResolvingShot` resumes safely;
 - terminal state is reconstructed without local winner mutation.
+
+Exit status:
+
+- met on June 11, 2026 (`src/onchain/battle/onchainBattleFlow.test.tsx` drives
+  two wallets through fire → resolve → finalize for Miss, Hit, and Win against
+  the shared fake contract, plus refresh recovery, forfeit, timeout claim, and
+  rematch).
+
+Realized structure:
+
+- `src/onchain/battle/publicBattleModel.ts` decodes the `uint128` public board
+  masks and the finalized move history into `PublicBattleRenderModel`
+  (GAME-701/702); remaining-ship counts derive from finalized `Sunk`/`Win`
+  moves, never from placements, and spectators receive no battle model;
+- the typed clients gained `getMoveHistory` (paginated past the contract's
+  50-entry page cap) and `getPendingShot` reads plus `attack`,
+  `finalizeAttack`, `retryShotResolution`, and `claimTimeoutWin` writes;
+  `useMatchView` loads moves and the pending shot with the authoritative
+  `getMatch`/`getPlayers` reads for battle and terminal statuses;
+- `src/onchain/battle/OnchainBattlePanel.tsx` renders both public boards as
+  tappable grids: target selection is enabled only on the viewer's valid turn
+  with an untried cell (GAME-703), `attack` enters ResolvingShot off the
+  receipt (GAME-704), and the resolving state offers the permissionless
+  `finalizeAttack` and `retryShotResolution` recovery actions (GAME-705/712);
+- shot effects fire exactly once per finalized public move: `moveFx.ts` keeps
+  an in-memory cursor per deployment + match id (GAME-706), `useShotFx.ts`
+  presents the newest finalized move (banner, cell flash, sfx, haptics) in
+  both the battle panel and the terminal summary (GAME-707), and the first
+  sighting of a match primes silently so refresh rebuilds boards and history
+  without replaying effects (GAME-708);
+- `src/onchain/battle/MatchSummaryPanel.tsx` renders victory/defeat/forfeit/
+  timeout outcomes purely from contract state — winner, move count, final
+  boards, history — and Rematch routes to `/match/new` with the old opponent
+  prefilled, creating a brand-new contract match (GAME-709/710/711); the
+  battle panel carries forfeit (confirmed) and the turn-deadline timeout claim
+  (GAME-710);
+- the pinned CoFHE line posts decrypt results on-chain, so "allowed
+  `decryptForTx` finalization" (GAME-705) is realized as the permissionless
+  `finalizeAttack(matchId, moveId)` reading `FHE.getDecryptResultSafe` —
+  no client ever supplies a result.
 
 ## Phase 8: Mobile, Recovery, and UX Hardening
 
@@ -810,8 +854,8 @@ Phase status:
 | 3. Contract public lifecycle | Complete (GAME-301 through GAME-311) |
 | 4. CoFHE encrypted rules | Complete (GAME-401 through GAME-412) |
 | 5. Friend-match frontend | Complete (GAME-501 through GAME-512) |
-| 6. Encrypted fleet UI | In progress (GAME-601 complete) |
-| 7. On-chain battle | Not started |
+| 6. Encrypted fleet UI | Complete (GAME-601 through GAME-612) |
+| 7. On-chain battle | Complete (GAME-701 through GAME-712) |
 | 8. Mobile and recovery | Not started |
 | 9. Security and release QA | Not started |
 | 10. Staging and public demo | Not started |

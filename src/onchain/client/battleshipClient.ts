@@ -21,10 +21,16 @@ import type { HexAddress } from '../phaseResolver'
 import { decodeReadError, decodeTxError } from './decodeError'
 import {
   toChainMatchView,
+  toChainMoveView,
   toMatchPlayersView,
+  toPendingShotView,
   type ChainMatchView,
+  type ChainMoveView,
+  type ChainPendingShotView,
   type MatchPlayersView,
   type RawMatchView,
+  type RawMoveView,
+  type RawPendingShotView,
   type RawPlayerPublicView,
 } from './mapping'
 import {
@@ -47,6 +53,10 @@ export interface BattleshipReadClient {
   getMatch(matchId: bigint): Promise<ChainMatchView | null>
   /** Public placement/board state for both player slots. */
   getPlayers?(matchId: bigint): Promise<MatchPlayersView>
+  /** Complete public move history, oldest first (GAME-708). */
+  getMoveHistory?(matchId: bigint, moveCount: number): Promise<ChainMoveView[]>
+  /** The match's unresolved shot, or `null` when none is pending (GAME-705). */
+  getPendingShot?(matchId: bigint): Promise<ChainPendingShotView | null>
   /**
    * Watch this match's contract events. The callback receives event identities
    * only — consumers must follow with authoritative reads. Returns unwatch.
@@ -85,6 +95,18 @@ export interface BattleshipWriteClient {
     player: HexAddress,
     onState: (state: TxState) => void,
   ): Promise<WriteResult>
+  attack?(
+    matchId: bigint,
+    cellIndex: number,
+    onState: (state: TxState) => void,
+  ): Promise<WriteResult>
+  finalizeAttack?(
+    matchId: bigint,
+    moveId: number,
+    onState: (state: TxState) => void,
+  ): Promise<WriteResult>
+  retryShotResolution?(matchId: bigint, onState: (state: TxState) => void): Promise<WriteResult>
+  claimTimeoutWin?(matchId: bigint, onState: (state: TxState) => void): Promise<WriteResult>
 }
 
 /* ------------------------------------------------------------------------- *
@@ -154,6 +176,9 @@ interface WatchedLog {
   args?: { matchId?: bigint }
 }
 
+/** Mirrors the contract's MAX_PAGE_LIMIT for getMoveHistory pagination. */
+const MOVE_PAGE_LIMIT = 50
+
 export function createBattleshipReadClient(
   config: BattleshipClientConfig,
 ): BattleshipReadClient {
@@ -184,6 +209,34 @@ export function createBattleshipReadClient(
       return toMatchPlayersView(
         raw as readonly [RawPlayerPublicView, RawPlayerPublicView],
       )
+    },
+
+    async getMoveHistory(matchId, moveCount) {
+      const moves: ChainMoveView[] = []
+      // The contract caps one page at MAX_PAGE_LIMIT (50); long matches read
+      // sequential pages. moveCount comes from the authoritative getMatch read.
+      for (let offset = 0; offset < moveCount; offset += MOVE_PAGE_LIMIT) {
+        const raw = await publicClient.readContract({
+          address: contractAddress,
+          abi: battleshipGameAbi,
+          functionName: 'getMoveHistory',
+          args: [matchId, offset, MOVE_PAGE_LIMIT],
+        })
+        const page = (raw as RawMoveView[]).map(toChainMoveView)
+        moves.push(...page)
+        if (page.length < MOVE_PAGE_LIMIT) break
+      }
+      return moves
+    },
+
+    async getPendingShot(matchId) {
+      const raw = await publicClient.readContract({
+        address: contractAddress,
+        abi: battleshipGameAbi,
+        functionName: 'getPendingShot',
+        args: [matchId],
+      })
+      return toPendingShotView(raw as RawPendingShotView)
     },
 
     watchMatch(matchId, onEvents) {
@@ -245,7 +298,11 @@ export function createBattleshipWriteClient(
       | 'forfeit'
       | 'submitFleet'
       | 'finalizeFleetValidation'
-      | 'retryFleetValidation',
+      | 'retryFleetValidation'
+      | 'attack'
+      | 'finalizeAttack'
+      | 'retryShotResolution'
+      | 'claimTimeoutWin',
     args: readonly unknown[],
     onState: (state: TxState) => void,
   ): Promise<{ ok: true; receipt: ReceiptLike } | { ok: false; error: ErrorCode }> {
@@ -324,6 +381,26 @@ export function createBattleshipWriteClient(
         [matchId, player],
         onState,
       )
+      return result.ok ? { ok: true, hash: result.receipt.transactionHash } : result
+    },
+
+    async attack(matchId, cellIndex, onState) {
+      const result = await performWrite('attack', [matchId, cellIndex], onState)
+      return result.ok ? { ok: true, hash: result.receipt.transactionHash } : result
+    },
+
+    async finalizeAttack(matchId, moveId, onState) {
+      const result = await performWrite('finalizeAttack', [matchId, moveId], onState)
+      return result.ok ? { ok: true, hash: result.receipt.transactionHash } : result
+    },
+
+    async retryShotResolution(matchId, onState) {
+      const result = await performWrite('retryShotResolution', [matchId], onState)
+      return result.ok ? { ok: true, hash: result.receipt.transactionHash } : result
+    },
+
+    async claimTimeoutWin(matchId, onState) {
+      const result = await performWrite('claimTimeoutWin', [matchId], onState)
       return result.ok ? { ok: true, hash: result.receipt.transactionHash } : result
     },
   }

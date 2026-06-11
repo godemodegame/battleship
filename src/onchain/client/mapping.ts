@@ -58,6 +58,10 @@ export interface ChainMatchView extends MatchView {
   deadlines: MatchDeadlines
   /** Authoritative public player state, loaded alongside getMatch in Phase 6. */
   players?: MatchPlayersView
+  /** Public move history, oldest first, loaded for battle phases (GAME-708). */
+  moves?: ReadonlyArray<ChainMoveView>
+  /** The unresolved shot while the match is ResolvingShot (GAME-705). */
+  pendingShot?: ChainPendingShotView | null
 }
 
 const PLACEMENT_STATUS_BY_INDEX = [
@@ -68,6 +72,35 @@ const PLACEMENT_STATUS_BY_INDEX = [
   'Valid',
   'Invalid',
 ] as const
+
+/** Solidity `ShotResult` enum, by index. Index 0 (`None`) = not yet resolved. */
+const SHOT_RESULT_BY_INDEX = ['None', 'Miss', 'Hit', 'Sunk', 'Win'] as const
+
+export type ShotResultName = (typeof SHOT_RESULT_BY_INDEX)[number]
+
+/** One public move from `getMove` / `getMoveHistory` (GAME-701/708). */
+export interface ChainMoveView {
+  moveId: number
+  attacker: HexAddress | null
+  defender: HexAddress | null
+  cellIndex: number
+  result: ShotResultName
+  /** 1..10 in the public ship-metadata order; 0 when no ship sank. */
+  sunkShipId: number
+  submittedAt: number
+  resolvedAt: number
+  finalized: boolean
+}
+
+/** The match's single unresolved shot from `getPendingShot` (GAME-705). */
+export interface ChainPendingShotView {
+  exists: boolean
+  moveId: number
+  attacker: HexAddress | null
+  defender: HexAddress | null
+  cellIndex: number
+  submittedAt: number
+}
 
 export type PlacementStatusName = (typeof PLACEMENT_STATUS_BY_INDEX)[number]
 
@@ -126,6 +159,31 @@ export interface RawMatchView {
   }
 }
 
+/** Structural type of one raw `MoveView` struct as decoded by viem. */
+export interface RawMoveView {
+  moveId: number
+  attacker: `0x${string}`
+  defender: `0x${string}`
+  cellIndex: number
+  result: number
+  sunkShipId: number
+  submittedAt: bigint
+  resolvedAt: bigint
+  finalized: boolean
+}
+
+/** Structural type of the raw `PendingShotView` struct as decoded by viem. */
+export interface RawPendingShotView {
+  exists: boolean
+  moveId: number
+  attacker: `0x${string}`
+  defender: `0x${string}`
+  cellIndex: number
+  resultCtHash: bigint
+  sunkShipCtHash: bigint
+  submittedAt: bigint
+}
+
 function addressOrNull(value: `0x${string}`): HexAddress | null {
   if (!value || value.toLowerCase() === ZERO_ADDRESS) return null
   return value.toLowerCase() as HexAddress
@@ -182,6 +240,37 @@ export function toChainPlayerView(raw: RawPlayerPublicView): ChainPlayerView {
       hitMask: raw.publicBoard.hitMask,
       sunkMask: raw.publicBoard.sunkMask,
     },
+  }
+}
+
+export function toChainMoveView(raw: RawMoveView): ChainMoveView {
+  return {
+    moveId: raw.moveId,
+    attacker: addressOrNull(raw.attacker),
+    defender: addressOrNull(raw.defender),
+    cellIndex: raw.cellIndex,
+    result: SHOT_RESULT_BY_INDEX[raw.result] ?? 'None',
+    sunkShipId: raw.sunkShipId,
+    submittedAt: Number(raw.submittedAt),
+    resolvedAt: Number(raw.resolvedAt),
+    finalized: raw.finalized,
+  }
+}
+
+/**
+ * Convert the raw pending-shot struct, dropping the ciphertext handle hashes:
+ * they are public handle identifiers the UI has no use for, and omitting them
+ * keeps encrypted-adjacent values out of every frontend state object.
+ */
+export function toPendingShotView(raw: RawPendingShotView): ChainPendingShotView | null {
+  if (!raw.exists) return null
+  return {
+    exists: true,
+    moveId: raw.moveId,
+    attacker: addressOrNull(raw.attacker),
+    defender: addressOrNull(raw.defender),
+    cellIndex: raw.cellIndex,
+    submittedAt: Number(raw.submittedAt),
   }
 }
 

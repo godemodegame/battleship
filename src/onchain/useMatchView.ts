@@ -45,6 +45,9 @@ function eventKey(event: MatchEventRef): string {
   return `${event.blockHash ?? 'pending'}:${event.logIndex ?? -1}:${event.transactionHash ?? ''}`
 }
 
+/** Statuses whose UI consumes move history and pending-shot state (Phase 7). */
+const BATTLE_STATUSES = new Set(['InProgress', 'ResolvingShot', 'Finished', 'Forfeited'])
+
 export function useMatchView(params: UseMatchViewParams): MatchViewQuery {
   const { readClient, matchId, accountEpoch, chainId } = params
 
@@ -77,8 +80,26 @@ export function useMatchView(params: UseMatchViewParams): MatchViewQuery {
           const players = readClient.getPlayers
             ? await readClient.getPlayers(matchId)
             : null
+          // Battle phases additionally read the public move history (GAME-708)
+          // and the unresolved shot (GAME-705); both stay contract-derived.
+          const wantBattle = BATTLE_STATUSES.has(view.status)
+          const moves =
+            wantBattle && readClient.getMoveHistory && view.moveCount > 0
+              ? await readClient.getMoveHistory(matchId, view.moveCount)
+              : wantBattle
+                ? []
+                : undefined
+          const pendingShot =
+            view.status === 'ResolvingShot' && readClient.getPendingShot
+              ? await readClient.getPendingShot(matchId)
+              : null
           if (seq !== seqRef.current) return
-          setMatch(players ? { ...view, players } : view)
+          setMatch({
+            ...view,
+            ...(players ? { players } : {}),
+            ...(moves !== undefined ? { moves } : {}),
+            pendingShot,
+          })
           setError(null)
           setStatus('ready')
         }

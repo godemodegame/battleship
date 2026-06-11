@@ -177,6 +177,60 @@ export const encryptedPlacementCopy = {
   privacyNote: 'Your plaintext fleet is cleared after the submission confirms.',
 } as const
 
+/** On-chain battle HUD (GAME-703..712). */
+export const battleCopy = {
+  enemyBoard: 'Enemy waters',
+  yourBoard: 'Your waters',
+  enemyShips: (remaining: number, total: number) => `Enemy ships ${remaining}/${total}`,
+  yourShips: (remaining: number, total: number) => `Your ships ${remaining}/${total}`,
+  yourTurnHint: 'Select a target cell.',
+  fireAt: (cell: string) => `Fire at ${cell}`,
+  selectTarget: 'Select a target cell',
+  opponentTurn: 'Waiting for the opponent to fire.',
+  firing: 'Sending Attack',
+  resolvingTitle: 'Resolving Shot',
+  resolvingBody:
+    'The encrypted result is pending. Finalize it once the CoFHE network has responded.',
+  resolvingShotAt: (cell: string) => `Shot at ${cell} awaits its encrypted result.`,
+  finalizeShot: 'Finalize Shot',
+  retryResolution: 'Retry CoFHE Request',
+  forfeit: 'Forfeit',
+  forfeitTitle: 'Forfeit Match',
+  forfeitBody: 'Abandon ship? The match counts as an on-chain defeat.',
+  forfeitConfirm: 'Forfeit',
+  forfeitCancel: 'Cancel',
+  claimTimeoutWin: 'Claim Timeout Win',
+  timeoutAvailable: 'The opponent missed their turn deadline. You can claim the win.',
+  historyTitle: 'Move history',
+  historyEmpty: 'No shots fired yet.',
+  historyYou: 'You',
+  historyOpponent: 'Opponent',
+  historyResults: {
+    None: 'Resolving…',
+    Miss: 'Miss',
+    Hit: 'Hit',
+    Sunk: 'Sunk',
+    Win: 'Win',
+  },
+  spectatorBattleBody: 'This battle is between other players.',
+} as const
+
+/** Contract-derived terminal summary (GAME-709/710/711). */
+export const summaryCopy = {
+  victoryTitle: 'Victory',
+  defeatTitle: 'Defeat',
+  completeTitle: 'Match Finished',
+  wonBody: 'You sank the enemy fleet.',
+  lostBody: 'Your fleet was destroyed.',
+  forfeitWonBody: 'Your opponent forfeited or timed out. The win is yours.',
+  forfeitLostBody: 'The match ended by forfeit or timeout.',
+  spectatorBody: 'This match has finished.',
+  cancelledTitle: 'Match Cancelled',
+  winnerLabel: 'Winner',
+  movesLabel: 'Moves',
+  rematch: 'Rematch',
+} as const
+
 /** Terminal / blocked lifecycle states on the match route (GAME-508). */
 export const matchStateCopy = {
   waitingForOpponentSpectator: 'This match is waiting for the invited player.',

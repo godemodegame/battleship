@@ -34,6 +34,16 @@ const EncryptedFleetPanel = lazy(async () => {
   return { default: module.EncryptedFleetPanel }
 })
 
+const OnchainBattlePanel = lazy(async () => {
+  const module = await import('./battle/OnchainBattlePanel')
+  return { default: module.OnchainBattlePanel }
+})
+
+const MatchSummaryPanel = lazy(async () => {
+  const module = await import('./battle/MatchSummaryPanel')
+  return { default: module.MatchSummaryPanel }
+})
+
 /** Demo addresses (match the ones used in phaseResolver.test.ts for consistency). */
 const DEMO_CREATOR = '0x1111111111111111111111111111111111111111' as const
 const DEMO_OPPONENT = '0x2222222222222222222222222222222222222222' as const
@@ -140,6 +150,14 @@ function PlacementLoading() {
   return (
     <div className="home-actions" data-testid="placement-loading">
       <p>Preparing encrypted placement…</p>
+    </div>
+  )
+}
+
+function BattleLoading() {
+  return (
+    <div className="home-actions" data-testid="battle-loading">
+      <p>Loading battle…</p>
     </div>
   )
 }
@@ -296,9 +314,17 @@ export function MatchRouteShell() {
   const showError = !walletGate && ready && numericMatchId !== null && query.status === 'error'
   const showMatch = !walletGate && ready && query.status === 'ready' && match !== null
 
+  // Placement, battle, and terminal phases hold tall panels; the route scrolls.
+  const scrollingPhase =
+    phase.kind === 'placement' ||
+    phase.kind === 'battle' ||
+    phase.kind === 'resolving' ||
+    phase.kind === 'finished' ||
+    phase.kind === 'forfeited'
+
   return (
     <div
-      className={`overlay home ${phase.kind === 'placement' ? 'match-placement-route' : ''}`}
+      className={`overlay home ${scrollingPhase ? 'match-placement-route' : ''}`}
       data-game-slice="onchain-shell-103"
       data-testid="match-route-shell"
     >
@@ -460,6 +486,26 @@ export function MatchRouteShell() {
                 />
               </Suspense>
             </>
+          )}
+
+          {/* On-chain battle and resolving states (GAME-701..708, 710, 712). */}
+          {(phase.kind === 'battle' || phase.kind === 'resolving') && (
+            <Suspense fallback={<BattleLoading />}>
+              <OnchainBattlePanel
+                phase={phase}
+                match={match}
+                writeClient={writeClient}
+                wallet={wallet}
+                onRefetch={query.refetch}
+              />
+            </Suspense>
+          )}
+
+          {/* Contract-derived terminal summary (GAME-709/710/711). */}
+          {(phase.kind === 'finished' || phase.kind === 'forfeited') && (
+            <Suspense fallback={<BattleLoading />}>
+              <MatchSummaryPanel match={match} wallet={wallet} />
+            </Suspense>
           )}
 
           {phase.kind === 'cancelled' && (
