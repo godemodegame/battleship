@@ -1,0 +1,42 @@
+{
+  "schemaVersion": 1,
+  "checkedAt": "2026-06-12T05:20:12.469Z",
+  "chainId": 421614,
+  "deploymentId": "arb-sepolia-staging-v1",
+  "contractAddress": "0xEEdadE604431277779e5B8C58b390795eef0486b",
+  "matchId": "1",
+  "creator": "0xAB3ed31F47F5Fd28E356a2B2FC6268C1Ec4c3910",
+  "opponent": "0xc4554EBcDf976e9Cda9B97081b3c115d55B01966",
+  "transactions": [
+    {
+      "action": "createMatch",
+      "hash": "0xcf48e43efe4d625e91516e2bc366c308b7dfcba33d21d3fd416a6f15cd194fd0",
+      "gasUsed": "268080",
+      "gasPriceWei": "20012000",
+      "feeWei": "5364816960000",
+      "walletToHashMs": 1740,
+      "hashToReceiptMs": 5234,
+      "walletToReceiptMs": 6974
+    },
+    {
+      "action": "joinMatch",
+      "hash": "0x7ad615572d25f6c303a9d189770d89184f3f21ae1ca8d552e41e055abee33c04",
+      "gasUsed": "169393",
+      "gasPriceWei": "20040000",
+      "feeWei": "3394635720000",
+      "walletToHashMs": 1868,
+      "hashToReceiptMs": 5040,
+      "walletToReceiptMs": 6908
+    },
+    {
+      "action": "cancelMatch",
+      "hash": "0xc3ca788f98bf868198607bc4d3ede75b7e5bd7d483f0bb918bd2a490c2f8797a",
+      "gasUsed": "74910",
+      "gasPriceWei": "20416000",
+      "feeWei": "1529362560000",
+      "walletToHashMs": 1933,
+      "hashToReceiptMs": 5104,
+      "walletToReceiptMs": 7037
+    }
+  ]
+}

@@ -3,8 +3,14 @@
     "deploymentId": "arb-sepolia-staging-v1",
     "chainId": 421614,
     "contractName": "BattleshipGame",
-    "address": null,
-    "status": "pending"
+    "address": "0xEEdadE604431277779e5B8C58b390795eef0486b",
+    "status": "active",
+    "deploymentTx": "0x17013c0acd433f0e3a02b39f7c59e7c80f1037293b60662f6093d8bbb9643050",
+    "deploymentBlock": 276345345,
+    "sourceCommit": "b6d92b2518e78266eef5c8ceb4ebc98139b642b7",
+    "compilerVersion": "0.8.25+commit.b61c2a91",
+    "abiSha256": "sha256:283d4196c0f6421c3e712aaceb08c2f8c79f3ed8e8f4520f8dd443831e6d7484",
+    "deployedAt": "2026-06-12T05:19:33.741Z"
   },
   {
     "deploymentId": "arb-sepolia-v1",

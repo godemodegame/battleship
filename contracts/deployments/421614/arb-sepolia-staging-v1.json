@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "deploymentId": "arb-sepolia-staging-v1",
+  "chainId": 421614,
+  "contractName": "BattleshipGame",
+  "address": "0xEEdadE604431277779e5B8C58b390795eef0486b",
+  "status": "active",
+  "deploymentTx": "0x17013c0acd433f0e3a02b39f7c59e7c80f1037293b60662f6093d8bbb9643050",
+  "deploymentBlock": 276345345,
+  "sourceCommit": "b6d92b2518e78266eef5c8ceb4ebc98139b642b7",
+  "compilerVersion": "0.8.25+commit.b61c2a91",
+  "cofheVersions": {
+    "@fhenixprotocol/cofhe-contracts": "0.0.13",
+    "@fhenixprotocol/cofhe-mock-contracts": "0.3.1",
+    "cofhe-hardhat-plugin": "0.3.1",
+    "cofhejs": "0.3.1"
+  },
+  "abiSha256": "sha256:283d4196c0f6421c3e712aaceb08c2f8c79f3ed8e8f4520f8dd443831e6d7484",
+  "deployedBytecodeKeccak256": "keccak256:0x68f8113b1177912348d5ddfc36e575080b55ca9b47ce8c262cd11703f2f93608",
+  "deployedAt": "2026-06-12T05:19:33.741Z",
+  "deploymentGasUsed": "6452880",
+  "deploymentGasPriceWei": "20100000",
+  "deploymentFeeWei": "129702888000000"
+}

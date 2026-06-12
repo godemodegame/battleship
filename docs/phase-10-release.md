@@ -4,26 +4,25 @@
 
 Phase 10 is in progress as of June 12, 2026.
 
-The repository-side release controls and stable Vercel origins exist. The
-public contract, funded two-wallet run, Privy origin confirmation, and physical
-mobile acceptance cannot be marked complete until the release operator supplies
-funded Arbitrum Sepolia credentials and confirms the dashboard/hardware checks.
+The repository-side release controls, stable Vercel origins, public staging
+contract, and funded two-wallet lifecycle exist. Privy origin confirmation,
+the full encrypted match, production contract, and physical mobile acceptance
+remain open.
 
 Stable origins:
 
 - staging: `https://battleship-staging-godemodegame.vercel.app`;
 - production demo: `https://battleship-blond.vercel.app`.
 
-Both currently serve the Phase 10 release-controls build from source commit
-`0e65e97339ac5f97c39cdeb85620d4db00e37be2`. On-chain writes remain disabled
-because `arb-sepolia-staging-v1` and `arb-sepolia-v1` are still pending in the
-committed manifest.
+The staging release is being promoted to the active
+`arb-sepolia-staging-v1` contract. Production remains practice-only because
+`arb-sepolia-v1` is still pending in the committed manifest.
 
 Current frontend deployments:
 
 | Environment | Vercel deployment | Embedded deployment id | Public checks |
 | --- | --- | --- | --- |
-| Staging | `dpl_2ybHyFMvGCoxMP8FvykZ3Ca6p2uZ` | `arb-sepolia-staging-v1` (pending) | Pass |
+| Staging | Promotion pending | `arb-sepolia-staging-v1` (active) | Contract checks pass; frontend promotion pending |
 | Production demo | `dpl_FQWmHFHpAAJNNer3N2TUksCFD3UD` | `arb-sepolia-v1` (pending) | Pass |
 
 Vercel automatic custom-domain assignment is disabled. The stable staging and
@@ -54,10 +53,42 @@ Implemented for GAME-1001 and GAME-1005 through GAME-1009:
   regression before promotion;
 - GitHub environments `staging` and `production-demo` exist with the public
   Privy app id and Arbitrum Sepolia RPC variables; private deployer/gameplay
-  credentials remain unset;
+  credentials remain local-only;
 - contract deployment records now capture deployment gas and fee, while the
   funded regression can write transaction gas and wallet-to-receipt timings to
   `TESTNET_EVIDENCE_PATH`.
+
+## Staging Contract
+
+Deployed and validated June 12, 2026:
+
+- deployment id: `arb-sepolia-staging-v1`;
+- address:
+  [`0xEEdadE604431277779e5B8C58b390795eef0486b`](https://sepolia.arbiscan.io/address/0xEEdadE604431277779e5B8C58b390795eef0486b);
+- deployment transaction:
+  [`0x17013c0acd433f0e3a02b39f7c59e7c80f1037293b60662f6093d8bbb9643050`](https://sepolia.arbiscan.io/tx/0x17013c0acd433f0e3a02b39f7c59e7c80f1037293b60662f6093d8bbb9643050);
+- deployment block: `276345345`;
+- source commit: `b6d92b2518e78266eef5c8ceb4ebc98139b642b7`;
+- deployment gas: `6,452,880`;
+- deployment fee: `0.000129702888 ETH`;
+- ABI SHA-256:
+  `sha256:283d4196c0f6421c3e712aaceb08c2f8c79f3ed8e8f4520f8dd443831e6d7484`.
+
+Runtime bytecode validation passed against the compiled release artifact.
+
+## Funded Staging Regression
+
+Match `1` completed the real-chain create, invited join, and creator cancel
+lifecycle:
+
+| Action | Transaction | Gas | Wallet to receipt |
+| --- | --- | ---: | ---: |
+| Create | [`0xcf48…4fd0`](https://sepolia.arbiscan.io/tx/0xcf48e43efe4d625e91516e2bc366c308b7dfcba33d21d3fd416a6f15cd194fd0) | 268,080 | 6,974 ms |
+| Join | [`0x7ad6…3c04`](https://sepolia.arbiscan.io/tx/0x7ad615572d25f6c303a9d189770d89184f3f21ae1ca8d552e41e055abee33c04) | 169,393 | 6,908 ms |
+| Cancel | [`0xc3ca…797a`](https://sepolia.arbiscan.io/tx/0xc3ca788f98bf868198607bc4d3ede75b7e5bd7d483f0bb918bd2a490c2f8797a) | 74,910 | 7,037 ms |
+
+Machine-readable evidence is committed in
+`phase-10-staging-testnet-evidence.json`.
 
 ## Staging Procedure
 
@@ -141,12 +172,12 @@ Contract redeploy:
 
 ## Known Limitations
 
-- No public Arbitrum Sepolia contract exists yet, so the stable origins are
-  practice-only.
+- The production origin remains practice-only until its separate immutable
+  contract is deployed after staging acceptance.
 - Privy allowed origins are dashboard state and are not yet confirmed for the
   staging and production domains.
-- No funded deployer or creator/opponent test keys are available to the current
-  release process.
+- The funded staging regression covers create, join, and cancel only; the full
+  encrypted fleet and battle flow still requires acceptance.
 - Physical iOS Safari and Android Chrome acceptance requires real devices.
 - CoFHE finalization latency cannot be represented by local mocks and must be
   measured on the deployed encrypted flow.

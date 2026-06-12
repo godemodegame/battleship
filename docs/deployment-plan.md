@@ -24,7 +24,9 @@ The repository currently has:
   release-controls candidate with environment-specific pending deployment ids;
 - build-embedded `/release.json`, public deployment smoke tests, immutable
   manifest sync tooling, and a manual GitHub release gate;
-- no active public contract deployment yet.
+- an active, immutable Arbitrum Sepolia staging contract and funded
+  create/join/cancel evidence;
+- no production-demo contract deployment yet.
 
 ## Deployment Decisions
 
