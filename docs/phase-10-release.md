@@ -22,7 +22,7 @@ Current frontend deployments:
 
 | Environment | Vercel deployment | Embedded deployment id | Public checks |
 | --- | --- | --- | --- |
-| Staging | Promotion pending | `arb-sepolia-staging-v1` (active) | Contract checks pass; frontend promotion pending |
+| Staging | `dpl_6FV7yLSaXuup9hRHDphGCitVjQxu` | `arb-sepolia-staging-v1` (active) | Pass |
 | Production demo | `dpl_FQWmHFHpAAJNNer3N2TUksCFD3UD` | `arb-sepolia-v1` (pending) | Pass |
 
 Vercel automatic custom-domain assignment is disabled. The stable staging and
