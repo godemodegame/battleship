@@ -349,7 +349,7 @@ export function BoardBase({ model }: { model: THREE.Group }) {
   const seated = useMemo(() => {
     const clone = model.clone(true)
     const box = new THREE.Box3().setFromObject(clone)
-    clone.position.y = -0.06 - box.max.y
+    clone.position.y = 0.34 - box.max.y
     return clone
   }, [model])
   return <primitive object={seated} />

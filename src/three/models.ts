@@ -9,7 +9,7 @@ import type { ShipClassId } from '../game/types'
  * target footprint, rotated so the hull runs along +X, and grounded at y=0.
  */
 
-export const CELL = 1
+export const CELL = 1.04
 export const BOARD_SPAN = 10 * CELL
 
 const MODEL = (name: string) => `/models/${name}.fbx`
