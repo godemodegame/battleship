@@ -856,10 +856,10 @@ Progress:
   route, asset, metadata, and refresh checks pass;
 - stable Vercel aliases are explicitly pinned with automatic custom-domain
   assignment disabled, keeping staging and production promotion independent;
-- the Arbitrum Sepolia deployer key, funded two-wallet keys, Privy dashboard
-  origin confirmation, and physical mobile devices are not available to the
-  current release process, so live-contract tasks remain blocked rather than
-  being simulated or marked complete;
+- the immutable `arb-sepolia-staging-v1` contract is deployed and bytecode
+  validated, and a funded two-wallet create/join/cancel lifecycle passes;
+- Privy dashboard origin confirmation, the full encrypted match, physical
+  mobile acceptance, and the separate production deployment remain open;
 - operational details and exact remaining gates are recorded in
   `docs/phase-10-release.md`.
 
@@ -868,14 +868,14 @@ Tasks:
 | ID | Priority | Status | Work |
 | --- | --- | --- | --- |
 | GAME-1001 | P0 | In progress | Stable staging/production Vercel project domains exist; exact Privy origins require dashboard confirmation |
-| GAME-1002 | P0 | Blocked | Deploy and record the staging Arbitrum Sepolia contract (funded deployer unavailable) |
-| GAME-1003 | P0 | Blocked | Complete staging two-wallet and physical mobile acceptance tests |
+| GAME-1002 | P0 | Complete | Deployed and validated immutable `arb-sepolia-staging-v1` contract record |
+| GAME-1003 | P0 | In progress | Funded create/join/cancel passes; full encrypted match and physical mobile acceptance remain |
 | GAME-1004 | P0 | Blocked | Create immutable production-demo deployment record after staging passes |
-| GAME-1005 | P0 | In progress | Matching build metadata and hard gates implemented; live address/id deployment awaits GAME-1002/1004 |
-| GAME-1006 | P0 | In progress | Automated public route, asset, release-metadata, and recovery checks implemented; explorer/live-match checks await contract |
+| GAME-1005 | P0 | In progress | Staging address/id and build gates implemented; production pairing awaits GAME-1004 |
+| GAME-1006 | P0 | In progress | Public checks and staging explorer/live lifecycle pass; encrypted friend-match checks remain |
 | GAME-1007 | P1 | Complete | Added release notes, known limitations, evidence requirements, and named rollback ownership |
 | GAME-1008 | P1 | Complete | Added exact Vercel rollback and immutable contract redeploy procedures |
-| GAME-1009 | P1 | In progress | Build/request, deployment gas, and funded transaction evidence implemented; live CoFHE baseline awaits contract |
+| GAME-1009 | P1 | In progress | Staging deployment and lifecycle gas/latency recorded; live CoFHE baseline awaits encrypted match |
 
 Exit criteria:
 
