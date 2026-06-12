@@ -21,7 +21,7 @@ The repository currently has:
 - release artifact/config verification and a funded two-wallet testnet
   regression command;
 - stable public staging and production Vercel origins serving the practice
-  release candidate;
+  release-controls candidate with environment-specific pending deployment ids;
 - build-embedded `/release.json`, public deployment smoke tests, immutable
   manifest sync tooling, and a manual GitHub release gate;
 - no active public contract deployment yet.
@@ -29,7 +29,8 @@ The repository currently has:
 ## Deployment Decisions
 
 - Host the frontend as a static Vite application on Vercel.
-- Use Vercel Git integration for normal preview and production deployments.
+- Use Vercel Git integration for preview builds and explicit stable-domain
+  promotion for staging and production.
 - Keep gameplay authority in Arbitrum Sepolia contracts, not Vercel Functions.
 - Use a stable staging domain for wallet and on-chain testing.
 - Use Privy app ids and allowed origins scoped by environment.
@@ -98,6 +99,7 @@ Required project settings:
 | Output directory | `dist` |
 | Production branch | `main` |
 | Node.js | `20.x`, matching the current local and CoFHE baseline |
+| Automatic custom-domain assignment | Disabled |
 
 Vercel copies Vite's `dist` output and the assets brought in from `public/`.
 No server runtime is required for the current app.
@@ -118,6 +120,15 @@ When client-side match routes are introduced, add a version-controlled
 ```
 
 Verify direct navigation and refresh for every route after adding this rewrite.
+
+Git deployments may create branch and production deployment URLs, but they
+must not automatically move the stable staging or production domains. Promote
+or roll back a release by explicitly assigning the appropriate stable alias to
+an exact, already-verified Vercel deployment:
+
+```bash
+vercel alias set <deployment-hostname> <stable-domain>
+```
 
 Do not add a gameplay API or authoritative move resolver as a Vercel Function.
 Optional future metadata or read-only indexing services must remain

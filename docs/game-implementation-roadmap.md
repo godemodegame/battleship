@@ -851,6 +851,11 @@ Progress:
 
 - repository-side release controls and stable Vercel staging/production
   origins implemented on June 12, 2026;
+- the release-controls frontend is deployed to both stable origins with
+  environment-specific pending deployment ids, and public desktop/mobile
+  route, asset, metadata, and refresh checks pass;
+- stable Vercel aliases are explicitly pinned with automatic custom-domain
+  assignment disabled, keeping staging and production promotion independent;
 - the Arbitrum Sepolia deployer key, funded two-wallet keys, Privy dashboard
   origin confirmation, and physical mobile devices are not available to the
   current release process, so live-contract tasks remain blocked rather than

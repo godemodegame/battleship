@@ -14,9 +14,21 @@ Stable origins:
 - staging: `https://battleship-staging-godemodegame.vercel.app`;
 - production demo: `https://battleship-blond.vercel.app`.
 
-Both currently serve the Phase 9 practice-capable release candidate. On-chain
-writes remain disabled because `arb-sepolia-staging-v1` and
-`arb-sepolia-v1` are still pending in the committed manifest.
+Both currently serve the Phase 10 release-controls build from source commit
+`0e65e97339ac5f97c39cdeb85620d4db00e37be2`. On-chain writes remain disabled
+because `arb-sepolia-staging-v1` and `arb-sepolia-v1` are still pending in the
+committed manifest.
+
+Current frontend deployments:
+
+| Environment | Vercel deployment | Embedded deployment id | Public checks |
+| --- | --- | --- | --- |
+| Staging | `dpl_2ybHyFMvGCoxMP8FvykZ3Ca6p2uZ` | `arb-sepolia-staging-v1` (pending) | Pass |
+| Production demo | `dpl_FQWmHFHpAAJNNer3N2TUksCFD3UD` | `arb-sepolia-v1` (pending) | Pass |
+
+Vercel automatic custom-domain assignment is disabled. The stable staging and
+production domains are explicitly aliased to the deployment ids above, so a
+new Git deployment cannot silently move either release channel.
 
 ## Release Controls
 
@@ -26,6 +38,8 @@ Implemented for GAME-1001 and GAME-1005 through GAME-1009:
   `dist`;
 - staging and production have exact, stable HTTPS project domains rather than
   a broad `*.vercel.app` origin;
+- automatic custom-domain assignment is disabled; release promotion and
+  rollback explicitly repoint each stable alias to a verified deployment;
 - every build emits `/release.json` with its source commit, deployment id,
   deployment status, chain id, address, deployment transaction, and ABI hash;
 - `npm run release:sync-manifest -- <record>` promotes a pending manifest
@@ -38,6 +52,9 @@ Implemented for GAME-1001 and GAME-1005 through GAME-1009:
 - `.github/workflows/release-gate.yml` validates the exact contract bytecode,
   frontend config, public artifact, deployed routes, and funded two-wallet
   regression before promotion;
+- GitHub environments `staging` and `production-demo` exist with the public
+  Privy app id and Arbitrum Sepolia RPC variables; private deployer/gameplay
+  credentials remain unset;
 - contract deployment records now capture deployment gas and fee, while the
   funded regression can write transaction gas and wallet-to-receipt timings to
   `TESTNET_EVIDENCE_PATH`.
@@ -65,7 +82,14 @@ Implemented for GAME-1001 and GAME-1005 through GAME-1009:
    wallet-only login, external EVM wallets, embedded wallets off, and Arbitrum
    Sepolia only.
 8. Deploy the committed candidate and point the staging domain at that exact
-   Vercel deployment.
+   Vercel deployment:
+
+   ```bash
+   vercel alias set <deployment-hostname> \
+     battleship-staging-godemodegame.vercel.app
+   ```
+
+   Do not enable automatic custom-domain assignment.
 9. Run the `Phase 10 Release Gate` workflow with the `staging` GitHub
    environment.
 10. Complete the manual encrypted fleet/battle/recovery matrix and one wallet
@@ -76,7 +100,9 @@ Implemented for GAME-1001 and GAME-1005 through GAME-1009:
 Repeat the staging procedure with a new immutable
 `arb-sepolia-v1` contract record and the `production-demo` GitHub environment.
 Do not reuse the staging address. Promote only the exact artifact that passed
-staging, then rerun public URL checks against the production domain.
+staging, explicitly alias the verified production deployment to
+`battleship-blond.vercel.app`, then rerun public URL checks against the
+production domain.
 
 The production evidence must record:
 
@@ -126,3 +152,22 @@ Contract redeploy:
   measured on the deployed encrypted flow.
 - The pinned CoFHE-compatible Hardhat 2 toolchain retains the accepted
   low-severity development-only advisories documented in Phase 9.
+
+## Public Baseline
+
+Measured June 12, 2026 from the release operator's network. These are smoke
+latencies, not global performance claims:
+
+| Probe | Staging | Production demo |
+| --- | ---: | ---: |
+| `/release.json` | 242 ms | 225 ms |
+| `/` | 202 ms | 214 ms |
+| `/practice` | 137 ms | 43 ms |
+| Direct match route | 67 ms | 97 ms |
+| Tactical board FBX (97,532 bytes) | 198 ms | 72 ms |
+| Board texture JPG (388,288 bytes) | 266 ms | 435 ms |
+| Hit-impact GLB (122,344 bytes) | 66 ms | 50 ms |
+
+Desktop Chrome and Pixel 5 Chromium public suites both passed on staging and
+production demo: release metadata, wallet-free practice entry, direct
+versioned-match refresh, and critical asset delivery.
