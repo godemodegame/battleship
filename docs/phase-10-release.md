@@ -9,6 +9,28 @@ contract, and funded two-wallet lifecycle exist. Privy origin confirmation,
 the full encrypted match, production contract, and physical mobile acceptance
 remain open.
 
+**Upstream blocker discovered June 12, 2026.** The Fhenix CoFHE testnet was
+upgraded in place (new `@cofhe/*` client stack released June 2, 2026, serving
+tfhe-rs 1.x safe-serialized FHE keys). Live isolation against the deployed
+TaskManager (`0xeA30…48D9`) with a `cofhe-contracts` 0.0.13 probe contract
+shows encrypted input verification and FHE compute operations still pass, but
+`FHE.decrypt` (`ITaskManager.createDecryptTask`) now reverts: the entrypoint
+was removed. Consequences:
+
+- the deployed `arb-sepolia-staging-v1` contract reverts on `submitFleet`
+  and `attack`, so its encrypted fleet/battle flow is permanently broken;
+- the frontend's pinned `cofhejs` 0.3.1 (latest on npm) can no longer parse
+  the FHE public key or CRS served by the testnet, so browser-side
+  encryption fails regardless of the contract;
+- a funded create/join lifecycle still works (plaintext paths unaffected).
+
+Unblocking GAME-1003/1004/1006/1009 requires migrating the contract to
+`cofhe-contracts` 0.1.x (decrypt results are now published on-chain from
+client-fetched threshold-network signatures instead of requested via
+`FHE.decrypt`), migrating the frontend and tooling from `cofhejs` to
+`@cofhe/sdk` 0.6.x, redeploying staging under a new deployment id, and
+re-running the affected Phase 9 gates.
+
 Stable origins:
 
 - staging: `https://battleship-staging-godemodegame.vercel.app`;
@@ -172,6 +194,10 @@ Contract redeploy:
 
 ## Known Limitations
 
+- The June 2026 CoFHE testnet upgrade removed `createDecryptTask`, breaking
+  the encrypted flow of every `cofhe-contracts` 0.0.13 deployment including
+  `arb-sepolia-staging-v1`, and the served FHE keys are no longer parseable
+  by `cofhejs` 0.3.1. See the Status section for the required migration.
 - The production origin remains practice-only until its separate immutable
   contract is deployed after staging acceptance.
 - Privy allowed origins are dashboard state and are not yet confirmed for the

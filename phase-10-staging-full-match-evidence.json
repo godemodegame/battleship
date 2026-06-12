@@ -1,0 +1,36 @@
+{
+  "schemaVersion": 1,
+  "checkedAt": "2026-06-12T06:22:04.593Z",
+  "chainId": 421614,
+  "deploymentId": "arb-sepolia-staging-v1",
+  "contractAddress": "0xEEdadE604431277779e5B8C58b390795eef0486b",
+  "status": "failed",
+  "creator": "0xAB3ed31F47F5Fd28E356a2B2FC6268C1Ec4c3910",
+  "opponent": "0xc4554EBcDf976e9Cda9B97081b3c115d55B01966",
+  "cofhe": {
+    "creatorEncryptMs": 8066
+  },
+  "transactions": [
+    {
+      "action": "createMatch",
+      "player": "0xAB3ed31F47F5Fd28E356a2B2FC6268C1Ec4c3910",
+      "hash": "0x25fb31765155537fef8b6319a4db2214f498be39cd363eb197eae23524340cf0",
+      "gasUsed": "226582",
+      "gasPriceWei": "20108000",
+      "feeWei": "4556110856000",
+      "walletToReceiptMs": 3440
+    },
+    {
+      "action": "joinMatch",
+      "player": "0xc4554EBcDf976e9Cda9B97081b3c115d55B01966",
+      "hash": "0x87da7b24f536b9c9c57f48899473083f53956d4bad28c8a6281ef2e7db843dab",
+      "gasUsed": "127927",
+      "gasPriceWei": "20140000",
+      "feeWei": "2576449780000",
+      "walletToReceiptMs": 3490
+    }
+  ],
+  "shots": [],
+  "matchId": "5",
+  "error": "execution reverted (no data present; likely require(false) occurred (action=\"estimateGas\", data=\"0x\", reason=\"require(false)\", [calldata truncated; upstream CoFHE TaskManager removed createDecryptTask — see docs/phase-10-release.md]"
+}
