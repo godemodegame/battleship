@@ -571,10 +571,7 @@ export function MatchRouteShell() {
             </p>
           )}
 
-          <MatchIdentityPanel
-            match={match}
-            contractAddress={resolution.ok ? resolution.record.address : null}
-          />
+          <MatchIdentityPanel contractAddress={resolution.ok ? resolution.record.address : null} />
         </>
       )}
 

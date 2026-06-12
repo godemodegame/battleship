@@ -281,6 +281,12 @@ export const Board = memo(function Board({
   onCellHover,
   children,
 }: BoardProps) {
+  // Taps commit on pointerup so a touch that turns into a scroll/drag (the
+  // on-chain placement canvas uses touch-action: pan-y inside a scrollable
+  // route) never fires a placement; a real scroll ends in pointercancel and
+  // never reaches pointerup with a small delta.
+  const tapStart = useRef<{ id: number; x: number; y: number } | null>(null)
+
   const toCell = (e: ThreeEvent<PointerEvent>): number | null => {
     const local = e.point.clone()
     local.x -= position[0]
@@ -311,6 +317,16 @@ export const Board = memo(function Board({
             // r3f synthetic events can be slightly removed from the original
             // trusted gesture context.
             haptics.prime()
+            e.stopPropagation()
+            tapStart.current = { id: e.pointerId, x: e.clientX, y: e.clientY }
+          }}
+          onPointerUp={(e) => {
+            const start = tapStart.current
+            tapStart.current = null
+            if (!start || start.id !== e.pointerId) return
+            const dx = e.clientX - start.x
+            const dy = e.clientY - start.y
+            if (dx * dx + dy * dy > 12 * 12) return
             e.stopPropagation()
             const cell = toCell(e)
             if (cell !== null) onCellTap?.(cell)

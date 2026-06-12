@@ -850,6 +850,26 @@ body,
   box-shadow: inset 0 0 8px rgba(33, 244, 255, 0.5);
 }
 
+/* 3D placement board (practice-mode look); the DOM grid stays as fallback.
+   The canvas is a fixed full-viewport backdrop, exactly like the practice
+   GameCanvas; the route content scrolls above it. Negative z-index keeps it
+   under every control while taps in open areas still reach the board because
+   the wrappers above it are pointer-events: none. */
+.placement-stage {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* The loading-state grid must fit the viewport; rows may compress slightly. */
+.placement-stage .placement-grid {
+  max-width: 100%;
+  max-height: 100%;
+}
+
 .placement-alert {
   display: flex;
   flex-direction: column;
@@ -869,27 +889,102 @@ body,
   overscroll-behavior: contain;
 }
 
+/* Compact header: the hero lockup collapses to one quiet line so the board,
+   not the route chrome, owns the screen. */
 .match-placement-route .title-lockup {
   flex: 0 0 auto;
   margin-top: 0;
+  display: flex;
+  align-items: baseline;
+  column-gap: 10px;
+  flex-wrap: wrap;
+}
+
+.match-placement-route .title-kicker {
+  display: none;
 }
 
 .match-placement-route .title-lockup h1 {
-  margin: 5px 0 3px;
-  font-size: clamp(24px, 8vw, 36px);
+  margin: 0;
+  font-size: 17px;
+  letter-spacing: 0.08em;
+  filter: none;
 }
 
 .match-placement-route .tagline {
   font-size: 11px;
+  color: rgba(232, 247, 255, 0.5);
+}
+
+.match-placement-route .wallet-bar {
+  justify-content: flex-start;
+  gap: 8px;
+  margin: 0;
+}
+
+.match-placement-route .wallet-bar .network-badge {
+  font-size: 10px;
+  padding: 2px 7px;
+}
+
+.match-placement-route .wallet-bar .wallet-address {
+  font-size: 12px;
+}
+
+.match-placement-route .wallet-bar .btn {
+  padding: 6px 12px;
+  font-size: 12px;
+  margin-left: auto;
+}
+
+/* The placement panel sheds its glass box; its content overlays the fixed
+   fullscreen scene. The section itself ignores pointer events so taps in the
+   open middle fall through to the 3D board; its children re-enable them. */
+.match-placement-route .onchain-placement {
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  padding: 0;
+  pointer-events: none;
+}
+
+.match-placement-route .onchain-placement > * {
+  pointer-events: auto;
+}
+
+/* Practice-style layout: heading at the top, controls pinned to the bottom,
+   the board visible in the gap between them. */
+.match-placement-route .onchain-placement .fleet-tray {
+  margin-top: auto;
+}
+
+/* Wide viewports (landscape phones, desktop): the camera shifts the board to
+   the left of the screen and the controls form a right-hand column. */
+@media (min-aspect-ratio: 6/5) {
+  .match-placement-route .onchain-placement:has(.placement-stage) {
+    width: min(46vw, 440px);
+    margin-right: max(3vw, 14px);
+    margin-left: auto;
+    justify-content: center;
+  }
+
+  .match-placement-route .onchain-placement:has(.placement-stage) .fleet-tray {
+    margin-top: 0;
+  }
 }
 
 .match-placement-route > [data-testid='match-phase-panel'] {
   display: none;
 }
 
-.match-placement-route .onchain-placement,
 .match-placement-route > .home-actions {
   flex: 0 0 auto;
+}
+
+.match-placement-route .onchain-placement {
+  flex: 1 0 auto;
 }
 
 @media (max-height: 760px) {

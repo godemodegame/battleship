@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { Suspense, lazy, useEffect, useMemo, useState } from 'react'
 import { FLEET, cellLabel } from '../../game/constants'
 import { isFleetComplete, shipCells } from '../../game/board'
 import { encryptedPlacementCopy } from '../../copy/en'
@@ -26,6 +26,27 @@ import {
 } from './placementStore'
 
 type PlacementPhase = Extract<MatchPhase, { kind: 'placement' }>
+
+// The 3D board (three.js) loads as its own chunk so the panel stays light;
+// the DOM grid below doubles as the loading state and the no-WebGL fallback.
+const PlacementCanvas = lazy(() =>
+  import('../../three/PlacementCanvas').then((m) => ({ default: m.PlacementCanvas })),
+)
+
+let webglProbe: boolean | null = null
+function supportsWebgl(): boolean {
+  if (webglProbe !== null) return webglProbe
+  try {
+    const canvas = document.createElement('canvas')
+    const gl = canvas.getContext('webgl2') ?? canvas.getContext('webgl')
+    webglProbe = Boolean(gl)
+    // Contexts count against a per-page budget; don't let the probe hold one.
+    gl?.getExtension('WEBGL_lose_context')?.loseContext()
+  } catch {
+    webglProbe = false
+  }
+  return webglProbe
+}
 
 function occupiedSlots(
   placements: ReturnType<typeof usePlacementStore.getState>['placements'],
@@ -328,24 +349,43 @@ export function EncryptedFleetPanel({
         </div>
       )}
 
-      <div className="placement-grid" role="grid" aria-label="Fleet placement grid">
-        {cells.map((slot, cell) => (
-          <button
-            key={cell}
-            type="button"
-            role="gridcell"
-            className={`placement-cell ${slot !== null ? 'occupied' : ''}`}
-            aria-label={`${cellLabel(cell)}${slot !== null ? `, ${FLEET[slot].label}` : ''}`}
-            onClick={() => {
-              if (busy) return
-              if (slot !== null) pickUpAt(cell)
-              else placeAt(Math.floor(cell / 10), cell % 10)
-            }}
-          >
-            {slot !== null ? slot + 1 : ''}
-          </button>
-        ))}
-      </div>
+      {(() => {
+        const grid = (
+          <div className="placement-grid" role="grid" aria-label="Fleet placement grid">
+            {cells.map((slot, cell) => (
+              <button
+                key={cell}
+                type="button"
+                role="gridcell"
+                className={`placement-cell ${slot !== null ? 'occupied' : ''}`}
+                aria-label={`${cellLabel(cell)}${slot !== null ? `, ${FLEET[slot].label}` : ''}`}
+                onClick={() => {
+                  if (busy) return
+                  if (slot !== null) pickUpAt(cell)
+                  else placeAt(Math.floor(cell / 10), cell % 10)
+                }}
+              >
+                {slot !== null ? slot + 1 : ''}
+              </button>
+            ))}
+          </div>
+        )
+        if (!supportsWebgl()) return grid
+        return (
+          <div className="placement-stage" data-testid="placement-stage">
+            <Suspense fallback={grid}>
+              <PlacementCanvas
+                placements={placements}
+                selectedSlot={selectedSlot}
+                orientation={orientation}
+                disabled={busy}
+                onPlace={(row, col) => void placeAt(row, col)}
+                onPickUp={(cell) => void pickUpAt(cell)}
+              />
+            </Suspense>
+          </div>
+        )
+      })()}
 
       <div className="fleet-tray">
         {FLEET.map((ship) => {
@@ -431,7 +471,6 @@ export function EncryptedFleetPanel({
         {encryptedPlacementCopy.confirm}
       </button>
       <TxStatusLine state={submitWrite.state} onRetry={submitWrite.reset} />
-      <p className="footnote">{encryptedPlacementCopy.privacyNote}</p>
     </section>
   )
 }

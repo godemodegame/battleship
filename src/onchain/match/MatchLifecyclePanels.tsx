@@ -5,7 +5,7 @@
  * data exists:
  * - `JoinPanel` — invited wallet's join action with deadline awareness;
  * - `InviteWaitingPanel` — creator's invite link, share, and cancel actions;
- * - `MatchIdentityPanel` — match id, network, contract + explorer links.
+ * - `MatchIdentityPanel` — contract explorer link.
  *
  * All data arrives as props (public contract-derived values only), so every
  * panel is testable without a network.
@@ -207,18 +207,14 @@ export function InviteWaitingPanel({
 }
 
 export interface MatchIdentityPanelProps {
-  match: ChainMatchView
   contractAddress: string | null
 }
 
-/** Match identity + explorer links (GAME-512). */
-export function MatchIdentityPanel({ match, contractAddress }: MatchIdentityPanelProps) {
+/** Explorer link for the match contract (GAME-512); identity text lives in
+ * the route header tagline, so it is not repeated here. */
+export function MatchIdentityPanel({ contractAddress }: MatchIdentityPanelProps) {
   return (
     <div className="match-identity" data-testid="match-identity">
-      <p className="footnote">
-        {explorerCopy.matchIdLabel} #{match.matchId} · {explorerCopy.networkLabel}:{' '}
-        {explorerCopy.networkName}
-      </p>
       {contractAddress && (
         <a
           className="footnote explorer-link"

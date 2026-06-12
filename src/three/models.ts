@@ -103,6 +103,14 @@ export function cellPosition(row: number, col: number): [number, number] {
   return [(col - 4.5) * CELL, (row - 4.5) * CELL]
 }
 
+/** Just the assets the placement board needs: live hulls plus the hero base. */
+export function preloadPlacement() {
+  for (const name of [...Object.values(SHIP_MODEL), 'tactical-ocean-board']) {
+    useFBX.preload(MODEL(name))
+    useTexture.preload(TEXTURE(name))
+  }
+}
+
 export function preloadAll() {
   for (const name of [
     ...Object.values(SHIP_MODEL),

@@ -8,6 +8,12 @@
       "autoPort": true
     },
     {
+      "name": "battleship-e2e",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev:e2e"],
+      "autoPort": true
+    },
+    {
       "name": "vfx-app",
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "dev", "--prefix", "vfx-app", "--", "--port", "5180", "--strictPort"],

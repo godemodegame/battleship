@@ -56,7 +56,6 @@ describe('match route with live contract data (GAME-507/508)', () => {
     await waitFor(() => expect(screen.getByTestId('invite-panel')).toBeTruthy())
     expect(screen.getByTestId('match-phase-kind').textContent).toContain('waiting-for-opponent')
     expect(screen.getByTestId('invite-link').textContent).toContain('/match/arb-sepolia-v1/1')
-    expect(screen.getByTestId('match-identity').textContent).toContain('Match ID #1')
     expect(screen.getByTestId('contract-explorer-link').getAttribute('href')).toBe(
       `https://sepolia.arbiscan.io/address/${CONTRACT_ADDRESS}`,
     )
