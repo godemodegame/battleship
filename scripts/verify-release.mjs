@@ -87,7 +87,12 @@ for (const record of manifest) {
   }
 
   if (!existsSync(recordPath)) {
-    problems.push(`${record.deploymentId} is active but its contract record is missing`)
+    // A retired deployment's contract record may be deleted once
+    // validate:deployment can no longer reproduce its hashes against the
+    // current toolchain; the manifest entry alone keeps old links resolving.
+    if (record.status !== 'retired') {
+      problems.push(`${record.deploymentId} is ${record.status} but its contract record is missing`)
+    }
     continue
   }
   const contractRecord = readJson(recordPath)
