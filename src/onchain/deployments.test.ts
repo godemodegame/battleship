@@ -36,8 +36,12 @@ describe('deployment manifest reader (GAME-109)', () => {
   })
 
   it('treats a pending (undeployed) record as not ready', () => {
-    expect(isDeploymentReady(getDeployment(DEFAULT_DEPLOYMENT_ID))).toBe(false)
+    expect(isDeploymentReady(getDeployment('arb-sepolia-v1'))).toBe(false)
     expect(isDeploymentReady(null)).toBe(false)
+  })
+
+  it('the default deployment is live and ready', () => {
+    expect(isDeploymentReady(getDeployment(DEFAULT_DEPLOYMENT_ID))).toBe(true)
   })
 
   it('marks an active record with a valid address as ready', () => {
@@ -98,13 +102,19 @@ describe('deployment manifest reader (GAME-109)', () => {
 })
 
 describe('resolveDeployment (GAME-501)', () => {
-  it('resolves the committed MVP deployment as known but not ready', () => {
-    const res = resolveDeployment(DEFAULT_DEPLOYMENT_ID)
+  it('resolves the reserved production id as known but not ready', () => {
+    const res = resolveDeployment('arb-sepolia-v1')
     expect(res.ok).toBe(true)
     if (res.ok) {
-      expect(res.record.deploymentId).toBe(DEFAULT_DEPLOYMENT_ID)
+      expect(res.record.deploymentId).toBe('arb-sepolia-v1')
       expect(res.ready).toBe(false)
     }
+  })
+
+  it('resolves the default deployment as ready', () => {
+    const res = resolveDeployment(DEFAULT_DEPLOYMENT_ID)
+    expect(res.ok).toBe(true)
+    if (res.ok) expect(res.ready).toBe(true)
   })
 
   it('reports unknown ids with a reason instead of throwing', () => {

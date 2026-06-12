@@ -43,9 +43,15 @@ describe('CreateFriendMatchScreen (GAME-505/506)', () => {
   })
 
   it('shows the pending-deployment note when no live contract exists', async () => {
-    renderApp({ route: '/match/new', wallet: connectedWalletValue(CREATOR) })
-    expect(await screen.findByTestId('create-deployment-pending')).toBeTruthy()
-    expect(screen.queryByTestId('create-match-form')).toBeNull()
+    // The reserved production id is still pending; the build default is live.
+    vi.stubEnv('VITE_ACTIVE_DEPLOYMENT_ID', 'arb-sepolia-v1')
+    try {
+      renderApp({ route: '/match/new', wallet: connectedWalletValue(CREATOR) })
+      expect(await screen.findByTestId('create-deployment-pending')).toBeTruthy()
+      expect(screen.queryByTestId('create-match-form')).toBeNull()
+    } finally {
+      vi.unstubAllEnvs()
+    }
   })
 
   it('validates empty, malformed, and self-invite addresses (GAME-505)', async () => {

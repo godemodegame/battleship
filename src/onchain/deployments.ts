@@ -21,8 +21,13 @@ export type Address = `0x${string}`
 /** The only chain supported for the MVP. Single source: `wallet/network.ts`. */
 export const MVP_CHAIN_ID = ARBITRUM_SEPOLIA_CHAIN_ID
 
-/** Deployment id selected when the build does not set one explicitly. */
-export const DEFAULT_DEPLOYMENT_ID = 'arb-sepolia-v1'
+/**
+ * Deployment id selected when the build does not set one explicitly. Points at
+ * the live staging contract so a plain `npm run dev` checkout can play
+ * on-chain; production builds override it via `VITE_ACTIVE_DEPLOYMENT_ID`
+ * (enforced by `check-release-config.mjs`).
+ */
+export const DEFAULT_DEPLOYMENT_ID = 'arb-sepolia-staging-v2'
 
 /**
  * Committed deployment record. Mirrors the minimum record schema in

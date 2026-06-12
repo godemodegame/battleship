@@ -56,7 +56,8 @@ if (existsSync(artifactPath)) {
 }
 
 const manifest = readJson(manifestPath)
-const activeId = env.VITE_ACTIVE_DEPLOYMENT_ID || 'arb-sepolia-v1'
+// Fallback mirrors DEFAULT_DEPLOYMENT_ID in src/onchain/deployments.ts.
+const activeId = env.VITE_ACTIVE_DEPLOYMENT_ID || 'arb-sepolia-staging-v2'
 const selected = manifest.find((record) => record.deploymentId === activeId)
 if (!selected) {
   problems.push(`active deployment id ${activeId} is absent from the frontend manifest`)
