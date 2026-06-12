@@ -41,8 +41,8 @@ The on-chain path now includes the lazy Privy/viem bridge, typed contract
 clients, event-triggered authoritative refetch, scoped CoFHE worker client,
 encrypted placement store, public battle adapter, pending-receipt recovery,
 and terminal summaries. The versioned manifest is stored in
-`src/onchain/deploymentManifest.json`; its single record remains
-`status: 'pending'` until Phase 10 deploys the public contract.
+`src/onchain/deploymentManifest.json`; its staging and production reservations
+remain `status: 'pending'` until Phase 10 deploys their public contracts.
 
 In practice mode, the local store is intentionally authoritative. It knows both
 fleets and calls `applyAttack()` directly. That authority must never be reused

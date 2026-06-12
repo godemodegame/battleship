@@ -16,11 +16,15 @@
     "test:watch": "vitest",
     "test:unit": "vitest run src/game src/practice src/onchain src/render src/copy --passWithNoTests",
     "test:screen": "vitest run src/ui src/app src/test --passWithNoTests",
-    "test:ci": "npm run build && npm run test:unit && npm run test:screen",
+    "test:release": "node --test scripts/*.test.mjs",
+    "test:ci": "npm run build && npm run test:unit && npm run test:screen && npm run test:release",
     "test:e2e": "playwright test --pass-with-no-tests",
+    "test:public": "playwright test --config playwright.public.config.ts",
     "test:e2e:install": "playwright install chromium",
     "test:contracts": "npm --prefix contracts test",
-    "verify:release": "node scripts/verify-release.mjs && node scripts/check-release-config.mjs"
+    "verify:release": "node scripts/verify-release.mjs && node scripts/check-release-config.mjs",
+    "release:sync-manifest": "node scripts/sync-deployment-manifest.mjs",
+    "release:verify-public": "node scripts/verify-public-deployment.mjs"
   },
   "overrides": {
     "uuid": "11.1.1",

@@ -30,12 +30,16 @@ Playable now:
 - pending transaction recovery, mobile handoff recovery, reduced-motion and
   graphics controls, adversarial/property/privacy tests, and two-wallet E2E.
 
+Phase 10 release controls now include stable Vercel staging/production origins,
+build-embedded `/release.json`, public deployment smoke tests, immutable
+manifest sync, and a manual GitHub release gate.
+
 Still pending:
 
-- an immutable active Arbitrum Sepolia deployment record;
-- a stable Vercel staging origin and matching Privy origin allowlist;
+- immutable staging and production Arbitrum Sepolia deployment records;
+- matching Privy staging/production origin allowlists;
 - funded two-wallet staging execution and physical iOS/Android acceptance;
-- the Phase 10 public testnet demo.
+- promotion of the Phase 10 public on-chain demo.
 
 ### Run Locally
 
@@ -56,6 +60,7 @@ Current build documentation:
 
 - [Game Implementation Roadmap](docs/game-implementation-roadmap.md) - active engineering sequence from the local practice build to the public Privy/CoFHE friend-match MVP.
 - [Phase 9 Release QA](docs/phase-9-release-qa.md) - security evidence, release commands, accepted limitations, and Phase 10 gates.
+- [Phase 10 Release](docs/phase-10-release.md) - live origins, release controls, remaining external gates, rollback, and contract redeploy procedures.
 - [Current Playable Build](docs/current-playable-build.md) - what the game does today, how to run it, and how the prototype maps to the on-chain target.
 - [Local Game Engine](docs/local-game-engine.md) - exact rules implemented by the local engine: board indexing, fleet, placement, attacks, and turn passing.
 - [Practice Mode and Bot AI](docs/practice-mode-and-bot-ai.md) - the local practice bot: difficulty behavior, public-information targeting, and migration paths.

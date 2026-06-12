@@ -21,11 +21,23 @@ import { JsonRpcProvider, keccak256 } from 'ethers'
 
 import { computeAbiSha256, validateRecordSchema, type DeploymentRecord } from './deploymentRecord'
 
+export function parseValidationArgs(args: string[]): {
+  recordArg: string | undefined
+  rpcUrl: string | undefined
+} {
+  const rpcFlagIndex = args.indexOf('--rpc')
+  const rpcValueIndex = rpcFlagIndex >= 0 ? rpcFlagIndex + 1 : -1
+  return {
+    rpcUrl: rpcFlagIndex >= 0 ? args[rpcValueIndex] : undefined,
+    recordArg: args.find(
+      (arg, index) => arg !== '--rpc' && index !== rpcValueIndex,
+    ),
+  }
+}
+
 async function main(): Promise<void> {
   const args = process.argv.slice(2)
-  const rpcFlagIndex = args.indexOf('--rpc')
-  const rpcUrl = rpcFlagIndex >= 0 ? args[rpcFlagIndex + 1] : undefined
-  const recordArg = args.find((arg, i) => arg !== '--rpc' && i !== rpcFlagIndex + 1)
+  const { recordArg, rpcUrl } = parseValidationArgs(args)
   if (!recordArg) {
     throw new Error(
       'Usage: validate-deployment.ts <path-to-record.json> [--rpc <url>]',
@@ -114,7 +126,9 @@ async function main(): Promise<void> {
   console.log(`Deployment record ${recordArg} is valid`)
 }
 
-main().catch((error) => {
-  console.error(error)
-  process.exitCode = 1
-})
+if (require.main === module) {
+  main().catch((error) => {
+    console.error(error)
+    process.exitCode = 1
+  })
+}

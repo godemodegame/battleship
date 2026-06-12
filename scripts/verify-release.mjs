@@ -2,9 +2,11 @@ import { createHash } from 'node:crypto'
 import { existsSync, readFileSync, readdirSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { loadEnv } from 'vite'
 
 const root = resolve(fileURLToPath(new URL('..', import.meta.url)))
 const problems = []
+const env = { ...loadEnv('production', root, ''), ...process.env }
 const readJson = (path) => JSON.parse(readFileSync(path, 'utf8'))
 const compactHash = (value) =>
   `sha256:${createHash('sha256').update(JSON.stringify(value)).digest('hex')}`
@@ -54,7 +56,7 @@ if (existsSync(artifactPath)) {
 }
 
 const manifest = readJson(manifestPath)
-const activeId = process.env.VITE_ACTIVE_DEPLOYMENT_ID || 'arb-sepolia-v1'
+const activeId = env.VITE_ACTIVE_DEPLOYMENT_ID || 'arb-sepolia-v1'
 const selected = manifest.find((record) => record.deploymentId === activeId)
 if (!selected) {
   problems.push(`active deployment id ${activeId} is absent from the frontend manifest`)
@@ -98,18 +100,40 @@ for (const record of manifest) {
   if (!/^keccak256:0x[0-9a-f]{64}$/.test(contractRecord.deployedBytecodeKeccak256)) {
     problems.push(`${record.deploymentId} has no valid deployed bytecode hash`)
   }
+  for (const field of [
+    'deploymentTx',
+    'deploymentBlock',
+    'sourceCommit',
+    'compilerVersion',
+    'abiSha256',
+    'deployedAt',
+  ]) {
+    if (record[field] !== contractRecord[field]) {
+      problems.push(`${record.deploymentId} frontend field ${field} differs from contract record`)
+    }
+  }
 }
 
 if (selected) {
-  const assertedAddress = process.env.VITE_BATTLESHIP_CONTRACT_ADDRESS
+  const assertedAddress = env.VITE_BATTLESHIP_CONTRACT_ADDRESS
   if (
     assertedAddress &&
     assertedAddress.toLowerCase() !== (selected.address ?? '').toLowerCase()
   ) {
     problems.push('VITE_BATTLESHIP_CONTRACT_ADDRESS does not match the selected record')
   }
-  if (process.env.REQUIRE_ACTIVE_DEPLOYMENT === '1' && selected.status !== 'active') {
+  if (env.REQUIRE_ACTIVE_DEPLOYMENT === '1' && selected.status !== 'active') {
     problems.push(`release requires an active deployment; ${activeId} is still pending`)
+  }
+  if (env.REQUIRE_ACTIVE_DEPLOYMENT === '1') {
+    for (const name of [
+      'VITE_PRIVY_APP_ID',
+      'VITE_ARBITRUM_SEPOLIA_RPC_URL',
+      'VITE_ACTIVE_DEPLOYMENT_ID',
+      'VITE_BATTLESHIP_CONTRACT_ADDRESS',
+    ]) {
+      if (!env[name]) problems.push(`release requires ${name}`)
+    }
   }
 }
 

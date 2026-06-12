@@ -1,0 +1,97 @@
+name: Phase 10 Release Gate
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: GitHub environment containing the matching public config and test-wallet secrets
+        required: true
+        type: choice
+        options:
+          - staging
+          - production-demo
+      deployment_id:
+        description: Immutable deployment id in the committed manifest
+        required: true
+        type: string
+      public_url:
+        description: Stable HTTPS origin already pointing at this release candidate
+        required: true
+        type: string
+
+jobs:
+  release-gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: ${{ inputs.environment }}
+
+    env:
+      VITE_PRIVY_APP_ID: ${{ vars.VITE_PRIVY_APP_ID }}
+      VITE_ARBITRUM_SEPOLIA_RPC_URL: ${{ vars.VITE_ARBITRUM_SEPOLIA_RPC_URL }}
+      VITE_ACTIVE_DEPLOYMENT_ID: ${{ inputs.deployment_id }}
+      VITE_BATTLESHIP_CONTRACT_ADDRESS: ${{ vars.VITE_BATTLESHIP_CONTRACT_ADDRESS }}
+      ARBITRUM_SEPOLIA_RPC_URL: ${{ secrets.ARBITRUM_SEPOLIA_RPC_URL }}
+      CREATOR_PRIVATE_KEY: ${{ secrets.CREATOR_PRIVATE_KEY }}
+      OPPONENT_PRIVATE_KEY: ${{ secrets.OPPONENT_PRIVATE_KEY }}
+      DEPLOYMENT_RECORD: deployments/421614/${{ inputs.deployment_id }}.json
+      PUBLIC_DEMO_URL: ${{ inputs.public_url }}
+      REQUIRE_ACTIVE_DEPLOYMENT: "1"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20.19.5
+          cache: npm
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Install contract dependencies
+        run: npm --prefix contracts ci
+
+      - name: Verify immutable release artifacts and public configuration
+        run: npm run verify:release
+
+      - name: Compile and test contracts
+        run: |
+          npm --prefix contracts run compile
+          npm --prefix contracts run lint:sol
+          npm --prefix contracts test
+
+      - name: Validate live Arbitrum Sepolia deployment
+        run: >-
+          npm --prefix contracts run validate:deployment --
+          "$DEPLOYMENT_RECORD"
+          --rpc "$ARBITRUM_SEPOLIA_RPC_URL"
+
+      - name: Build exact frontend release
+        run: npm run build
+
+      - name: Verify public files, routes, and embedded release metadata
+        env:
+          RELEASE_EVIDENCE_PATH: phase-10-public-evidence.json
+        run: npm run release:verify-public
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Run deployed desktop and mobile browser smoke tests
+        run: npm run test:public
+
+      - name: Run funded two-wallet Arbitrum Sepolia regression
+        env:
+          TESTNET_EVIDENCE_PATH: ../phase-10-testnet-evidence.json
+        run: npm --prefix contracts run regression:arb-sepolia
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: phase-10-${{ inputs.environment }}-${{ inputs.deployment_id }}
+          path: |
+            phase-10-public-evidence.json
+            phase-10-testnet-evidence.json
+            playwright-report/
+            test-results/
+          if-no-files-found: ignore

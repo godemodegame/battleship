@@ -847,19 +847,35 @@ Goal:
 
 - release an observable and reversible public testnet build.
 
+Progress:
+
+- repository-side release controls and stable Vercel staging/production
+  origins implemented on June 12, 2026;
+- the release-controls frontend is deployed to both stable origins with
+  environment-specific pending deployment ids, and public desktop/mobile
+  route, asset, metadata, and refresh checks pass;
+- stable Vercel aliases are explicitly pinned with automatic custom-domain
+  assignment disabled, keeping staging and production promotion independent;
+- the Arbitrum Sepolia deployer key, funded two-wallet keys, Privy dashboard
+  origin confirmation, and physical mobile devices are not available to the
+  current release process, so live-contract tasks remain blocked rather than
+  being simulated or marked complete;
+- operational details and exact remaining gates are recorded in
+  `docs/phase-10-release.md`.
+
 Tasks:
 
-| ID | Priority | Work |
-| --- | --- | --- |
-| GAME-1001 | P0 | Create stable staging Vercel project/domain and Privy origin |
-| GAME-1002 | P0 | Deploy and record the staging Arbitrum Sepolia contract |
-| GAME-1003 | P0 | Complete staging two-wallet and mobile acceptance tests |
-| GAME-1004 | P0 | Create immutable production-demo deployment record |
-| GAME-1005 | P0 | Deploy frontend with matching ABI, address, and deployment id |
-| GAME-1006 | P0 | Verify direct invite links, assets, explorer links, and recovery |
-| GAME-1007 | P1 | Add release notes, known limitations, and rollback ownership |
-| GAME-1008 | P1 | Confirm Vercel rollback and contract redeploy procedures |
-| GAME-1009 | P1 | Record performance, gas, transaction, and CoFHE finalization baselines |
+| ID | Priority | Status | Work |
+| --- | --- | --- | --- |
+| GAME-1001 | P0 | In progress | Stable staging/production Vercel project domains exist; exact Privy origins require dashboard confirmation |
+| GAME-1002 | P0 | Blocked | Deploy and record the staging Arbitrum Sepolia contract (funded deployer unavailable) |
+| GAME-1003 | P0 | Blocked | Complete staging two-wallet and physical mobile acceptance tests |
+| GAME-1004 | P0 | Blocked | Create immutable production-demo deployment record after staging passes |
+| GAME-1005 | P0 | In progress | Matching build metadata and hard gates implemented; live address/id deployment awaits GAME-1002/1004 |
+| GAME-1006 | P0 | In progress | Automated public route, asset, release-metadata, and recovery checks implemented; explorer/live-match checks await contract |
+| GAME-1007 | P1 | Complete | Added release notes, known limitations, evidence requirements, and named rollback ownership |
+| GAME-1008 | P1 | Complete | Added exact Vercel rollback and immutable contract redeploy procedures |
+| GAME-1009 | P1 | In progress | Build/request, deployment gas, and funded transaction evidence implemented; live CoFHE baseline awaits contract |
 
 Exit criteria:
 
@@ -937,7 +953,7 @@ Phase status:
 | 7. On-chain battle | Complete (GAME-701 through GAME-712) |
 | 8. Mobile and recovery | Complete (GAME-801 through GAME-810) |
 | 9. Security and release QA | Complete (GAME-901 through GAME-910) |
-| 10. Staging and public demo | Not started |
+| 10. Staging and public demo | In progress (external release gates pending) |
 
 Update this table and the relevant task rows in the same merge that completes a
 phase. Do not mark a phase complete based only on documentation or mocked UI.
