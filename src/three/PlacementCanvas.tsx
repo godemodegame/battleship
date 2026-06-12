@@ -4,7 +4,7 @@ import { Canvas, useThree } from '@react-three/fiber'
 import { FLEET } from '../game/constants'
 import { canPlace, shipCells } from '../game/board'
 import type { CellShot, Orientation, Placement } from '../game/types'
-import { Board, BoardBase } from './Board'
+import { BOARD_ELEVATION, Board, BoardBase } from './Board'
 import { Lights } from './Lights'
 import { Ocean } from './Ocean'
 import { Ship } from './Ships'
@@ -44,8 +44,8 @@ const NO_SHOTS: ReadonlyArray<CellShot> = Object.freeze(
 // the camera so the board sits in the upper half of the fullscreen canvas,
 // clear of the controls overlaying the bottom.
 const POSE = {
-  position: [0, 16.2, 5.5] as [number, number, number],
-  target: new THREE.Vector3(0, 0, 2.2),
+  position: [0, 16.2 + BOARD_ELEVATION, 5.5] as [number, number, number],
+  target: new THREE.Vector3(0, BOARD_ELEVATION, 2.2),
 }
 
 /** Viewport pixels the route chrome (header above, controls below) overlays
@@ -182,40 +182,46 @@ export function PlacementCanvas({
       <PlacementCamera />
       <Lights shadows={profile.shadows} />
       <Suspense fallback={null}>
-        <Ocean animated={oceanAnimated} />
-        <HeroBase />
-        <Board
-          position={[0, 0, 0]}
-          shots={NO_SHOTS}
-          interactive={!disabled}
-          onCellTap={(cell) => {
-            if (disabled) return
-            if (occupied.has(cell)) onPickUp(cell)
-            else onPlace(Math.floor(cell / 10), cell % 10)
-            setHover(null)
-          }}
-          onCellHover={disabled ? undefined : setHover}
-        >
-          {placements.map(
-            (p) =>
-              p && (
-                <Ship
-                  key={p.slot}
-                  classId={FLEET[p.slot].classId}
-                  length={FLEET[p.slot].length}
-                  row={p.row}
-                  col={p.col}
-                  orientation={p.orientation}
-                />
-              ),
-          )}
-          <PlacementGhost
-            placements={placements}
-            selectedSlot={selectedSlot}
-            orientation={orientation}
-            hover={hover}
-          />
-        </Board>
+        <Ocean
+          animated={oceanAnimated}
+          reflections={profile.shadows}
+          reflectionSize={level === 'high' ? 768 : 512}
+        />
+        <group position-y={BOARD_ELEVATION}>
+          <HeroBase />
+          <Board
+            position={[0, 0, 0]}
+            shots={NO_SHOTS}
+            interactive={!disabled}
+            onCellTap={(cell) => {
+              if (disabled) return
+              if (occupied.has(cell)) onPickUp(cell)
+              else onPlace(Math.floor(cell / 10), cell % 10)
+              setHover(null)
+            }}
+            onCellHover={disabled ? undefined : setHover}
+          >
+            {placements.map(
+              (p) =>
+                p && (
+                  <Ship
+                    key={p.slot}
+                    classId={FLEET[p.slot].classId}
+                    length={FLEET[p.slot].length}
+                    row={p.row}
+                    col={p.col}
+                    orientation={p.orientation}
+                  />
+                ),
+            )}
+            <PlacementGhost
+              placements={placements}
+              selectedSlot={selectedSlot}
+              orientation={orientation}
+              hover={hover}
+            />
+          </Board>
+        </group>
       </Suspense>
     </Canvas>
   )

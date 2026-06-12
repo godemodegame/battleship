@@ -9,7 +9,7 @@ import { canPlace, shipCells } from '../game/board'
 import type { Placement } from '../game/types'
 import type { BattleRenderModel, BoardRenderData, RenderShip } from '../render/model'
 import { Ocean } from './Ocean'
-import { Board, BoardBase, SelectionFrame } from './Board'
+import { BOARD_ELEVATION, Board, BoardBase, SelectionFrame } from './Board'
 import { Lights } from './Lights'
 import { Ship } from './Ships'
 import { FxLayer, preloadVfx } from './Effects'
@@ -31,10 +31,10 @@ const BOARD_CENTERS = { player: PLAYER_CENTER, bot: ENEMY_CENTER }
 type Pose = { position: [number, number, number]; target: [number, number, number] }
 const POSES: Record<string, Pose> = {
   home: { position: [0, 2.1, 10.2], target: [0, 1.1, 0] },
-  place: { position: [0, 16.2, 12.0], target: [0, 0, 5.4] },
-  attack: { position: [0, 11.6, 3.2], target: [0, 0, -6.6] },
-  defend: { position: [0, 10.8, 15.2], target: [0, 0, 6.3] },
-  over: { position: [0, 17.5, 9.5], target: [0, 0, -0.5] },
+  place: { position: [0, 16.2 + BOARD_ELEVATION, 12.0], target: [0, BOARD_ELEVATION, 5.4] },
+  attack: { position: [0, 11.6 + BOARD_ELEVATION, 3.2], target: [0, BOARD_ELEVATION, -6.6] },
+  defend: { position: [0, 10.8 + BOARD_ELEVATION, 15.2], target: [0, BOARD_ELEVATION, 6.3] },
+  over: { position: [0, 17.5 + BOARD_ELEVATION, 9.5], target: [0, BOARD_ELEVATION, -0.5] },
 }
 
 function usePoseKey(): keyof typeof POSES {
@@ -234,7 +234,7 @@ function HeroBase({ z }: { z: number }) {
 
 function BattleScene({ model }: { model: BattleRenderModel }) {
   return (
-    <group>
+    <group position-y={BOARD_ELEVATION}>
       <HeroBase z={PLAYER_CENTER.z} />
       <HeroBase z={ENEMY_CENTER.z} />
       <PlayerBoard data={model.player} />
@@ -312,7 +312,11 @@ export function GameCanvas() {
       <CameraRig reducedMotion={reducedMotion} />
       <Lights shadows={profile.shadows} />
       <Suspense fallback={null}>
-        <Ocean animated={profile.oceanAnimated && !reducedMotion} />
+        <Ocean
+          animated={profile.oceanAnimated && !reducedMotion}
+          reflections={profile.shadows}
+          reflectionSize={level === 'high' ? 768 : 512}
+        />
         {screen === 'home' ? <HomeScene /> : <BattleScene model={model} />}
       </Suspense>
     </Canvas>

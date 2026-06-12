@@ -18,6 +18,9 @@ const COLORS = {
   dim: new THREE.Color('#0a0e16'),
 }
 
+/** Clearance between the ocean surface and the complete tactical platform. */
+export const BOARD_ELEVATION = 0.72
+
 /** Flat instanced tiles under everything; per-cell tint encodes shot state. */
 function Tiles({ shots, dimmed }: { shots: ReadonlyArray<CellShot>; dimmed?: ReadonlySet<number> }) {
   const ref = useRef<THREE.InstancedMesh>(null)
