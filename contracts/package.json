@@ -38,6 +38,7 @@
     "@types/mocha": "10.0.10",
     "@types/node": "20.19.42",
     "chai": "4.5.0",
+    "cofhe-contracts-next": "npm:@fhenixprotocol/cofhe-contracts@0.1.4",
     "cofhe-hardhat-plugin": "0.3.1",
     "cofhejs": "0.3.1",
     "ethers": "6.16.0",
