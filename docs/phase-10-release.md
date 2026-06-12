@@ -9,6 +9,55 @@ contract, and funded two-wallet lifecycle exist. Privy origin confirmation,
 the full encrypted match, production contract, and physical mobile acceptance
 remain open.
 
+**Upstream blocker discovered June 12, 2026.** The Fhenix CoFHE testnet was
+upgraded in place (new `@cofhe/*` client stack released June 2, 2026, serving
+tfhe-rs 1.x safe-serialized FHE keys). Live isolation against the deployed
+TaskManager (`0xeA30…48D9`) with a `cofhe-contracts` 0.0.13 probe contract
+shows encrypted input verification and FHE compute operations still pass, but
+`FHE.decrypt` (`ITaskManager.createDecryptTask`) now reverts: the entrypoint
+was removed. Consequences:
+
+- the deployed `arb-sepolia-staging-v1` contract reverts on `submitFleet`
+  and `attack`, so its encrypted fleet/battle flow is permanently broken;
+- the frontend's pinned `cofhejs` 0.3.1 (latest on npm) can no longer parse
+  the FHE public key or CRS served by the testnet, so browser-side
+  encryption fails regardless of the contract;
+- a funded create/join lifecycle still works (plaintext paths unaffected).
+
+Unblocking GAME-1003/1004/1006/1009 requires migrating the contract to
+`cofhe-contracts` 0.1.x (decrypt results are now published on-chain from
+client-fetched threshold-network signatures instead of requested via
+`FHE.decrypt`), migrating the frontend and tooling from `cofhejs` to
+`@cofhe/sdk` 0.6.x, redeploying staging under a new deployment id, and
+re-running the affected Phase 9 gates.
+
+**Contract-side migration completed June 12, 2026.** `BattleshipGame.sol`,
+the deploy/validation tooling, and the full test suite (128 passing) now run
+on `cofhe-contracts` 0.1.4 with the `@cofhe/hardhat-plugin` mock
+environment. The retry entrypoints were replaced by permissionless
+`finalizeFleetValidationWithProof` / `finalizeAttackWithProof`, which verify
+the threshold-network signature on-chain via `publishDecryptResult` — the
+frontend still never supplies result authority. The migrated contract is
+deployed as `arb-sepolia-staging-v2` and a funded two-wallet **full
+encrypted match** (create, join, both encrypted fleets, CoFHE validation,
+22 shots including misses/turn handoffs, win) **passed live** (see Staging
+Contract and Funded Staging Regression below).
+
+**Frontend migration completed June 12, 2026.** The browser stack moved
+from `cofhejs` 0.3.1 (hand-rolled encryption worker, since deleted) to
+`@cofhe/sdk/web` 0.6.0, which manages its own zk-prove Web Worker and
+IndexedDB key cache. The match flow now performs the proof-publish step
+itself: the client reads the pending `validityCtHash` /
+`resultCtHash`+`sunkShipCtHash` handles, fetches threshold-network decrypt
+proofs via `decryptForTx(...).withoutPermit()`, and publishes them through
+`finalizeFleetValidationWithProof` / `finalizeAttackWithProof`. The legacy
+decrypt re-request retry buttons were removed; recovery is re-running the
+re-entrant fetch-and-publish action, with proof-fetch status and a
+retryable `proof-unavailable` error surfaced in both panels. Full suite
+(build, 336 unit, 40 screen, release scripts, 12 e2e) passes. Remaining:
+staging frontend promotion to an `arb-sepolia-staging-v2` build, and
+physical mobile acceptance.
+
 Stable origins:
 
 - staging: `https://battleship-staging-godemodegame.vercel.app`;
@@ -60,35 +109,55 @@ Implemented for GAME-1001 and GAME-1005 through GAME-1009:
 
 ## Staging Contract
 
-Deployed and validated June 12, 2026:
+Active staging contract (migrated `cofhe-contracts` 0.1.4 decrypt model),
+deployed and validated June 12, 2026:
 
-- deployment id: `arb-sepolia-staging-v1`;
+- deployment id: `arb-sepolia-staging-v2`;
 - address:
-  [`0xEEdadE604431277779e5B8C58b390795eef0486b`](https://sepolia.arbiscan.io/address/0xEEdadE604431277779e5B8C58b390795eef0486b);
+  [`0xe1C0D99d2e8b410538710C902CbD3Ee6637e9D94`](https://sepolia.arbiscan.io/address/0xe1C0D99d2e8b410538710C902CbD3Ee6637e9D94);
 - deployment transaction:
-  [`0x17013c0acd433f0e3a02b39f7c59e7c80f1037293b60662f6093d8bbb9643050`](https://sepolia.arbiscan.io/tx/0x17013c0acd433f0e3a02b39f7c59e7c80f1037293b60662f6093d8bbb9643050);
-- deployment block: `276345345`;
-- source commit: `b6d92b2518e78266eef5c8ceb4ebc98139b642b7`;
-- deployment gas: `6,452,880`;
-- deployment fee: `0.000129702888 ETH`;
+  [`0x0721f91e3469d7375b3c7b326735d564e259bf0386740080d447f0d7a0e304a1`](https://sepolia.arbiscan.io/tx/0x0721f91e3469d7375b3c7b326735d564e259bf0386740080d447f0d7a0e304a1);
+- deployment block: `276375706`;
+- source commit: `6771dd09be68c37e6b34d38da1ddecc8f088daa1`;
+- deployment gas: `4,628,667`;
+- deployment fee: `0.000093119522706 ETH`;
 - ABI SHA-256:
-  `sha256:283d4196c0f6421c3e712aaceb08c2f8c79f3ed8e8f4520f8dd443831e6d7484`.
+  `sha256:14c061d46cea4971fec557c8d025536d778e6d048afa7b1492367b33fb4f1bd7`.
 
 Runtime bytecode validation passed against the compiled release artifact.
 
-## Funded Staging Regression
+The superseded `arb-sepolia-staging-v1`
+(`0xEEdadE604431277779e5B8C58b390795eef0486b`, source commit `b6d92b2`) is
+permanently broken for encrypted play by the June 2026 CoFHE TaskManager
+upgrade (its `FHE.decrypt` entrypoint was removed upstream); its record
+stays committed per the immutable-record rule. Its funded create/join/cancel
+evidence is preserved in `phase-10-staging-testnet-evidence.json`.
 
-Match `1` completed the real-chain create, invited join, and creator cancel
-lifecycle:
+## Funded Staging Regression (Full Encrypted Match)
 
-| Action | Transaction | Gas | Wallet to receipt |
-| --- | --- | ---: | ---: |
-| Create | [`0xcf48…4fd0`](https://sepolia.arbiscan.io/tx/0xcf48e43efe4d625e91516e2bc366c308b7dfcba33d21d3fd416a6f15cd194fd0) | 268,080 | 6,974 ms |
-| Join | [`0x7ad6…3c04`](https://sepolia.arbiscan.io/tx/0x7ad615572d25f6c303a9d189770d89184f3f21ae1ca8d552e41e055abee33c04) | 169,393 | 6,908 ms |
-| Cancel | [`0xc3ca…797a`](https://sepolia.arbiscan.io/tx/0xc3ca788f98bf868198607bc4d3ede75b7e5bd7d483f0bb918bd2a490c2f8797a) | 74,910 | 7,037 ms |
+Match `1` on `arb-sepolia-staging-v2` completed the entire encrypted
+lifecycle live on June 12, 2026: create, invited join, both encrypted fleet
+submissions, threshold-network placement validation, and a 22-move battle
+(one miss per side exercising turn handoff, then a full sink-out) ending in
+a win for the invited opponent. Every shot result matched the plaintext
+rules.
+
+| Phase | Gas | Latency |
+| --- | ---: | ---: |
+| createMatch / joinMatch | 236,176 / 132,236 | — |
+| Fleet encryption (zk prove + verify, off-chain) | — | 8,606 / 7,219 ms |
+| submitFleet (per player) | 5,286,853 / 5,207,553 | — |
+| Validation proof fetch (threshold network) | — | 1,074 / 996 ms |
+| finalizeFleetValidationWithProof | 159,335 / 197,994 | — |
+| attack (min/avg/max of 22) | 4,121,438 / 4,134,770 / 4,141,982 | — |
+| Shot proof fetch (min/median/max of 22) | — | 1,268 / 1,576 / 10,710 ms |
+| finalizeAttackWithProof (min/avg/max of 22) | 223,846 / 257,548 / 287,155 | — |
+| Whole 22-move match | 107,856,450 (0.002162 ETH) | — |
 
 Machine-readable evidence is committed in
-`phase-10-staging-testnet-evidence.json`.
+`phase-10-staging-full-match-evidence.json`. The run is reproducible with
+`npm --prefix contracts run match:arb-sepolia` given the funded wallet keys,
+RPC URL, and `DEPLOYMENT_RECORD`.
 
 ## Staging Procedure
 
@@ -172,15 +241,18 @@ Contract redeploy:
 
 ## Known Limitations
 
+- The frontend's browser-side encrypted flow (`@cofhe/sdk/web` encryption,
+  threshold-network decrypt-proof fetches, `finalizeFleetValidationWithProof`
+  / `finalizeAttackWithProof` publishing) has passed the full local suite but
+  has not yet run against the live testnet from a real browser/wallet; that
+  is exercised by the staging promotion and physical mobile acceptance.
+- The deployed staging/production frontends still embed the superseded
+  `arb-sepolia-staging-v1` / pending `arb-sepolia-v1` ids; the staging
+  origin must be promoted to a migrated build configured for
+  `arb-sepolia-staging-v2`.
 - The production origin remains practice-only until its separate immutable
   contract is deployed after staging acceptance.
-- Privy allowed origins are dashboard state and are not yet confirmed for the
-  staging and production domains.
-- The funded staging regression covers create, join, and cancel only; the full
-  encrypted fleet and battle flow still requires acceptance.
 - Physical iOS Safari and Android Chrome acceptance requires real devices.
-- CoFHE finalization latency cannot be represented by local mocks and must be
-  measured on the deployed encrypted flow.
 - The pinned CoFHE-compatible Hardhat 2 toolchain retains the accepted
   low-severity development-only advisories documented in Phase 9.
 

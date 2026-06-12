@@ -374,6 +374,7 @@ export function MatchRouteShell() {
             <EncryptedFleetPanel
               phase={phase}
               match={demoPlacementMatch}
+              readClient={null}
               writeClient={null}
               wallet={{
                 ...wallet,
@@ -529,6 +530,7 @@ export function MatchRouteShell() {
                 <EncryptedFleetPanel
                   phase={phase}
                   match={match}
+                  readClient={readClient}
                   writeClient={writeClient}
                   wallet={wallet}
                   onRefetch={query.refetch}

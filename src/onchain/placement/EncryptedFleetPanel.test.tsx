@@ -2,22 +2,29 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import type { ErrorCode } from '../../copy/errors'
 import type {
+  BattleshipReadClient,
   BattleshipWriteClient,
   WriteResult,
 } from '../client/battleshipClient'
 import type { ChainMatchView } from '../client/mapping'
 import type { TxState } from '../client/txTracker'
 import {
-  CofheEncryptorFactoryContext,
-  type CofheEncryptorFactory,
-} from '../fhenix/useCofheFleetClient'
+  CofheClientFactoryContext,
+  type CofheClientFactory,
+} from '../fhenix/useCofheMatchClient'
 import {
   cofheScopeKey,
-  type CofheFleetEncryptor,
+  type CofheMatchClient,
   type CofheProgress,
 } from '../fhenix/types'
 import type { MatchPhase } from '../phaseResolver'
-import { connectedWalletValue, CREATOR, INVITED, TX_HASH } from '../testSupport'
+import {
+  connectedWalletValue,
+  makeFakeCofheFactory,
+  CREATOR,
+  INVITED,
+  TX_HASH,
+} from '../testSupport'
 import { usePlacementStore } from './placementStore'
 import { EncryptedFleetPanel } from './EncryptedFleetPanel'
 
@@ -84,9 +91,9 @@ function writeClient(over: Partial<BattleshipWriteClient> = {}): BattleshipWrite
   }
 }
 
-function encryptorFactory(encryptFleet = vi.fn()): CofheEncryptorFactory {
+function encryptorFactory(encryptFleet = vi.fn()): CofheClientFactory {
   return (config) => {
-    const client: CofheFleetEncryptor = {
+    const client: CofheMatchClient = {
       execution: 'worker',
       scopeKey: cofheScopeKey(config.scope),
       initialize: vi.fn(async () => {}),
@@ -104,34 +111,49 @@ function encryptorFactory(encryptFleet = vi.fn()): CofheEncryptorFactory {
           signature: `0x${index.toString(16).padStart(2, '0')}`,
         }))
       }),
+      fetchDecryptProof: vi.fn(async () => ({
+        value: 1n,
+        signature: '0xproof' as const,
+      })),
       dispose: vi.fn(),
     }
     return client
   }
 }
 
+function readClient(over: Partial<BattleshipReadClient> = {}): BattleshipReadClient {
+  return {
+    getMatch: vi.fn(async () => null),
+    watchMatch: vi.fn(() => () => {}),
+    getPendingPlacementValidation: vi.fn(async () => ({
+      validityCtHash: 42n,
+      requestedAt: 3,
+    })),
+    ...over,
+  }
+}
+
 function renderPanel(options: {
   phase?: ReturnType<typeof placementPhase>
   client?: BattleshipWriteClient
-  factory?: CofheEncryptorFactory
+  reads?: BattleshipReadClient
+  factory?: CofheClientFactory
   onRefetch?: () => void
 }) {
-  const wallet = connectedWalletValue(CREATOR, {
-    publicClient: {} as never,
-    walletClient: {} as never,
-  })
+  const wallet = connectedWalletValue(CREATOR)
   return render(
-    <CofheEncryptorFactoryContext.Provider
+    <CofheClientFactoryContext.Provider
       value={options.factory ?? encryptorFactory()}
     >
       <EncryptedFleetPanel
         phase={options.phase ?? placementPhase()}
         match={match()}
+        readClient={options.reads ?? readClient()}
         writeClient={options.client ?? writeClient()}
         wallet={wallet}
         onRefetch={options.onRefetch ?? vi.fn()}
       />
-    </CofheEncryptorFactoryContext.Provider>,
+    </CofheClientFactoryContext.Provider>,
   )
 }
 
@@ -179,14 +201,10 @@ describe('EncryptedFleetPanel (GAME-602..611)', () => {
   })
 
   it('keeps plaintext for an encryption failure so the player can retry', async () => {
-    const failingFactory: CofheEncryptorFactory = (config) => ({
-      execution: 'worker',
-      scopeKey: cofheScopeKey(config.scope),
-      initialize: vi.fn(async () => {}),
+    const failingFactory = makeFakeCofheFactory({
       encryptFleet: vi.fn(async () => {
         throw new Error('proof failed')
       }),
-      dispose: vi.fn(),
     })
     renderPanel({ factory: failingFactory })
     await waitFor(() => expect(screen.getByTestId('cofhe-execution')).toBeTruthy())
@@ -197,23 +215,20 @@ describe('EncryptedFleetPanel (GAME-602..611)', () => {
     expect(usePlacementStore.getState().placements.every(Boolean)).toBe(true)
   })
 
-  it('recovers a validating placement after refresh with finalize and retry actions', async () => {
-    const finalizeFleetValidation = vi.fn(async (
+  it('finalizes a validating placement by fetching and publishing the decrypt proof', async () => {
+    const finalizeFleetValidationWithProof = vi.fn(async (
       _matchId: bigint,
       _player: string,
+      _proof: { value: bigint; signature: `0x${string}` },
       onState: (state: TxState) => void,
     ) => {
       txSuccess(onState)
       return { ok: true as const, hash: TX_HASH }
     })
-    const retryFleetValidation = vi.fn(async (
-      _matchId: bigint,
-      _player: string,
-      onState: (state: TxState) => void,
-    ) => {
-      txSuccess(onState)
-      return { ok: true as const, hash: TX_HASH }
-    })
+    const fetchDecryptProof = vi.fn(async (ctHash: bigint) => ({
+      value: ctHash === 42n ? 1n : 0n,
+      signature: '0xproof' as const,
+    }))
     const onRefetch = vi.fn()
     renderPanel({
       phase: placementPhase({
@@ -222,22 +237,63 @@ describe('EncryptedFleetPanel (GAME-602..611)', () => {
         validating: true,
         waitingForOpponent: false,
       }),
-      client: writeClient({ finalizeFleetValidation, retryFleetValidation }),
+      client: writeClient({ finalizeFleetValidationWithProof }),
+      factory: makeFakeCofheFactory({ fetchDecryptProof }),
       onRefetch,
     })
 
     expect(screen.getByTestId('placement-validating')).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: 'Finalize Validation' }))
-    await waitFor(() => expect(finalizeFleetValidation).toHaveBeenCalledWith(
+    const finalize = screen.getByTestId('finalize-validation')
+    await waitFor(() => expect(finalize.hasAttribute('disabled')).toBe(false))
+    fireEvent.click(finalize)
+    await waitFor(() => expect(finalizeFleetValidationWithProof).toHaveBeenCalledWith(
       7n,
       CREATOR,
+      { value: 1n, signature: '0xproof' },
       expect.any(Function),
     ))
+    expect(fetchDecryptProof).toHaveBeenCalledWith(42n)
     expect(onRefetch).toHaveBeenCalledTimes(1)
+  })
 
-    fireEvent.click(screen.getByRole('button', { name: 'Retry CoFHE Request' }))
-    await waitFor(() => expect(retryFleetValidation).toHaveBeenCalled())
-    expect(onRefetch).toHaveBeenCalledTimes(2)
+  it('surfaces a failed proof fetch as retryable and recovers on the next attempt', async () => {
+    const finalizeFleetValidationWithProof = vi.fn(async (
+      _matchId: bigint,
+      _player: string,
+      _proof: { value: bigint; signature: `0x${string}` },
+      onState: (state: TxState) => void,
+    ) => {
+      txSuccess(onState)
+      return { ok: true as const, hash: TX_HASH }
+    })
+    const fetchDecryptProof = vi
+      .fn(async () => ({ value: 1n, signature: '0xproof' as const }))
+      .mockRejectedValueOnce(new Error('proof not ready'))
+    const onRefetch = vi.fn()
+    renderPanel({
+      phase: placementPhase({
+        canSubmit: false,
+        submitted: true,
+        validating: true,
+        waitingForOpponent: false,
+      }),
+      client: writeClient({ finalizeFleetValidationWithProof }),
+      factory: makeFakeCofheFactory({ fetchDecryptProof }),
+      onRefetch,
+    })
+
+    const finalize = screen.getByTestId('finalize-validation')
+    await waitFor(() => expect(finalize.hasAttribute('disabled')).toBe(false))
+    fireEvent.click(finalize)
+    await waitFor(() => expect(screen.getByTestId('proof-error')).toBeTruthy())
+    expect(finalizeFleetValidationWithProof).not.toHaveBeenCalled()
+    expect(onRefetch).not.toHaveBeenCalled()
+
+    await waitFor(() => expect(finalize.hasAttribute('disabled')).toBe(false))
+    fireEvent.click(finalize)
+    await waitFor(() => expect(finalizeFleetValidationWithProof).toHaveBeenCalledTimes(1))
+    expect(screen.queryByTestId('proof-error')).toBeNull()
+    expect(onRefetch).toHaveBeenCalledTimes(1)
   })
 
   it('shows an invalid contract verdict as a recoverable fresh placement', () => {

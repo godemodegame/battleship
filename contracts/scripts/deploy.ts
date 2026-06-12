@@ -22,9 +22,8 @@ import { computeAbiSha256, validateRecordSchema, type DeploymentRecord } from '.
 const CONTRACT_NAME = 'BattleshipGame'
 const COFHE_PACKAGES = [
   '@fhenixprotocol/cofhe-contracts',
-  '@fhenixprotocol/cofhe-mock-contracts',
-  'cofhe-hardhat-plugin',
-  'cofhejs',
+  '@cofhe/hardhat-plugin',
+  '@cofhe/sdk',
 ] as const
 
 async function main(): Promise<void> {

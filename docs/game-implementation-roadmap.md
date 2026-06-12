@@ -860,6 +860,17 @@ Progress:
   validated, and a funded two-wallet create/join/cancel lifecycle passes;
 - Privy dashboard origin confirmation, the full encrypted match, physical
   mobile acceptance, and the separate production deployment remain open;
+- June 12, 2026: the in-place Fhenix CoFHE testnet upgrade removed
+  `createDecryptTask`, breaking `FHE.decrypt` for the deployed
+  `cofhe-contracts` 0.0.13 staging contract and making the served FHE keys
+  unparseable by the pinned `cofhejs` 0.3.1 (see `docs/phase-10-release.md`);
+- June 12, 2026 (later): the contract, tooling, and test suite migrated to
+  `cofhe-contracts` 0.1.4 / `@cofhe/hardhat-plugin` / `@cofhe/sdk` with
+  permissionless proof-publishing finalizers (128 tests passing); the
+  migrated contract is deployed as `arb-sepolia-staging-v2` and a funded
+  two-wallet full encrypted match (fleets, validation, 22 shots, win)
+  passed live with gas and CoFHE latency evidence; the frontend migration
+  from `cofhejs` to `@cofhe/sdk/web` remains;
 - operational details and exact remaining gates are recorded in
   `docs/phase-10-release.md`.
 
@@ -868,14 +879,14 @@ Tasks:
 | ID | Priority | Status | Work |
 | --- | --- | --- | --- |
 | GAME-1001 | P0 | In progress | Stable staging/production Vercel project domains exist; exact Privy origins require dashboard confirmation |
-| GAME-1002 | P0 | Complete | Deployed and validated immutable `arb-sepolia-staging-v1` contract record |
-| GAME-1003 | P0 | In progress | Funded create/join/cancel passes; full encrypted match and physical mobile acceptance remain |
-| GAME-1004 | P0 | Blocked | Create immutable production-demo deployment record after staging passes |
+| GAME-1002 | P0 | Complete | Deployed and validated immutable `arb-sepolia-staging-v2` record on the migrated CoFHE 0.1.x stack (v1 superseded by the upstream upgrade) |
+| GAME-1003 | P0 | In progress | Funded full encrypted match (fleets, validation, 22 shots, win) passed live on staging-v2; frontend migration and physical mobile acceptance remain |
+| GAME-1004 | P0 | Blocked | Create immutable production-demo deployment record after staging passes on the migrated CoFHE stack |
 | GAME-1005 | P0 | In progress | Staging address/id and build gates implemented; production pairing awaits GAME-1004 |
-| GAME-1006 | P0 | In progress | Public checks and staging explorer/live lifecycle pass; encrypted friend-match checks remain |
+| GAME-1006 | P0 | In progress | Public checks and live encrypted contract lifecycle pass; browser friend-match checks await the frontend @cofhe/sdk migration |
 | GAME-1007 | P1 | Complete | Added release notes, known limitations, evidence requirements, and named rollback ownership |
 | GAME-1008 | P1 | Complete | Added exact Vercel rollback and immutable contract redeploy procedures |
-| GAME-1009 | P1 | In progress | Staging deployment and lifecycle gas/latency recorded; live CoFHE baseline awaits encrypted match |
+| GAME-1009 | P1 | Complete | Staging deployment, full-match gas, and live CoFHE encrypt/validation/shot latency baselines recorded in `phase-10-staging-full-match-evidence.json` |
 
 Exit criteria:
 

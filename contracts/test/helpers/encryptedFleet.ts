@@ -1,12 +1,14 @@
 import hre, { ethers } from 'hardhat'
-import { cofhejs, Encryptable } from 'cofhejs/node'
-import { cofhejs_initializeWithHardhatSigner } from 'cofhe-hardhat-plugin'
+import { Encryptable, TASK_MANAGER_ADDRESS } from '@cofhe/sdk'
 import type { HardhatEthersSigner } from '@nomicfoundation/hardhat-ethers/signers'
 import type { BaseContract, ContractTransactionReceipt } from 'ethers'
 
-// Shared Phase 4 test utilities: fleet fixtures in the frozen ship-segment
-// encoding, per-signer encryption, and drivers for the asynchronous CoFHE
-// decrypt flow in the mock environment.
+// Shared test utilities: fleet fixtures in the frozen ship-segment encoding,
+// per-signer encryption, and drivers for the client-published CoFHE decrypt
+// flow (cofhe-contracts 0.1.x: results become readable only after a
+// threshold-network-signed plaintext is published on-chain; the mock
+// environment signs with a well-known key and the MockTaskManager verifies
+// it exactly like the live one).
 
 export const SHIP_LENGTHS = [4, 3, 3, 2, 2, 2, 1, 1, 1, 1] as const
 
@@ -43,57 +45,92 @@ export const FLEET_ROW_WRAP = [
   7, 8, 9, 10, 30, 31, 32, 50, 51, 52, 70, 71, 90, 91, 34, 35, 55, 75, 95, 13,
 ] as const
 
-export function unwrapCofhejs<T>(result: {
-  success: boolean
-  data: T
-  error: unknown
-}): T {
-  if (!result.success) {
-    throw new Error(`cofhejs call failed: ${JSON.stringify(result.error)}`)
-  }
-  return result.data
-}
-
-/// Initializes the cofhejs singleton for `signer` and encrypts a fleet in
-/// the frozen InEuint8[20] shape. Inputs are signature-bound to the signer.
-export async function encryptFleetAs(
-  signer: HardhatEthersSigner,
-  segments: readonly number[],
-) {
-  unwrapCofhejs(
-    await cofhejs_initializeWithHardhatSigner(hre, signer, {
-      environment: 'MOCK',
-      generatePermit: false,
-    }),
-  )
-  return unwrapCofhejs(
-    await cofhejs.encrypt(segments.map((segment) => Encryptable.uint8(BigInt(segment)))),
-  )
-}
-
-/// The mock task manager marks decrypt results ready after a simulated async
-/// offset of (timestamp % 10) + 1 seconds; 11 seconds always passes it.
-export async function advancePastDecryptDelay() {
-  await hre.network.provider.send('evm_increaseTime', [11])
-  await hre.network.provider.send('evm_mine')
-}
-
-/// Pins the next block's timestamp so the mock decrypt delay is at least 6
-/// seconds. Hardhat advances ~1 second per mined transaction, so without
-/// this a request made at a timestamp ending in 0 (delay of exactly 1s) can
-/// already be decryptable one transaction later, making not-ready assertions
-/// flaky.
-export async function pinNextDecryptDelay() {
-  const latest = await hre.ethers.provider.getBlock('latest')
-  const current = BigInt(latest!.timestamp)
-  const next = current + 10n - (current % 10n) + 5n
-  await hre.network.provider.send('evm_setNextBlockTimestamp', [`0x${next.toString(16)}`])
-}
-
 // Hardhat's ethers v6 contract instances expose methods through a proxy, so
 // helpers take them loosely typed.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type GameContract = any
+
+// One connected CoFHE client per signer; creation deploys nothing but does
+// permit/signature work, so reuse across tests in a file.
+type CofheClient = Awaited<ReturnType<typeof hre.cofhe.createClientWithBatteries>>
+const clientCache = new Map<string, CofheClient>()
+
+export async function cofheClientFor(signer: HardhatEthersSigner): Promise<CofheClient> {
+  const key = await signer.getAddress()
+  const cached = clientCache.get(key)
+  if (cached) return cached
+  const client = await hre.cofhe.createClientWithBatteries(signer)
+  clientCache.set(key, client)
+  return client
+}
+
+/// Encrypts a fleet in the frozen InEuint8[20] shape as `signer`. Inputs are
+/// signature-bound to the signer by the (mock) zk verifier.
+export async function encryptFleetAs(
+  signer: HardhatEthersSigner,
+  segments: readonly number[],
+) {
+  const client = await cofheClientFor(signer)
+  return client
+    .encryptInputs(segments.map((segment) => Encryptable.uint8(BigInt(segment))))
+    .execute()
+}
+
+export interface DecryptProof {
+  value: bigint
+  signature: `0x${string}`
+}
+
+/// Fetches the threshold-network decrypt proof for a globally-allowed
+/// handle. Works for any signer because the game allows results globally.
+export async function fetchDecryptProof(
+  ctHash: bigint,
+  signer?: HardhatEthersSigner,
+): Promise<DecryptProof> {
+  const actual = signer ?? (await ethers.getSigners())[0]
+  const client = await cofheClientFor(actual)
+  const result = await client.decryptForTx(ctHash).withoutPermit().execute()
+  return { value: result.decryptedValue, signature: result.signature }
+}
+
+const TASK_MANAGER_ABI = [
+  'function publishDecryptResult(uint256 ctHash, uint256 result, bytes signature) external',
+]
+
+/// Publishes a fetched decrypt proof straight at the TaskManager, leaving
+/// the existing finalize entrypoints to read it (the two-transaction path).
+export async function publishDecryptProof(
+  ctHash: bigint,
+  proof: DecryptProof,
+  signer?: HardhatEthersSigner,
+) {
+  const actual = signer ?? (await ethers.getSigners())[0]
+  const taskManager = new ethers.Contract(TASK_MANAGER_ADDRESS, TASK_MANAGER_ABI, actual)
+  await (await taskManager.publishDecryptResult(ctHash, proof.value, proof.signature)).wait()
+}
+
+/// Makes a pending placement validation readable on-chain (replaces the old
+/// mock decrypt-delay advance): fetch the proof, publish it, done.
+export async function makeValidationReady(
+  game: GameContract,
+  matchId: bigint,
+  player: HardhatEthersSigner | string,
+) {
+  const address = typeof player === 'string' ? player : player.address
+  const pending = await game.getPendingPlacementValidation(matchId, address)
+  const proof = await fetchDecryptProof(pending.validityCtHash as bigint)
+  await publishDecryptProof(pending.validityCtHash as bigint, proof)
+}
+
+/// Makes the pending shot readable on-chain: fetch and publish both the
+/// result and sunk-ship-id proofs.
+export async function makeShotReady(game: GameContract, matchId: bigint) {
+  const pending = await game.getPendingShot(matchId)
+  for (const ctHash of [pending.resultCtHash, pending.sunkShipCtHash] as bigint[]) {
+    const proof = await fetchDecryptProof(ctHash)
+    await publishDecryptProof(ctHash, proof)
+  }
+}
 
 /// Submits and finalizes both fleets, leaving the match InProgress with the
 /// invited opponent on turn.
@@ -110,8 +147,9 @@ export async function startEncryptedMatch(
   const opponentInput = await encryptFleetAs(opponent, opponentFleet)
   await (await game.connect(opponent).submitFleet(matchId, opponentInput)).wait()
 
-  await advancePastDecryptDelay()
+  await makeValidationReady(game, matchId, creator)
   await (await game.finalizeFleetValidation(matchId, creator.address)).wait()
+  await makeValidationReady(game, matchId, opponent)
   await (await game.finalizeFleetValidation(matchId, opponent.address)).wait()
 }
 
@@ -124,8 +162,8 @@ export interface ShotRecord {
   finalizeGas: bigint
 }
 
-/// Attacks one cell and finalizes the shot, returning the resolved public
-/// result from the ShotResolved event.
+/// Attacks one cell, publishes the decrypt proofs, and finalizes the shot,
+/// returning the resolved public result from the ShotResolved event.
 export async function playShot(
   game: GameContract,
   matchId: bigint,
@@ -138,7 +176,7 @@ export async function playShot(
   const submitted = parseEvent(game, attackReceipt!, 'ShotSubmitted')
   const moveId = submitted.moveId as bigint
 
-  await advancePastDecryptDelay()
+  await makeShotReady(game, matchId)
 
   const finalizeTx = await game.finalizeAttack(matchId, moveId)
   const finalizeReceipt = await finalizeTx.wait()

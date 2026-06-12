@@ -175,13 +175,14 @@ describe('toPendingShotView (GAME-705)', () => {
     ...over,
   })
 
-  it('maps an existing pending shot and drops the ciphertext handles', () => {
+  it('maps an existing pending shot including the proof-fetch ctHashes', () => {
     const pending = toPendingShotView(rawPending())!
     expect(pending.moveId).toBe(6)
     expect(pending.attacker).toBe(CREATOR.toLowerCase())
     expect(pending.cellIndex).toBe(17)
-    expect('resultCtHash' in pending).toBe(false)
-    expect('sunkShipCtHash' in pending).toBe(false)
+    // Public handle identifiers the client needs to fetch decrypt proofs.
+    expect(pending.resultCtHash).toBe(123n)
+    expect(pending.sunkShipCtHash).toBe(456n)
   })
 
   it('returns null when no shot is pending', () => {

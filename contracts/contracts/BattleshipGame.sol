@@ -14,10 +14,17 @@ import {InEuint8} from "@fhenixprotocol/cofhe-contracts/ICofhe.sol";
 ///         ship-segment cell indexes (see docs/cofhe-feasibility-results.md
 ///         for the encoding decision). Hit, sunk, and win are computed with
 ///         FHE operations; the only values ever decrypted are the per-shot
-///         result enum, the sunk ship id, and the placement validity flag,
-///         through the asynchronous CoFHE decrypt-request flow
-///         (FHE.decrypt -> FHE.getDecryptResultSafe). No client supplies any
-///         authoritative result, and no plaintext fleet data exists anywhere.
+///         result enum, the sunk ship id, and the placement validity flag.
+///
+///         Decrypt model (cofhe-contracts 0.1.x, June 2026 CoFHE upgrade):
+///         result handles are made globally decryptable with
+///         FHE.allowGlobal; any party fetches the threshold-network decrypt
+///         signature off-chain and publishes it through the permissionless
+///         *WithProof finalizers (or directly at the TaskManager), where the
+///         TaskManager verifies the network signature on-chain before the
+///         plaintext is accepted. No client ever supplies an authoritative
+///         result - a forged signature reverts - and no plaintext fleet
+///         data exists anywhere.
 contract BattleshipGame {
     // ---------------------------------------------------------------------
     // Board and fleet constants (docs/contract-data-model.md)
@@ -54,11 +61,11 @@ contract BattleshipGame {
     uint64 public constant JOIN_TIMEOUT = 24 hours;
     uint64 public constant PLACEMENT_TIMEOUT = 24 hours;
     uint64 public constant TURN_TIMEOUT = 24 hours;
-    /// @dev Resolving-recovery rule (decided with the Phase 4 prototype): a
-    ///      stuck decryption is never a win for either player - anyone can
-    ///      re-request it through retryShotResolution / retryFleetValidation,
-    ///      and both players can always exit via forfeit. This deadline only
-    ///      paces retry UI; claimTimeoutWin stays closed during resolution.
+    /// @dev Resolving-recovery rule: a stuck resolution is never a win for
+    ///      either player - anyone can publish the pending threshold-network
+    ///      decrypt result through the *WithProof finalizers, and both
+    ///      players can always exit via forfeit. This deadline only paces
+    ///      recovery UI; claimTimeoutWin stays closed during resolution.
     uint64 public constant RESOLVING_TIMEOUT = 24 hours;
 
     /// @dev Cap for paginated reads so view calls stay bounded.
@@ -501,9 +508,11 @@ contract BattleshipGame {
 
         ebool valid = _validatePlacement(fleet);
         FHE.allowThis(valid);
-        FHE.decrypt(valid);
+        // The validity flag is public by design: anyone may fetch the
+        // threshold-network decrypt signature for it and publish it.
+        FHE.allowGlobal(valid);
 
-        uint256 validityCtHash = ebool.unwrap(valid);
+        uint256 validityCtHash = uint256(ebool.unwrap(valid));
         pendingValidations[matchId][msg.sender] = PendingPlacementValidation({
             exists: true,
             validityCtHash: validityCtHash,
@@ -523,10 +532,11 @@ contract BattleshipGame {
     }
 
     /// @notice Publish a resolved placement-validity result. Permissionless:
-    ///         the plaintext comes from the on-chain decrypt result posted by
-    ///         the CoFHE network, never from the caller. Starts the match
-    ///         when both fleets are valid (invited opponent moves first).
-    function finalizeFleetValidation(uint256 matchId, address player) external {
+    ///         the plaintext comes from the on-chain decrypt result whose
+    ///         threshold-network signature the TaskManager verified, never
+    ///         from the caller. Starts the match when both fleets are valid
+    ///         (invited opponent moves first).
+    function finalizeFleetValidation(uint256 matchId, address player) public {
         Match storage m = _getMatch(matchId);
         if (m.status != MatchStatus.ValidatingPlacement) revert InvalidMatchStatus();
 
@@ -535,7 +545,7 @@ contract BattleshipGame {
         if (!pending.exists) revert NoPendingPlacementValidation();
 
         (bool valid, bool ready) = FHE.getDecryptResultSafe(
-            ebool.wrap(pending.validityCtHash)
+            ebool.wrap(bytes32(pending.validityCtHash))
         );
         if (!ready) revert DecryptionResultNotReady();
 
@@ -562,11 +572,17 @@ contract BattleshipGame {
         }
     }
 
-    /// @notice Re-request the pending placement-validity decryption. The
-    ///         recovery path when a CoFHE decrypt result never lands.
-    ///         Permissionless and idempotent: re-requesting an already
-    ///         decrypted handle changes nothing.
-    function retryFleetValidation(uint256 matchId, address player) external {
+    /// @notice Publish the threshold-network decrypt signature for a pending
+    ///         placement validation and finalize it in one transaction.
+    ///         Permissionless: the TaskManager verifies the network
+    ///         signature over (ctHash, result) on-chain, so a forged result
+    ///         reverts. Skips the publish when the result already landed.
+    function finalizeFleetValidationWithProof(
+        uint256 matchId,
+        address player,
+        uint256 result,
+        bytes calldata signature
+    ) external {
         Match storage m = _getMatch(matchId);
         if (m.status != MatchStatus.ValidatingPlacement) revert InvalidMatchStatus();
         _playerStateOf(m, player);
@@ -574,9 +590,8 @@ contract BattleshipGame {
         PendingPlacementValidation storage pending = pendingValidations[matchId][player];
         if (!pending.exists) revert NoPendingPlacementValidation();
 
-        FHE.decrypt(ebool.wrap(pending.validityCtHash));
-
-        emit FleetValidationRequested(matchId, player, pending.validityCtHash);
+        _publishIfNeeded(pending.validityCtHash, result, signature);
+        finalizeFleetValidation(matchId, player);
     }
 
     // ---------------------------------------------------------------------
@@ -625,11 +640,13 @@ contract BattleshipGame {
         );
         FHE.allowThis(eResult);
         FHE.allowThis(eSunkShipId);
-        FHE.decrypt(eResult);
-        FHE.decrypt(eSunkShipId);
+        // Shot outcomes are public by design: anyone may fetch and publish
+        // their threshold-network decrypt signatures.
+        FHE.allowGlobal(eResult);
+        FHE.allowGlobal(eSunkShipId);
 
-        uint256 resultCtHash = euint8.unwrap(eResult);
-        uint256 sunkShipCtHash = euint8.unwrap(eSunkShipId);
+        uint256 resultCtHash = uint256(euint8.unwrap(eResult));
+        uint256 sunkShipCtHash = uint256(euint8.unwrap(eSunkShipId));
         pendingShots[matchId] = PendingShot({
             exists: true,
             moveId: moveId,
@@ -654,7 +671,7 @@ contract BattleshipGame {
     ///         from the on-chain decrypt results, never from the caller.
     ///         Miss passes the turn to the defender; Hit and Sunk keep the
     ///         attacker on turn; Win finishes the match.
-    function finalizeAttack(uint256 matchId, uint32 moveId) external {
+    function finalizeAttack(uint256 matchId, uint32 moveId) public {
         Match storage m = _getMatch(matchId);
         if (m.status != MatchStatus.ResolvingShot) revert InvalidMatchStatus();
 
@@ -675,10 +692,10 @@ contract BattleshipGame {
         PendingShot memory pending
     ) private view returns (ShotResult result, uint8 sunkShipId) {
         (uint8 rawResult, bool resultReady) = FHE.getDecryptResultSafe(
-            euint8.wrap(pending.resultCtHash)
+            euint8.wrap(bytes32(pending.resultCtHash))
         );
         (uint8 rawSunkShipId, bool sunkReady) = FHE.getDecryptResultSafe(
-            euint8.wrap(pending.sunkShipCtHash)
+            euint8.wrap(bytes32(pending.sunkShipCtHash))
         );
         if (!resultReady || !sunkReady) revert DecryptionResultNotReady();
 
@@ -747,26 +764,43 @@ contract BattleshipGame {
         }
     }
 
-    /// @notice Re-request the pending shot decryptions. The recovery path
-    ///         when a CoFHE decrypt result never lands. Permissionless and
-    ///         idempotent.
-    function retryShotResolution(uint256 matchId) external {
+    /// @notice Publish the threshold-network decrypt signatures for the
+    ///         pending shot and finalize it in one transaction.
+    ///         Permissionless: the TaskManager verifies each network
+    ///         signature over (ctHash, result) on-chain, so a forged result
+    ///         reverts. Skips publishes whose result already landed.
+    function finalizeAttackWithProof(
+        uint256 matchId,
+        uint32 moveId,
+        uint256 result,
+        bytes calldata resultSignature,
+        uint256 sunkShipId,
+        bytes calldata sunkShipSignature
+    ) external {
         Match storage m = _getMatch(matchId);
         if (m.status != MatchStatus.ResolvingShot) revert InvalidMatchStatus();
 
         PendingShot storage pending = pendingShots[matchId];
         if (!pending.exists) revert NoPendingShot();
+        if (moveId != pending.moveId) revert InvalidMoveId();
 
-        FHE.decrypt(euint8.wrap(pending.resultCtHash));
-        FHE.decrypt(euint8.wrap(pending.sunkShipCtHash));
-        m.timeoutState.resolvingDeadline = uint64(block.timestamp) + RESOLVING_TIMEOUT;
+        _publishIfNeeded(pending.resultCtHash, result, resultSignature);
+        _publishIfNeeded(pending.sunkShipCtHash, sunkShipId, sunkShipSignature);
+        finalizeAttack(matchId, moveId);
+    }
 
-        emit ShotResolutionRequested(
-            matchId,
-            pending.moveId,
-            pending.resultCtHash,
-            pending.sunkShipCtHash
-        );
+    /// @dev Publishes a threshold-network decrypt result unless it is
+    ///      already readable. The TaskManager rejects invalid signatures, so
+    ///      the caller never holds result authority.
+    function _publishIfNeeded(
+        uint256 ctHash,
+        uint256 result,
+        bytes calldata signature
+    ) private {
+        (, bool ready) = FHE.getDecryptResultSafe(bytes32(ctHash));
+        if (!ready) {
+            FHE.publishDecryptResult(ctHash, result, signature);
+        }
     }
 
     // ---------------------------------------------------------------------
@@ -971,6 +1005,18 @@ contract BattleshipGame {
                 sunkShipCtHash: pending.sunkShipCtHash,
                 submittedAt: pending.submittedAt
             });
+    }
+
+    /// @notice Pending placement-validation state for refresh recovery. The
+    ///         ct hash is a public handle identifier whose plaintext is
+    ///         globally decryptable by design.
+    function getPendingPlacementValidation(
+        uint256 matchId,
+        address player
+    ) external view returns (PendingPlacementValidation memory) {
+        Match storage m = _getMatch(matchId);
+        _playerStateOf(m, player);
+        return pendingValidations[matchId][player];
     }
 
     // ---------------------------------------------------------------------

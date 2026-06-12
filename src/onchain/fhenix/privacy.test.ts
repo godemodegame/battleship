@@ -9,7 +9,6 @@ describe('encrypted fleet privacy regression (GAME-607/610/612)', () => {
   it('does not persist, log, or URL-encode fleet inputs or ciphertext payloads', async () => {
     const files = [
       resolve(here, './cofheClient.ts'),
-      resolve(here, './cofhe.worker.ts'),
       resolve(here, '../placement/EncryptedFleetPanel.tsx'),
       resolve(here, '../placement/placementStore.ts'),
     ]

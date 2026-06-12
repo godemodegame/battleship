@@ -34,8 +34,13 @@ export interface DeploymentRecord {
   chainId: number
   contractName: string
   address: Address | null
-  /** 'active' = deployed with a known address; 'pending' = id reserved, not live. */
-  status: 'active' | 'pending'
+  /**
+   * 'active' = deployed with a known address; 'pending' = id reserved, not
+   * live; 'retired' = deployed but no longer playable (e.g. broken by an
+   * upstream CoFHE upgrade) — old match links still resolve to it, but
+   * writes stay disabled and its ABI is historical.
+   */
+  status: 'active' | 'pending' | 'retired'
   deploymentTx?: string
   deploymentBlock?: number
   sourceCommit?: string
@@ -68,8 +73,8 @@ export function validateDeploymentRecord(record: DeploymentRecord): string[] {
     problems.push(`chainId ${record.chainId} is not ${MVP_CHAIN_ID}`)
   }
   if (!record.contractName) problems.push('contractName is empty')
-  if (record.status === 'active' && !isAddress(record.address)) {
-    problems.push('active deployment must have a valid contract address')
+  if (record.status !== 'pending' && !isAddress(record.address)) {
+    problems.push(`${record.status} deployment must have a valid contract address`)
   }
   if (record.address !== null && !isAddress(record.address)) {
     problems.push('address must be null or a 20-byte hex address')

@@ -24,6 +24,9 @@ export const ERROR_MESSAGES = {
   'encryption-failed': 'Fhenix encryption failed',
   'finalization-failed': 'Result finalization failed',
   'decryption-not-ready': 'Encrypted validation is still processing. Try again shortly.',
+  // The threshold network has not produced the decrypt proof yet (or the
+  // fetch failed); the finalize action is safe to retry.
+  'proof-unavailable': 'The CoFHE network has not released this result yet. Try again shortly.',
   'transaction-rejected': 'Transaction rejected',
   'transaction-reverted': 'Transaction reverted',
   // Phase 5 lifecycle + transaction tracking copy (GAME-503/507/508/511),

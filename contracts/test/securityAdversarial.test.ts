@@ -4,11 +4,11 @@ import { loadFixture, time } from '@nomicfoundation/hardhat-network-helpers'
 import {
   VALID_FLEET,
   VALID_FLEET_ALT,
-  advancePastDecryptDelay,
   deployEncryptedMatchFixtureBase,
   encryptFleetAs,
+  makeShotReady,
+  makeValidationReady,
   parseEvent,
-  pinNextDecryptDelay,
   playShot,
   startEncryptedMatch,
 } from './helpers/encryptedFleet'
@@ -38,7 +38,8 @@ async function activeMatchFixture() {
 
 async function resolvingShotFixture() {
   const base = await activeMatchFixture()
-  await pinNextDecryptDelay()
+  // No proof is published, so the shot stays unresolvable until someone
+  // publishes the threshold-network result.
   await (await base.game.connect(base.opponent).attack(base.matchId, VALID_FLEET[0])).wait()
   return base
 }
@@ -106,7 +107,7 @@ describe('BattleshipGame adversarial security (GAME-903)', () => {
         game.finalizeFleetValidation(matchId, creator.address),
       ).to.be.revertedWithCustomError(game, 'InvalidMatchStatus')
       await expect(
-        game.retryFleetValidation(matchId, creator.address),
+        game.finalizeFleetValidationWithProof(matchId, creator.address, 1n, '0x'),
       ).to.be.revertedWithCustomError(game, 'InvalidMatchStatus')
     })
 
@@ -129,13 +130,12 @@ describe('BattleshipGame adversarial security (GAME-903)', () => {
       ).to.be.revertedWithCustomError(game, 'CannotCancelStartedMatch')
     })
 
-    it('rejects shot-resolution retries once no shot is pending', async () => {
+    it('rejects proof finalization once no shot is pending', async () => {
       const { game, opponent, matchId } = await loadFixture(activeMatchFixture)
       await playShot(game, matchId, opponent, 9) // miss, resolved
-      await expect(game.retryShotResolution(matchId)).to.be.revertedWithCustomError(
-        game,
-        'InvalidMatchStatus',
-      )
+      await expect(
+        game.finalizeAttackWithProof(matchId, 1n, 1n, '0x', 0n, '0x'),
+      ).to.be.revertedWithCustomError(game, 'InvalidMatchStatus')
     })
   })
 
@@ -146,8 +146,8 @@ describe('BattleshipGame adversarial security (GAME-903)', () => {
       await time.setNextBlockTimestamp(m.timeoutState.resolvingDeadline + 1000n)
       await ethers.provider.send('evm_mine', [])
 
-      // Neither the attacker nor the defender can convert a stuck decryption
-      // into a win; retry and forfeit are the only exits.
+      // Neither the attacker nor the defender can convert a stuck resolution
+      // into a win; publishing the proof and forfeit are the only exits.
       await expect(
         game.connect(creator).claimTimeoutWin(matchId),
       ).to.be.revertedWithCustomError(game, 'NoTimeoutAvailable')
@@ -186,7 +186,7 @@ describe('BattleshipGame adversarial security (GAME-903)', () => {
 
       // Second shot pending; replaying move 1 must not resolve it.
       await (await game.connect(creator).attack(matchId, 99)).wait()
-      await advancePastDecryptDelay()
+      await makeShotReady(game, matchId)
       await expect(game.finalizeAttack(matchId, first.moveId)).to.be.revertedWithCustomError(
         game,
         'InvalidMoveId',
@@ -220,7 +220,7 @@ describe('BattleshipGame adversarial security (GAME-903)', () => {
       const cell = VALID_FLEET[0] // a real creator ship segment
       const receipt = await (await game.connect(opponent).attack(matchId, cell)).wait()
       const submitted = parseEvent(game, receipt!, 'ShotSubmitted')
-      await advancePastDecryptDelay()
+      await makeShotReady(game, matchId)
 
       const finalizeReceipt = await (
         await game.connect(outsider).finalizeAttack(matchId, submitted.moveId)
@@ -240,7 +240,7 @@ describe('BattleshipGame adversarial security (GAME-903)', () => {
       )
       const input = await encryptFleetAs(creator, VALID_FLEET)
       await (await game.connect(creator).submitFleet(matchId, input)).wait()
-      await advancePastDecryptDelay()
+      await makeValidationReady(game, matchId, creator)
 
       // Self-referencing call: the caller check fires for msg.sender.
       await expect(

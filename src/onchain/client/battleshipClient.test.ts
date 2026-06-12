@@ -245,6 +245,8 @@ describe('battle reads (GAME-701/705/708)', () => {
       attacker: CREATOR,
       defender: INVITED,
       cellIndex: 33,
+      resultCtHash: 1n,
+      sunkShipCtHash: 2n,
       submittedAt: 9,
     })
 
@@ -255,6 +257,33 @@ describe('battle reads (GAME-701/705/708)', () => {
       })) as PublicClientLike['readContract'],
     })
     await expect(readClientFor(absent).getPendingShot!(7n)).resolves.toBeNull()
+  })
+
+  it('getPendingPlacementValidation maps the struct and null when absent', async () => {
+    const raw = { exists: true, validityCtHash: 77n, requestedAt: 4n }
+    const readContract = vi.fn(async () => raw)
+    const publicClient = makePublicClient({
+      readContract: readContract as PublicClientLike['readContract'],
+    })
+    await expect(
+      readClientFor(publicClient).getPendingPlacementValidation!(7n, CREATOR),
+    ).resolves.toEqual({ validityCtHash: 77n, requestedAt: 4 })
+    expect(readContract).toHaveBeenCalledWith(
+      expect.objectContaining({
+        functionName: 'getPendingPlacementValidation',
+        args: [7n, CREATOR],
+      }),
+    )
+
+    const absent = makePublicClient({
+      readContract: vi.fn(async () => ({
+        ...raw,
+        exists: false,
+      })) as PublicClientLike['readContract'],
+    })
+    await expect(
+      readClientFor(absent).getPendingPlacementValidation!(7n, CREATOR),
+    ).resolves.toBeNull()
   })
 })
 
@@ -293,15 +322,15 @@ describe('battle writes (GAME-704/705/710/712)', () => {
     }
   })
 
-  it('exposes finalizeAttack, retryShotResolution, and claimTimeoutWin', async () => {
+  it('exposes finalizeAttackWithProof and claimTimeoutWin', async () => {
     const publicClient = okReceipt()
     const client = writeClientFor(publicClient)
+    const resultProof = { value: 2n, signature: '0xaa' as const }
+    const sunkProof = { value: 0n, signature: '0xbb' as const }
 
-    await expect(client.finalizeAttack!(7n, 3, () => {})).resolves.toEqual({
-      ok: true,
-      hash: TX_HASH,
-    })
-    await expect(client.retryShotResolution!(7n, () => {})).resolves.toEqual({
+    await expect(
+      client.finalizeAttackWithProof!(7n, 3, resultProof, sunkProof, () => {}),
+    ).resolves.toEqual({
       ok: true,
       hash: TX_HASH,
     })
@@ -311,23 +340,30 @@ describe('battle writes (GAME-704/705/710/712)', () => {
     })
 
     expect(publicClient.simulateContract).toHaveBeenCalledWith(
-      expect.objectContaining({ functionName: 'finalizeAttack', args: [7n, 3] }),
-    )
-    expect(publicClient.simulateContract).toHaveBeenCalledWith(
-      expect.objectContaining({ functionName: 'retryShotResolution', args: [7n] }),
+      expect.objectContaining({
+        functionName: 'finalizeAttackWithProof',
+        args: [7n, 3, 2n, '0xaa', 0n, '0xbb'],
+      }),
     )
     expect(publicClient.simulateContract).toHaveBeenCalledWith(
       expect.objectContaining({ functionName: 'claimTimeoutWin', args: [7n] }),
     )
   })
 
-  it('finalizeAttack maps a not-ready decryption onto retryable copy', async () => {
+  it('finalizeAttackWithProof maps a not-ready decryption onto retryable copy', async () => {
     const publicClient = makePublicClient({
       simulateContract: vi.fn(async () => {
         throw revertError('DecryptionResultNotReady')
       }),
     })
-    const result = await writeClientFor(publicClient).finalizeAttack!(7n, 3, () => {})
+    const proof = { value: 0n, signature: '0x00' as const }
+    const result = await writeClientFor(publicClient).finalizeAttackWithProof!(
+      7n,
+      3,
+      proof,
+      proof,
+      () => {},
+    )
     expect(result).toEqual({ ok: false, error: 'decryption-not-ready' })
   })
 })
@@ -428,10 +464,12 @@ describe('createBattleshipWriteClient (GAME-503/506/507)', () => {
       hash: TX_HASH,
     })
     await expect(
-      client.finalizeFleetValidation!(7n, CREATOR, () => {}),
-    ).resolves.toEqual({ ok: true, hash: TX_HASH })
-    await expect(
-      client.retryFleetValidation!(7n, CREATOR, () => {}),
+      client.finalizeFleetValidationWithProof!(
+        7n,
+        CREATOR,
+        { value: 1n, signature: '0xcc' },
+        () => {},
+      ),
     ).resolves.toEqual({ ok: true, hash: TX_HASH })
 
     expect(publicClient.simulateContract).toHaveBeenCalledWith(
@@ -443,14 +481,8 @@ describe('createBattleshipWriteClient (GAME-503/506/507)', () => {
     )
     expect(publicClient.simulateContract).toHaveBeenCalledWith(
       expect.objectContaining({
-        functionName: 'finalizeFleetValidation',
-        args: [7n, CREATOR],
-      }),
-    )
-    expect(publicClient.simulateContract).toHaveBeenCalledWith(
-      expect.objectContaining({
-        functionName: 'retryFleetValidation',
-        args: [7n, CREATOR],
+        functionName: 'finalizeFleetValidationWithProof',
+        args: [7n, CREATOR, 1n, '0xcc'],
       }),
     )
   })

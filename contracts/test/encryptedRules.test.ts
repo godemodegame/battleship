@@ -9,8 +9,9 @@ import {
   FLEET_DIAGONAL,
   FLEET_ROW_WRAP,
   encryptFleetAs,
-  advancePastDecryptDelay,
-  pinNextDecryptDelay,
+  fetchDecryptProof,
+  makeValidationReady,
+  makeShotReady,
   startEncryptedMatch,
   playShot,
   parseEvent,
@@ -55,8 +56,8 @@ const TimeoutReason = { PlacementTimeout: 1n } as const
 
 const DAY = 24n * 60n * 60n
 
-// The mock task manager address where the CoFHE network would post decrypt
-// results; used to prove the result channel rejects unauthorized writers.
+// The mock task manager address where decrypt results are published; used to
+// prove the result channel rejects writers without a network signature.
 const TASK_MANAGER_ADDRESS = '0xeA30c4B8b44078Bbf8a6ef5b9f1eC1626C7848D9'
 
 async function joinedFixture() {
@@ -136,7 +137,7 @@ describe('BattleshipGame encrypted rules (Phase 4)', () => {
       const { game, creator, matchId } = await loadFixture(joinedFixture)
       const input = await encryptFleetAs(creator, VALID_FLEET)
       await (await game.connect(creator).submitFleet(matchId, input)).wait()
-      await advancePastDecryptDelay()
+      await makeValidationReady(game, matchId, creator)
       await (await game.finalizeFleetValidation(matchId, creator.address)).wait()
 
       const second = await encryptFleetAs(creator, VALID_FLEET)
@@ -144,22 +145,21 @@ describe('BattleshipGame encrypted rules (Phase 4)', () => {
         .to.be.revertedWithCustomError(game, 'FleetAlreadySubmitted')
     })
 
-    // Cross-account encrypted-input replay (submitting ciphertexts encrypted
-    // for another wallet) is rejected by the CoFHE zk verifier on real
-    // networks: the input proof binds the ciphertext to the sender account
-    // and chain id. The mock environment deploys with input verification
-    // explicitly disabled (MockTaskManager.initialize sets verifierSigner to
-    // zero, and the cofhejs mock signature format does not match the
-    // verifier's raw-ECDSA recovery), so this protocol guarantee cannot be
-    // exercised under mocks and is covered by the Arbitrum Sepolia testnet
-    // regression (GAME-906) instead. docs/cofhe-feasibility-results.md
-    // records this mock limitation.
+    it('rejects ciphertexts encrypted for another wallet (cross-account replay)', async () => {
+      // The input proof binds the ciphertext to the sender account; the new
+      // mock zk verifier signs over the sender exactly like the live one,
+      // so submitting an outsider's inputs from the creator must revert.
+      const { game, creator, outsider, matchId } = await loadFixture(joinedFixture)
+      const stolen = await encryptFleetAs(outsider, VALID_FLEET)
+      await expect(game.connect(creator).submitFleet(matchId, stolen)).to.be.reverted
+    })
   })
 
   describe('fleet validation finalization', () => {
     it('validates two encrypted fleets and starts the match with the invited opponent first', async () => {
       const { game, creator, opponent, matchId } = await loadFixture(bothSubmittedFixture)
-      await advancePastDecryptDelay()
+      await makeValidationReady(game, matchId, creator)
+      await makeValidationReady(game, matchId, opponent)
 
       await expect(game.finalizeFleetValidation(matchId, creator.address))
         .to.emit(game, 'FleetValidated')
@@ -178,10 +178,9 @@ describe('BattleshipGame encrypted rules (Phase 4)', () => {
       expect(match.timeoutState.turnDeadline).to.be.greaterThan(0n)
     })
 
-    it('reverts when the decrypt result is not ready yet', async () => {
+    it('reverts while no decrypt result has been published yet', async () => {
       const { game, creator, matchId } = await loadFixture(joinedFixture)
       const input = await encryptFleetAs(creator, VALID_FLEET)
-      await pinNextDecryptDelay()
       await (await game.connect(creator).submitFleet(matchId, input)).wait()
 
       await expect(game.finalizeFleetValidation(matchId, creator.address))
@@ -218,7 +217,7 @@ describe('BattleshipGame encrypted rules (Phase 4)', () => {
         const { game, creator, matchId } = await loadFixture(joinedFixture)
         const input = await encryptFleetAs(creator, fleet)
         await (await game.connect(creator).submitFleet(matchId, input)).wait()
-        await advancePastDecryptDelay()
+        await makeValidationReady(game, matchId, creator)
 
         await expect(game.finalizeFleetValidation(matchId, creator.address))
           .to.emit(game, 'FleetValidated')
@@ -239,22 +238,21 @@ describe('BattleshipGame encrypted rules (Phase 4)', () => {
       const badReceipt = await badTx.wait()
       const firstRequest = parseEvent(game, badReceipt!, 'FleetValidationRequested')
 
-      await advancePastDecryptDelay()
+      await makeValidationReady(game, matchId, creator)
       await (await game.finalizeFleetValidation(matchId, creator.address)).wait()
 
       const goodInput = await encryptFleetAs(creator, VALID_FLEET)
-      await pinNextDecryptDelay()
       const goodTx = await game.connect(creator).submitFleet(matchId, goodInput)
       const goodReceipt = await goodTx.wait()
       const secondRequest = parseEvent(game, goodReceipt!, 'FleetValidationRequested')
 
-      // The resubmission gets a fresh ciphertext handle: the already-decrypted
+      // The resubmission gets a fresh ciphertext handle: the already-published
       // result of the first (invalid) submission cannot finalize it.
       expect(secondRequest.ctHash).to.not.equal(firstRequest.ctHash)
       await expect(game.finalizeFleetValidation(matchId, creator.address))
         .to.be.revertedWithCustomError(game, 'DecryptionResultNotReady')
 
-      await advancePastDecryptDelay()
+      await makeValidationReady(game, matchId, creator)
       await expect(game.finalizeFleetValidation(matchId, creator.address))
         .to.emit(game, 'FleetValidated')
         .withArgs(matchId, creator.address, true)
@@ -264,25 +262,25 @@ describe('BattleshipGame encrypted rules (Phase 4)', () => {
       const { game, creator, matchId } = await loadFixture(joinedFixture)
       const input = await encryptFleetAs(creator, VALID_FLEET)
       await (await game.connect(creator).submitFleet(matchId, input)).wait()
-      await advancePastDecryptDelay()
+      await makeValidationReady(game, matchId, creator)
       await (await game.finalizeFleetValidation(matchId, creator.address)).wait()
 
       await expect(game.finalizeFleetValidation(matchId, creator.address))
         .to.be.revertedWithCustomError(game, 'NoPendingPlacementValidation')
     })
 
-    it('supports a permissionless validation retry that re-requests the same handle', async () => {
+    it('lets any outsider publish the validation proof and finalize in one transaction', async () => {
       const { game, creator, outsider, matchId } = await loadFixture(joinedFixture)
       const input = await encryptFleetAs(creator, VALID_FLEET)
       const submitReceipt = await (await game.connect(creator).submitFleet(matchId, input)).wait()
       const requested = parseEvent(game, submitReceipt!, 'FleetValidationRequested')
 
-      await expect(game.connect(outsider).retryFleetValidation(matchId, creator.address))
-        .to.emit(game, 'FleetValidationRequested')
-        .withArgs(matchId, creator.address, requested.ctHash)
-
-      await advancePastDecryptDelay()
-      await expect(game.finalizeFleetValidation(matchId, creator.address))
+      const proof = await fetchDecryptProof(requested.ctHash as bigint)
+      await expect(
+        game
+          .connect(outsider)
+          .finalizeFleetValidationWithProof(matchId, creator.address, proof.value, proof.signature),
+      )
         .to.emit(game, 'FleetValidated')
         .withArgs(matchId, creator.address, true)
     })
@@ -293,7 +291,6 @@ describe('BattleshipGame encrypted rules (Phase 4)', () => {
         .to.emit(game, 'MatchCancelled')
         .withArgs(matchId)
 
-      await advancePastDecryptDelay()
       await expect(game.finalizeFleetValidation(matchId, creator.address))
         .to.be.revertedWithCustomError(game, 'InvalidMatchStatus')
     })
@@ -302,7 +299,7 @@ describe('BattleshipGame encrypted rules (Phase 4)', () => {
       const { game, creator, opponent, matchId } = await loadFixture(joinedFixture)
       const input = await encryptFleetAs(creator, VALID_FLEET)
       await (await game.connect(creator).submitFleet(matchId, input)).wait()
-      await advancePastDecryptDelay()
+      await makeValidationReady(game, matchId, creator)
       await (await game.finalizeFleetValidation(matchId, creator.address)).wait()
 
       await time.increase(DAY + 1n)
@@ -338,7 +335,7 @@ describe('BattleshipGame encrypted rules (Phase 4)', () => {
       expect(pending.attacker).to.equal(opponent.address)
       expect(pending.cellIndex).to.equal(99)
 
-      await advancePastDecryptDelay()
+      await makeShotReady(game, matchId)
       const finalizeTx = game.finalizeAttack(matchId, 1n)
       await expect(finalizeTx)
         .to.emit(game, 'ShotResolved')
@@ -415,9 +412,8 @@ describe('BattleshipGame encrypted rules (Phase 4)', () => {
         .to.be.revertedWithCustomError(game, 'InvalidMatchStatus')
     })
 
-    it('reverts finalization before the decrypt results are ready', async () => {
+    it('reverts finalization before the decrypt results are published', async () => {
       const { game, opponent, matchId } = await loadFixture(activeMatchFixture)
-      await pinNextDecryptDelay()
       await (await game.connect(opponent).attack(matchId, 0)).wait()
 
       await expect(game.finalizeAttack(matchId, 1n))
@@ -427,7 +423,7 @@ describe('BattleshipGame encrypted rules (Phase 4)', () => {
     it('rejects a stale or wrong move id during finalization', async () => {
       const { game, opponent, matchId } = await loadFixture(activeMatchFixture)
       await (await game.connect(opponent).attack(matchId, 0)).wait()
-      await advancePastDecryptDelay()
+      await makeShotReady(game, matchId)
 
       await expect(game.finalizeAttack(matchId, 0n))
         .to.be.revertedWithCustomError(game, 'InvalidMoveId')
@@ -443,32 +439,50 @@ describe('BattleshipGame encrypted rules (Phase 4)', () => {
         .to.be.revertedWithCustomError(game, 'InvalidMatchStatus')
     })
 
-    it('rejects forged decrypt results: only the network aggregator can post plaintexts', async () => {
+    it('rejects forged decrypt results: only network-signed plaintexts are accepted', async () => {
       const { game, opponent, outsider, matchId } = await loadFixture(activeMatchFixture)
       const attackReceipt = await (await game.connect(opponent).attack(matchId, 0)).wait()
       const requested = parseEvent(game, attackReceipt!, 'ShotResolutionRequested')
 
+      // Forged via the contract's publish passthrough: a signature from
+      // anyone but the threshold network must revert.
+      const forged = await outsider.signMessage('forged decrypt result')
+      await expect(
+        game
+          .connect(outsider)
+          .finalizeAttackWithProof(matchId, 1n, ShotResult.Win, forged, 10n, forged),
+      ).to.be.reverted
+
+      // Forged directly at the TaskManager: same rejection.
       const taskManager = new ethers.Contract(
         TASK_MANAGER_ADDRESS,
-        ['function handleDecryptResult(uint256 ctHash, uint256 result, address[] requestors)'],
+        ['function publishDecryptResult(uint256 ctHash, uint256 result, bytes signature)'],
         outsider,
       )
       await expect(
-        taskManager.handleDecryptResult(requested.resultCtHash, ShotResult.Win, []),
+        taskManager.publishDecryptResult(requested.resultCtHash, ShotResult.Win, forged),
       ).to.be.reverted
     })
 
-    it('supports a permissionless shot-resolution retry', async () => {
+    it('lets any outsider publish the shot proofs and finalize in one transaction', async () => {
       const { game, opponent, outsider, matchId } = await loadFixture(activeMatchFixture)
       const attackReceipt = await (await game.connect(opponent).attack(matchId, 0)).wait()
       const requested = parseEvent(game, attackReceipt!, 'ShotResolutionRequested')
 
-      await expect(game.connect(outsider).retryShotResolution(matchId))
-        .to.emit(game, 'ShotResolutionRequested')
-        .withArgs(matchId, 1n, requested.resultCtHash, requested.sunkShipCtHash)
-
-      await advancePastDecryptDelay()
-      await expect(game.finalizeAttack(matchId, 1n))
+      const resultProof = await fetchDecryptProof(requested.resultCtHash as bigint)
+      const sunkProof = await fetchDecryptProof(requested.sunkShipCtHash as bigint)
+      await expect(
+        game
+          .connect(outsider)
+          .finalizeAttackWithProof(
+            matchId,
+            1n,
+            resultProof.value,
+            resultProof.signature,
+            sunkProof.value,
+            sunkProof.signature,
+          ),
+      )
         .to.emit(game, 'ShotResolved')
         .withArgs(matchId, 1n, ShotResult.Hit, 0)
     })
@@ -481,7 +495,6 @@ describe('BattleshipGame encrypted rules (Phase 4)', () => {
         .to.emit(game, 'MatchForfeited')
         .withArgs(matchId, creator.address, opponent.address)
 
-      await advancePastDecryptDelay()
       await expect(game.finalizeAttack(matchId, 1n))
         .to.be.revertedWithCustomError(game, 'InvalidMatchStatus')
     })

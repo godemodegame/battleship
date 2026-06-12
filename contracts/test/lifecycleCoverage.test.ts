@@ -4,9 +4,10 @@ import { loadFixture, time } from '@nomicfoundation/hardhat-network-helpers'
 import {
   VALID_FLEET,
   VALID_FLEET_ALT,
-  advancePastDecryptDelay,
   deployEncryptedMatchFixtureBase,
   encryptFleetAs,
+  makeShotReady,
+  makeValidationReady,
   parseEvent,
   playShot,
   startEncryptedMatch,
@@ -247,7 +248,7 @@ describe('BattleshipGame lifecycle coverage (GAME-901)', () => {
         const tx = await game.connect(opponent).attack(matchId, cell)
         const receipt = await tx.wait()
         const submitted = parseEvent(game, receipt!, 'ShotSubmitted')
-        await advancePastDecryptDelay()
+        await makeShotReady(game, matchId)
         lastReceipt = await (await game.finalizeAttack(matchId, submitted.moveId)).wait()
       }
 
@@ -283,7 +284,7 @@ describe('BattleshipGame lifecycle coverage (GAME-901)', () => {
       const opponentInput = await encryptFleetAs(opponent, VALID_FLEET_ALT)
       await (await game.connect(opponent).submitFleet(matchId, opponentInput)).wait()
 
-      await advancePastDecryptDelay()
+      await makeValidationReady(game, matchId, creator)
       await (await game.finalizeFleetValidation(matchId, creator.address)).wait()
 
       // One valid fleet is not enough to start.
@@ -291,6 +292,7 @@ describe('BattleshipGame lifecycle coverage (GAME-901)', () => {
       expect(m.status).to.equal(MatchStatus.ValidatingPlacement)
       expect(m.currentTurn).to.equal(ZERO)
 
+      await makeValidationReady(game, matchId, opponent)
       await expect(game.finalizeFleetValidation(matchId, opponent.address)).to.emit(
         game,
         'MatchStarted',
@@ -303,7 +305,7 @@ describe('BattleshipGame lifecycle coverage (GAME-901)', () => {
       const { game, creator, matchId } = await loadFixture(joinedFixture)
       const input = await encryptFleetAs(creator, VALID_FLEET)
       await (await game.connect(creator).submitFleet(matchId, input)).wait()
-      await advancePastDecryptDelay()
+      await makeValidationReady(game, matchId, creator)
       await (await game.finalizeFleetValidation(matchId, creator.address)).wait()
 
       const [creatorView, opponentView] = await game.getPlayers(matchId)

@@ -33,6 +33,14 @@ import {
   type BattleshipClients,
 } from './client/useBattleshipClients'
 import type { DeploymentResolution } from './deployments'
+import {
+  cofheScopeKey,
+  type CofheMatchClient,
+} from './fhenix/types'
+import {
+  CofheClientFactoryContext,
+  type CofheClientFactory,
+} from './fhenix/useCofheMatchClient'
 import type { HexAddress } from './phaseResolver'
 import type { WalletSession } from './wallet/session'
 import {
@@ -83,6 +91,38 @@ export function connectedWalletValue(
     writeBlockedReason: null,
     balanceStatus: 'ok',
     balance: 10n ** 18n,
+    // Non-null stand-ins so the CoFHE hook builds its config; the actual
+    // CoFHE behavior comes from the fake factory below.
+    publicClient: {} as never,
+    walletClient: {} as never,
+    ...over,
+  })
+}
+
+/**
+ * Deterministic CoFHE stand-in: encryption yields stable dummy `InEuint8`s
+ * and decrypt-proof fetches resolve immediately. Override single members to
+ * script failures.
+ */
+export function makeFakeCofheFactory(
+  over: Partial<CofheMatchClient> = {},
+): CofheClientFactory {
+  return (config) => ({
+    execution: 'worker',
+    scopeKey: cofheScopeKey(config.scope),
+    initialize: async () => {},
+    encryptFleet: async (segments) =>
+      segments.map((segment, index) => ({
+        ctHash: BigInt(segment + index + 1),
+        securityZone: 0,
+        utype: 2,
+        signature: `0x${index.toString(16).padStart(2, '0')}`,
+      })),
+    fetchDecryptProof: async (ctHash) => ({
+      value: ctHash & 0xffn,
+      signature: '0xproof' as `0x${string}`,
+    }),
+    dispose: () => {},
     ...over,
   })
 }
@@ -128,9 +168,9 @@ export interface FakeContract {
   moves: ChainMoveView[]
   pendingShot: ChainPendingShotView | null
   /**
-   * Scripted "encrypted" outcomes consumed by finalizeAttack in order. The
-   * real contract reads these from CoFHE decrypt results; the fake scripts
-   * them so tests stay deterministic.
+   * Scripted "encrypted" outcomes consumed by finalizeAttackWithProof in
+   * order. The real contract derives these from the published decrypt
+   * proofs; the fake scripts them so tests stay deterministic.
    */
   nextResults: Array<{ result: ShotResultName; sunkShipId?: number }>
   readClient: BattleshipReadClient
@@ -235,6 +275,11 @@ export function makeFakeContract(): FakeContract {
       },
       async getPendingShot() {
         return fake.pendingShot ? { ...fake.pendingShot } : null
+      },
+      async getPendingPlacementValidation() {
+        // Route-level tests drive validation through phase flags; a stable
+        // handle is enough for the proof-fetch step.
+        return { validityCtHash: 1n, requestedAt: 0 }
       },
       watchMatch(_matchId: bigint, onEvents: (events: MatchEventRef[]) => void) {
         const key = `w${watcherSeq++}`
@@ -352,6 +397,8 @@ export function makeFakeContract(): FakeContract {
             attacker: account,
             defender,
             cellIndex,
+            resultCtHash: BigInt(moveId * 2 + 1),
+            sunkShipCtHash: BigInt(moveId * 2 + 2),
             submittedAt: nowTs,
           }
           fake.match = {
@@ -364,7 +411,7 @@ export function makeFakeContract(): FakeContract {
           return { ok: true, hash: TX_HASH }
         },
 
-        async finalizeAttack(matchId, moveId, onState) {
+        async finalizeAttackWithProof(matchId, moveId, _result, _sunkShip, onState) {
           walk(onState)
           const m = fake.match
           const pending = fake.pendingShot
@@ -417,15 +464,6 @@ export function makeFakeContract(): FakeContract {
           return { ok: true, hash: TX_HASH }
         },
 
-        async retryShotResolution(matchId, onState) {
-          walk(onState)
-          if (!fake.match || fake.match.matchIdBig !== matchId || !fake.pendingShot) {
-            return { ok: false, error: 'invalid-status' }
-          }
-          fake.emit('ShotResolutionRequested')
-          return { ok: true, hash: TX_HASH }
-        },
-
         async claimTimeoutWin(matchId, onState) {
           walk(onState)
           const m = fake.match
@@ -464,17 +502,25 @@ export interface RenderAppOptions {
   route: string
   wallet: WalletContextValue
   clients?: BattleshipClients | null
+  cofheFactory?: CofheClientFactory
 }
 
 /** Mount the full route tree with wallet + contract-client overrides. */
-export function renderApp({ route, wallet, clients = null }: RenderAppOptions) {
+export function renderApp({
+  route,
+  wallet,
+  clients = null,
+  cofheFactory = makeFakeCofheFactory(),
+}: RenderAppOptions) {
   return render(
     <WalletSessionContext.Provider value={wallet}>
-      <BattleshipClientsOverrideContext.Provider value={clients ? () => clients : null}>
-        <MemoryRouter initialEntries={[route]}>
-          <Routes>{appRoutes}</Routes>
-        </MemoryRouter>
-      </BattleshipClientsOverrideContext.Provider>
+      <CofheClientFactoryContext.Provider value={cofheFactory}>
+        <BattleshipClientsOverrideContext.Provider value={clients ? () => clients : null}>
+          <MemoryRouter initialEntries={[route]}>
+            <Routes>{appRoutes}</Routes>
+          </MemoryRouter>
+        </BattleshipClientsOverrideContext.Provider>
+      </CofheClientFactoryContext.Provider>
     </WalletSessionContext.Provider>,
   )
 }
@@ -486,13 +532,21 @@ export function renderWithProviders(
     wallet,
     clients = null,
     route = '/',
-  }: { wallet: WalletContextValue; clients?: BattleshipClients | null; route?: string },
+    cofheFactory = makeFakeCofheFactory(),
+  }: {
+    wallet: WalletContextValue
+    clients?: BattleshipClients | null
+    route?: string
+    cofheFactory?: CofheClientFactory
+  },
 ) {
   return render(
     <WalletSessionContext.Provider value={wallet}>
-      <BattleshipClientsOverrideContext.Provider value={clients ? () => clients : null}>
-        <MemoryRouter initialEntries={[route]}>{ui}</MemoryRouter>
-      </BattleshipClientsOverrideContext.Provider>
+      <CofheClientFactoryContext.Provider value={cofheFactory}>
+        <BattleshipClientsOverrideContext.Provider value={clients ? () => clients : null}>
+          <MemoryRouter initialEntries={[route]}>{ui}</MemoryRouter>
+        </BattleshipClientsOverrideContext.Provider>
+      </CofheClientFactoryContext.Provider>
     </WalletSessionContext.Provider>,
   )
 }

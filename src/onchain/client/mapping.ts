@@ -92,14 +92,38 @@ export interface ChainMoveView {
   finalized: boolean
 }
 
-/** The match's single unresolved shot from `getPendingShot` (GAME-705). */
+/**
+ * The match's single unresolved shot from `getPendingShot` (GAME-705). The
+ * ctHashes are public ciphertext-handle identifiers: the client fetches their
+ * threshold-network decrypt proofs and publishes them via
+ * `finalizeAttackWithProof`.
+ */
 export interface ChainPendingShotView {
   exists: boolean
   moveId: number
   attacker: HexAddress | null
   defender: HexAddress | null
   cellIndex: number
+  resultCtHash: bigint
+  sunkShipCtHash: bigint
   submittedAt: number
+}
+
+/**
+ * One player's unresolved placement validation from
+ * `getPendingPlacementValidation`. `validityCtHash` is the ebool handle whose
+ * decrypt proof `finalizeFleetValidationWithProof` publishes.
+ */
+export interface PendingPlacementValidationView {
+  validityCtHash: bigint
+  requestedAt: number
+}
+
+/** Structural type of the raw `PendingPlacementValidation` struct. */
+export interface RawPendingPlacementValidation {
+  exists: boolean
+  validityCtHash: bigint
+  requestedAt: bigint
 }
 
 export type PlacementStatusName = (typeof PLACEMENT_STATUS_BY_INDEX)[number]
@@ -257,11 +281,6 @@ export function toChainMoveView(raw: RawMoveView): ChainMoveView {
   }
 }
 
-/**
- * Convert the raw pending-shot struct, dropping the ciphertext handle hashes:
- * they are public handle identifiers the UI has no use for, and omitting them
- * keeps encrypted-adjacent values out of every frontend state object.
- */
 export function toPendingShotView(raw: RawPendingShotView): ChainPendingShotView | null {
   if (!raw.exists) return null
   return {
@@ -270,7 +289,19 @@ export function toPendingShotView(raw: RawPendingShotView): ChainPendingShotView
     attacker: addressOrNull(raw.attacker),
     defender: addressOrNull(raw.defender),
     cellIndex: raw.cellIndex,
+    resultCtHash: raw.resultCtHash,
+    sunkShipCtHash: raw.sunkShipCtHash,
     submittedAt: Number(raw.submittedAt),
+  }
+}
+
+export function toPendingPlacementValidationView(
+  raw: RawPendingPlacementValidation,
+): PendingPlacementValidationView | null {
+  if (!raw.exists) return null
+  return {
+    validityCtHash: raw.validityCtHash,
+    requestedAt: Number(raw.requestedAt),
   }
 }
 

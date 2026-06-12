@@ -4,7 +4,7 @@ import {
   VALID_FLEET,
   VALID_FLEET_ALT,
   encryptFleetAs,
-  advancePastDecryptDelay,
+  makeValidationReady,
   playShot,
   type ShotRecord,
 } from './helpers/encryptedFleet'
@@ -47,8 +47,9 @@ describe('full match gas benchmark (GAME-411)', function () {
     const opponentInput = await encryptFleetAs(opponent, VALID_FLEET_ALT)
     const submitOpponent = await (await game.connect(opponent).submitFleet(matchId, opponentInput)).wait()
 
-    await advancePastDecryptDelay()
+    await makeValidationReady(game, matchId, creator)
     const finalizeCreator = await (await game.finalizeFleetValidation(matchId, creator.address)).wait()
+    await makeValidationReady(game, matchId, opponent)
     const finalizeOpponent = await (await game.finalizeFleetValidation(matchId, opponent.address)).wait()
 
     // The opponent hunts the creator's fleet, deliberately missing after

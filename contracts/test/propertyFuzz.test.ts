@@ -2,8 +2,9 @@ import { expect } from 'chai'
 import { ethers } from 'hardhat'
 import {
   SHIP_LENGTHS,
-  advancePastDecryptDelay,
   encryptFleetAs,
+  makeShotReady,
+  makeValidationReady,
   parseEvent,
 } from './helpers/encryptedFleet'
 
@@ -199,7 +200,7 @@ describe('BattleshipGame property fuzz (GAME-902)', function () {
       await (await game.connect(opponent).joinMatch(matchId)).wait()
       const input = await encryptFleetAs(creator, fleet)
       await (await game.connect(creator).submitFleet(matchId, input)).wait()
-      await advancePastDecryptDelay()
+      await makeValidationReady(game, matchId, creator)
       await expect(
         game.finalizeFleetValidation(matchId, creator.address),
         `random valid fleet round ${round}: [${fleet.join(',')}]`,
@@ -226,7 +227,7 @@ describe('BattleshipGame property fuzz (GAME-902)', function () {
       await (await game.connect(opponent).joinMatch(matchId)).wait()
       const input = await encryptFleetAs(creator, fleet)
       await (await game.connect(creator).submitFleet(matchId, input)).wait()
-      await advancePastDecryptDelay()
+      await makeValidationReady(game, matchId, creator)
       await expect(
         game.finalizeFleetValidation(matchId, creator.address),
         `${mutation.label}: [${fleet.join(',')}]`,
@@ -252,8 +253,9 @@ describe('BattleshipGame property fuzz (GAME-902)', function () {
     await (await game.connect(creator).submitFleet(matchId, creatorInput)).wait()
     const opponentInput = await encryptFleetAs(opponent, opponentFleet)
     await (await game.connect(opponent).submitFleet(matchId, opponentInput)).wait()
-    await advancePastDecryptDelay()
+    await makeValidationReady(game, matchId, creator)
     await (await game.finalizeFleetValidation(matchId, creator.address)).wait()
+    await makeValidationReady(game, matchId, opponent)
     await (await game.finalizeFleetValidation(matchId, opponent.address)).wait()
 
     const signers = { [creator.address]: creator, [opponent.address]: opponent }
@@ -307,7 +309,7 @@ describe('BattleshipGame property fuzz (GAME-902)', function () {
       moveCount += 1
       expect(submitted.moveId).to.equal(BigInt(moveCount))
 
-      await advancePastDecryptDelay()
+      await makeShotReady(game, matchId)
       const finalizeReceipt = await (await game.finalizeAttack(matchId, moveCount)).wait()
       const resolved = parseEvent(game, finalizeReceipt!, 'ShotResolved')
 

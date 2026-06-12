@@ -99,6 +99,9 @@ export default defineConfig(({ mode }) => {
           manualChunks(id: string) {
             if (!id.includes('node_modules')) return undefined
             if (/node_modules\/(three|@react-three|maath)\//.test(id)) return 'three'
+            // The CoFHE SDK and its tfhe wasm glue load only with the
+            // encrypted placement/battle panels.
+            if (/node_modules\/(@cofhe|tfhe)\//.test(id)) return 'cofhe'
             if (/node_modules\/viem\//.test(id)) return 'viem'
             if (
               /node_modules\/(react|react-dom|react-router|react-router-dom|scheduler)\//.test(

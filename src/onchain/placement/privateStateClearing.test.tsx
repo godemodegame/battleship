@@ -11,10 +11,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { BattleshipWriteClient } from '../client/battleshipClient'
 import type { ChainMatchView } from '../client/mapping'
 import {
-  CofheEncryptorFactoryContext,
-  type CofheEncryptorFactory,
-} from '../fhenix/useCofheFleetClient'
-import { cofheScopeKey, type CofheFleetEncryptor } from '../fhenix/types'
+  CofheClientFactoryContext,
+  type CofheClientFactory,
+} from '../fhenix/useCofheMatchClient'
+import { cofheScopeKey, type CofheMatchClient } from '../fhenix/types'
 import type { MatchPhase } from '../phaseResolver'
 import {
   connectedWalletValue,
@@ -61,12 +61,13 @@ function matchView(over: Partial<ChainMatchView> = {}): ChainMatchView {
 
 const disposed: string[] = []
 
-const factory: CofheEncryptorFactory = (config) => {
-  const client: CofheFleetEncryptor = {
+const factory: CofheClientFactory = (config) => {
+  const client: CofheMatchClient = {
     execution: 'worker',
     scopeKey: cofheScopeKey(config.scope),
     initialize: vi.fn(async () => {}),
     encryptFleet: vi.fn(),
+    fetchDecryptProof: vi.fn(),
     dispose: () => disposed.push(cofheScopeKey(config.scope)),
   }
   return client
@@ -79,15 +80,16 @@ const writeClientStub = {
 
 function mount(wallet: WalletContextValue, match: ChainMatchView) {
   return render(
-    <CofheEncryptorFactoryContext.Provider value={factory}>
+    <CofheClientFactoryContext.Provider value={factory}>
       <EncryptedFleetPanel
         phase={PHASE}
         match={match}
+        readClient={null}
         writeClient={writeClientStub}
         wallet={wallet}
         onRefetch={() => {}}
       />
-    </CofheEncryptorFactoryContext.Provider>,
+    </CofheClientFactoryContext.Provider>,
   )
 }
 
@@ -97,15 +99,16 @@ function rerenderWith(
   match: ChainMatchView,
 ) {
   view.rerender(
-    <CofheEncryptorFactoryContext.Provider value={factory}>
+    <CofheClientFactoryContext.Provider value={factory}>
       <EncryptedFleetPanel
         phase={PHASE}
         match={match}
+        readClient={null}
         writeClient={writeClientStub}
         wallet={wallet}
         onRefetch={() => {}}
       />
-    </CofheEncryptorFactoryContext.Provider>,
+    </CofheClientFactoryContext.Provider>,
   )
 }
 

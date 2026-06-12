@@ -3,8 +3,9 @@
  *
  * Renders the viewer's battle from authoritative contract reads only: the
  * decoded public boards, finalized move history, turn-gated target selection,
- * the `attack` transaction, and the pending-shot resolving state with its
- * permissionless `finalizeAttack` / `retryShotResolution` recovery actions.
+ * the `attack` transaction, and the pending-shot resolving state. Resolution
+ * fetches the threshold-network decrypt proofs for the pending shot and
+ * publishes them through the permissionless `finalizeAttackWithProof`.
  *
  * The frontend never computes hit, sunk, winner, or turn changes — every
  * board cell and result shown here was finalized by the contract, and an
@@ -15,6 +16,7 @@
 import { useMemo, useState } from 'react'
 import { cellLabel } from '../../game/constants'
 import { battleCopy } from '../../copy/en'
+import { errorMessage, type ErrorCode } from '../../copy/errors'
 import { sfx } from '../../lib/sfx'
 import { haptics } from '../../lib/haptics'
 import type { BattleshipWriteClient } from '../client/battleshipClient'
@@ -25,6 +27,8 @@ import type { WalletContextValue } from '../wallet/WalletSessionContext'
 import { TxStatusLine } from '../match/TxStatusLine'
 import { pendingTxScope } from '../client/pendingTxStore'
 import { useTrackedWrite } from '../client/useTrackedWrite'
+import type { CofheScope } from '../fhenix/types'
+import { useCofheMatchClient } from '../fhenix/useCofheMatchClient'
 import { BattleGrid } from './BattleGrid'
 import { buildPublicBattleModel, TOTAL_SHIPS } from './publicBattleModel'
 import { useShotFx, type ShotFx } from './useShotFx'
@@ -114,12 +118,39 @@ export function OnchainBattlePanel({
   const resolveWrite = useTrackedWrite(txScope('resolve'))
   const forfeitWrite = useTrackedWrite(txScope('forfeit'))
   const timeoutWrite = useTrackedWrite(txScope('timeout'))
+  const [fetchingProof, setFetchingProof] = useState(false)
+  const [proofError, setProofError] = useState<ErrorCode | null>(null)
   const fx = useShotFx(match, viewer)
 
   const model = useMemo(
     () => (viewer ? buildPublicBattleModel(match, viewer, selectedCell) : null),
     [match, viewer, selectedCell],
   )
+
+  // The CoFHE session fetches the pending shot's decrypt proofs; it is only
+  // needed while a shot is unresolved.
+  const chainId = wallet.session.chainId
+  const cofheScope = useMemo<CofheScope | null>(
+    () =>
+      viewer && chainId
+        ? {
+            address: viewer,
+            chainId,
+            deploymentId: match.deploymentId,
+            matchId: match.matchIdBig,
+          }
+        : null,
+    [viewer, chainId, match.deploymentId, match.matchIdBig],
+  )
+  const cofhe = useCofheMatchClient({
+    enabled:
+      phase.kind === 'resolving' &&
+      wallet.canWrite &&
+      Boolean(writeClient?.finalizeAttackWithProof),
+    scope: cofheScope,
+    publicClient: wallet.publicClient,
+    walletClient: wallet.walletClient,
+  })
 
   // The phase resolver routes non-participants away from the battle phase;
   // this guard only covers a missing players read.
@@ -134,7 +165,11 @@ export function OnchainBattlePanel({
   const resolving = phase.kind === 'resolving'
   const isMyTurn = phase.kind === 'battle' && phase.isMyTurn
   const busy =
-    attackWrite.busy || resolveWrite.busy || forfeitWrite.busy || timeoutWrite.busy
+    fetchingProof ||
+    attackWrite.busy ||
+    resolveWrite.busy ||
+    forfeitWrite.busy ||
+    timeoutWrite.busy
   const canFire =
     isMyTurn &&
     selectedCell !== null &&
@@ -168,15 +203,47 @@ export function OnchainBattlePanel({
     }
   }
 
-  async function resolveAction(action: 'finalize' | 'retry') {
-    if (!writeClient || !wallet.canWrite) return
-    const moveId = match.pendingShot?.moveId ?? match.pendingMoveId
+  /**
+   * Fetch both decrypt proofs for the pending shot and publish them through
+   * `finalizeAttackWithProof`. Re-running after a failure is the recovery
+   * path — proof fetches and the publish are re-entrant.
+   */
+  async function finalizeShot() {
+    const pending = match.pendingShot
+    if (!writeClient?.finalizeAttackWithProof || !wallet.canWrite || !cofhe.client) return
+    if (!pending) {
+      // The authoritative read lost the pending shot (already finalized or
+      // stale view) — refetch instead of guessing ctHashes.
+      onRefetch()
+      return
+    }
+
     resolveWrite.reset()
+    setProofError(null)
+    setFetchingProof(true)
+    let resultProof: Awaited<ReturnType<typeof cofhe.client.fetchDecryptProof>>
+    let sunkShipProof: Awaited<ReturnType<typeof cofhe.client.fetchDecryptProof>>
+    try {
+      ;[resultProof, sunkShipProof] = await Promise.all([
+        cofhe.client.fetchDecryptProof(pending.resultCtHash),
+        cofhe.client.fetchDecryptProof(pending.sunkShipCtHash),
+      ])
+    } catch {
+      setProofError('proof-unavailable')
+      return
+    } finally {
+      setFetchingProof(false)
+    }
+
     wallet.actions.prepareHandoff()
     const result = await resolveWrite.run((onState) =>
-      action === 'finalize'
-        ? writeClient.finalizeAttack!(match.matchIdBig, moveId, onState)
-        : writeClient.retryShotResolution!(match.matchIdBig, onState),
+      writeClient.finalizeAttackWithProof!(
+        match.matchIdBig,
+        pending.moveId,
+        resultProof,
+        sunkShipProof,
+        onState,
+      ),
     )
     if (result?.ok) onRefetch()
   }
@@ -242,19 +309,36 @@ export function OnchainBattlePanel({
           <button
             className="btn primary wide"
             data-testid="finalize-shot"
-            disabled={busy || !wallet.canWrite || !writeClient?.finalizeAttack}
-            onClick={() => void resolveAction('finalize')}
+            disabled={
+              busy ||
+              !wallet.canWrite ||
+              !writeClient?.finalizeAttackWithProof ||
+              cofhe.status !== 'ready'
+            }
+            onClick={() => void finalizeShot()}
           >
             {battleCopy.finalizeShot}
           </button>
-          <button
-            className="btn small"
-            data-testid="retry-shot-resolution"
-            disabled={busy || !wallet.canWrite || !writeClient?.retryShotResolution}
-            onClick={() => void resolveAction('retry')}
-          >
-            {battleCopy.retryResolution}
-          </button>
+          {cofhe.status === 'initializing' && (
+            <p className="status-sub" data-testid="cofhe-initializing">
+              {battleCopy.preparingCofhe}
+            </p>
+          )}
+          {cofhe.status === 'error' && (
+            <p className="error-note" role="alert">
+              {errorMessage('proof-unavailable')}
+            </p>
+          )}
+          {fetchingProof && (
+            <p className="status-sub" data-testid="proof-fetching" role="status">
+              {battleCopy.fetchingProof}
+            </p>
+          )}
+          {proofError && (
+            <p className="error-note" role="alert" data-testid="proof-error">
+              {errorMessage(proofError)}
+            </p>
+          )}
           <TxStatusLine state={resolveWrite.state} onRetry={resolveWrite.reset} />
         </div>
       )}

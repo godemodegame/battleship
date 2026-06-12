@@ -4,7 +4,8 @@ import { loadFixture } from '@nomicfoundation/hardhat-network-helpers'
 import { FunctionFragment } from 'ethers'
 import {
   VALID_FLEET,
-  advancePastDecryptDelay,
+  makeValidationReady,
+  makeShotReady,
   deployEncryptedMatchFixtureBase,
   parseEvent,
   encryptFleetAs,
@@ -38,10 +39,10 @@ const ALLOWED_FUNCTIONS = [
   'claimTimeoutWin',
   'submitFleet',
   'finalizeFleetValidation',
-  'retryFleetValidation',
+  'finalizeFleetValidationWithProof',
   'attack',
   'finalizeAttack',
-  'retryShotResolution',
+  'finalizeAttackWithProof',
   // reads
   'nextMatchId',
   'getMatch',
@@ -51,6 +52,7 @@ const ALLOWED_FUNCTIONS = [
   'getMove',
   'getMoveHistory',
   'getPendingShot',
+  'getPendingPlacementValidation',
 ] as const
 
 const ALLOWED_EVENTS = [
@@ -144,11 +146,11 @@ describe('BattleshipGame fleet privacy surfaces (GAME-904)', () => {
     // leak (cell index 0..99 or bool 0/1) would be a tiny integer.
     expect(requested.ctHash as bigint).to.be.greaterThan(2n ** 64n)
 
-    await advancePastDecryptDelay()
+    await makeValidationReady(game, matchId, creator)
     await (await game.finalizeFleetValidation(matchId, creator.address)).wait()
     const opponentInput = await encryptFleetAs(opponent, VALID_FLEET)
     await (await game.connect(opponent).submitFleet(matchId, opponentInput)).wait()
-    await advancePastDecryptDelay()
+    await makeValidationReady(game, matchId, opponent)
     await (await game.finalizeFleetValidation(matchId, opponent.address)).wait()
 
     const attackReceipt = await (await game.connect(opponent).attack(matchId, 50)).wait()
@@ -169,7 +171,7 @@ describe('BattleshipGame fleet privacy surfaces (GAME-904)', () => {
     for (const cell of [VALID_FLEET[0], 9]) {
       const attackReceipt = await (await game.connect(opponent).attack(matchId, cell)).wait()
       const submitted = parseEvent(game, attackReceipt!, 'ShotSubmitted')
-      await advancePastDecryptDelay()
+      await makeShotReady(game, matchId)
       const finalizeReceipt = await (
         await game.finalizeAttack(matchId, submitted.moveId)
       ).wait()
@@ -192,7 +194,7 @@ describe('BattleshipGame fleet privacy surfaces (GAME-904)', () => {
       await game.connect(opponent).attack(matchId, VALID_FLEET[0])
     ).wait()
     const submitted = parseEvent(game, attackReceipt!, 'ShotSubmitted')
-    await advancePastDecryptDelay()
+    await makeShotReady(game, matchId)
     await (await game.finalizeAttack(matchId, submitted.moveId)).wait()
 
     const [creatorView] = await game.getPlayers(matchId)
