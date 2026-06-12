@@ -1,36 +1,717 @@
 {
   "schemaVersion": 1,
-  "checkedAt": "2026-06-12T06:22:04.593Z",
+  "checkedAt": "2026-06-12T07:26:52.016Z",
   "chainId": 421614,
-  "deploymentId": "arb-sepolia-staging-v1",
-  "contractAddress": "0xEEdadE604431277779e5B8C58b390795eef0486b",
-  "status": "failed",
+  "deploymentId": "arb-sepolia-staging-v2",
+  "contractAddress": "0xe1C0D99d2e8b410538710C902CbD3Ee6637e9D94",
+  "status": "passed",
   "creator": "0xAB3ed31F47F5Fd28E356a2B2FC6268C1Ec4c3910",
   "opponent": "0xc4554EBcDf976e9Cda9B97081b3c115d55B01966",
   "cofhe": {
-    "creatorEncryptMs": 8066
+    "creatorEncryptMs": 8606,
+    "opponentEncryptMs": 7219,
+    "creatorValidationReadyMs": 1074,
+    "opponentValidationReadyMs": 996
   },
   "transactions": [
     {
       "action": "createMatch",
       "player": "0xAB3ed31F47F5Fd28E356a2B2FC6268C1Ec4c3910",
-      "hash": "0x25fb31765155537fef8b6319a4db2214f498be39cd363eb197eae23524340cf0",
-      "gasUsed": "226582",
-      "gasPriceWei": "20108000",
-      "feeWei": "4556110856000",
-      "walletToReceiptMs": 3440
+      "hash": "0x4094bdbf5f165935cf3fc497252af5ebebb53e2f7c080c52a01dcc477dcb2b37",
+      "gasUsed": "236176",
+      "gasPriceWei": "20170000",
+      "feeWei": "4763669920000",
+      "walletToReceiptMs": 7356
     },
     {
       "action": "joinMatch",
       "player": "0xc4554EBcDf976e9Cda9B97081b3c115d55B01966",
-      "hash": "0x87da7b24f536b9c9c57f48899473083f53956d4bad28c8a6281ef2e7db843dab",
-      "gasUsed": "127927",
-      "gasPriceWei": "20140000",
-      "feeWei": "2576449780000",
-      "walletToReceiptMs": 3490
+      "hash": "0xb34af1b52a11b12c7e05a182ff1b10ade5effb09464e273d671e513ae31a1c67",
+      "gasUsed": "137530",
+      "gasPriceWei": "20032000",
+      "feeWei": "2755000960000",
+      "walletToReceiptMs": 8390
+    },
+    {
+      "action": "submitFleet (creator)",
+      "player": "0xAB3ed31F47F5Fd28E356a2B2FC6268C1Ec4c3910",
+      "hash": "0xc765d0c43fb364bdb8e0898d911e2a99d02f8b5a8c04ace549f81d362293a47c",
+      "gasUsed": "5286853",
+      "gasPriceWei": "20074000",
+      "feeWei": "106128287122000",
+      "walletToReceiptMs": 8379
+    },
+    {
+      "action": "submitFleet (opponent)",
+      "player": "0xc4554EBcDf976e9Cda9B97081b3c115d55B01966",
+      "hash": "0x4f2133b7f9568053c963cde3a8f60b636cbcf5f93b2042e7bbd8b100e8bdc2be",
+      "gasUsed": "5207553",
+      "gasPriceWei": "20000000",
+      "feeWei": "104151060000000",
+      "walletToReceiptMs": 9874
+    },
+    {
+      "action": "finalizeFleetValidationWithProof (creator)",
+      "player": "0xAB3ed31F47F5Fd28E356a2B2FC6268C1Ec4c3910",
+      "hash": "0x703fd83708f887c93315f7f6f334cbabf0f50bb564156ecb6aea34ffca6815cd",
+      "gasUsed": "159335",
+      "gasPriceWei": "20032000",
+      "feeWei": "3191798720000",
+      "walletToReceiptMs": 6989
+    },
+    {
+      "action": "finalizeFleetValidationWithProof (opponent)",
+      "player": "0xAB3ed31F47F5Fd28E356a2B2FC6268C1Ec4c3910",
+      "hash": "0xa6f83e68ece3ad2905a509c04987f31ae0d81e905af4ee5689e6289c7396e377",
+      "gasUsed": "197994",
+      "gasPriceWei": "20098000",
+      "feeWei": "3979283412000",
+      "walletToReceiptMs": 7643
+    },
+    {
+      "action": "attack #1 cell 99",
+      "player": "0xc4554EBcDf976e9Cda9B97081b3c115d55B01966",
+      "hash": "0x79f9d1299c440a9283bceed9ec3c1e8ab7e7b614a8fb9eb2eaf3b983c94c1d55",
+      "gasUsed": "4140321",
+      "gasPriceWei": "20060000",
+      "feeWei": "83054839260000",
+      "walletToReceiptMs": 7753
+    },
+    {
+      "action": "finalizeAttackWithProof #1",
+      "player": "0xAB3ed31F47F5Fd28E356a2B2FC6268C1Ec4c3910",
+      "hash": "0x3cbc627259200b3150e5800b2a1ae52de7b362cde560dd22555ff976dc947691",
+      "gasUsed": "230236",
+      "gasPriceWei": "20014000",
+      "feeWei": "4607943304000",
+      "walletToReceiptMs": 6982
+    },
+    {
+      "action": "attack #2 cell 99",
+      "player": "0xAB3ed31F47F5Fd28E356a2B2FC6268C1Ec4c3910",
+      "hash": "0x0db4a77bb1e53ae5eddf66a2a5def04c39a862c26f7018157c089c0df267c872",
+      "gasUsed": "4125421",
+      "gasPriceWei": "20032000",
+      "feeWei": "82640433472000",
+      "walletToReceiptMs": 7309
+    },
+    {
+      "action": "finalizeAttackWithProof #2",
+      "player": "0xAB3ed31F47F5Fd28E356a2B2FC6268C1Ec4c3910",
+      "hash": "0x3c6e1db76545e69d2b5583e1b628d3a652dae97f8c153c105762514eab0635dc",
+      "gasUsed": "232611",
+      "gasPriceWei": "20000000",
+      "feeWei": "4652220000000",
+      "walletToReceiptMs": 7811
+    },
+    {
+      "action": "attack #3 cell 0",
+      "player": "0xc4554EBcDf976e9Cda9B97081b3c115d55B01966",
+      "hash": "0xd4f320a9eced5204432024c9da62b26a8e0c0c97dc39e2d83e8381137a7005cf",
+      "gasUsed": "4121438",
+      "gasPriceWei": "20020000",
+      "feeWei": "82511188760000",
+      "walletToReceiptMs": 7536
+    },
+    {
+      "action": "finalizeAttackWithProof #3",
+      "player": "0xAB3ed31F47F5Fd28E356a2B2FC6268C1Ec4c3910",
+      "hash": "0xe5aebb4f2797cf141841201dda17143decb44d5877e2f76cf9f59e210c76b1be",
+      "gasUsed": "241120",
+      "gasPriceWei": "20004000",
+      "feeWei": "4823364480000",
+      "walletToReceiptMs": 2603
+    },
+    {
+      "action": "attack #4 cell 1",
+      "player": "0xc4554EBcDf976e9Cda9B97081b3c115d55B01966",
+      "hash": "0x63620ca64b90c1f29a265b9579cb3b9762f86ad06289bcb0154f0b7022baa8f4",
+      "gasUsed": "4121460",
+      "gasPriceWei": "20000000",
+      "feeWei": "82429200000000",
+      "walletToReceiptMs": 7239
+    },
+    {
+      "action": "finalizeAttackWithProof #4",
+      "player": "0xAB3ed31F47F5Fd28E356a2B2FC6268C1Ec4c3910",
+      "hash": "0x84b9a2f6a810f4c75b5483ba15e6d02a93fdc416e4a631c9d500a4b438f6ef93",
+      "gasUsed": "223969",
+      "gasPriceWei": "20144000",
+      "feeWei": "4511631536000",
+      "walletToReceiptMs": 7117
+    },
+    {
+      "action": "attack #5 cell 2",
+      "player": "0xc4554EBcDf976e9Cda9B97081b3c115d55B01966",
+      "hash": "0xe70bcf08927f39e97f50decf556cdb62eaea649f466d3b7827e09a9b540758c6",
+      "gasUsed": "4121507",
+      "gasPriceWei": "20000000",
+      "feeWei": "82430140000000",
+      "walletToReceiptMs": 7321
+    },
+    {
+      "action": "finalizeAttackWithProof #5",
+      "player": "0xAB3ed31F47F5Fd28E356a2B2FC6268C1Ec4c3910",
+      "hash": "0xef3e2a35a5044773228f936b43e944556499e3ea89de7bc03a8014bafca1ee60",
+      "gasUsed": "223846",
+      "gasPriceWei": "20026000",
+      "feeWei": "4482739996000",
+      "walletToReceiptMs": 3052
+    },
+    {
+      "action": "attack #6 cell 3",
+      "player": "0xc4554EBcDf976e9Cda9B97081b3c115d55B01966",
+      "hash": "0x7088f3deaaedc23156214f9527f69d390af09c94cac6e63f38da409a37ccadaf",
+      "gasUsed": "4121460",
+      "gasPriceWei": "20100000",
+      "feeWei": "82841346000000",
+      "walletToReceiptMs": 7540
+    },
+    {
+      "action": "finalizeAttackWithProof #6",
+      "player": "0xAB3ed31F47F5Fd28E356a2B2FC6268C1Ec4c3910",
+      "hash": "0x91e07725bafcd3bf543e9e617e7b0cc30efd061e1f448b6ac0501c5e8139eb44",
+      "gasUsed": "243918",
+      "gasPriceWei": "20138000",
+      "feeWei": "4912020684000",
+      "walletToReceiptMs": 7196
+    },
+    {
+      "action": "attack #7 cell 20",
+      "player": "0xc4554EBcDf976e9Cda9B97081b3c115d55B01966",
+      "hash": "0x92c68b8d3119c3be614a677548487a3d284a256898560bf66f963eee61371f50",
+      "gasUsed": "4125493",
+      "gasPriceWei": "20030000",
+      "feeWei": "82633624790000",
+      "walletToReceiptMs": 7505
+    },
+    {
+      "action": "finalizeAttackWithProof #7",
+      "player": "0xAB3ed31F47F5Fd28E356a2B2FC6268C1Ec4c3910",
+      "hash": "0xf83e85841b7ad850d700b2152d551e391e1786d7f5a7c7bc8636d8175e0b151c",
+      "gasUsed": "223879",
+      "gasPriceWei": "20082000",
+      "feeWei": "4495938078000",
+      "walletToReceiptMs": 2821
+    },
+    {
+      "action": "attack #8 cell 21",
+      "player": "0xc4554EBcDf976e9Cda9B97081b3c115d55B01966",
+      "hash": "0xdb0c68e435ac2dbd4aae669a192d07ffb014ba2fc53160fe06e67bd435764041",
+      "gasUsed": "4125463",
+      "gasPriceWei": "20094000",
+      "feeWei": "82897053522000",
+      "walletToReceiptMs": 7148
+    },
+    {
+      "action": "finalizeAttackWithProof #8",
+      "player": "0xAB3ed31F47F5Fd28E356a2B2FC6268C1Ec4c3910",
+      "hash": "0xd7689dfd35d89f2ab9689a85cea9b0d05dfa12d67be176364de74463f1fd5cd8",
+      "gasUsed": "223948",
+      "gasPriceWei": "20076000",
+      "feeWei": "4495980048000",
+      "walletToReceiptMs": 3071
+    },
+    {
+      "action": "attack #9 cell 22",
+      "player": "0xc4554EBcDf976e9Cda9B97081b3c115d55B01966",
+      "hash": "0x6d8529965e2275605b4057abff5fda338acb416df908110c678adbb659e6d920",
+      "gasUsed": "4125490",
+      "gasPriceWei": "20036000",
+      "feeWei": "82658317640000",
+      "walletToReceiptMs": 2873
+    },
+    {
+      "action": "finalizeAttackWithProof #9",
+      "player": "0xAB3ed31F47F5Fd28E356a2B2FC6268C1Ec4c3910",
+      "hash": "0xa16465a4f659369cb5add00a79923a3d53c2b0059c315c02ddc7d4f5754c24e2",
+      "gasUsed": "280158",
+      "gasPriceWei": "20000000",
+      "feeWei": "5603160000000",
+      "walletToReceiptMs": 3583
+    },
+    {
+      "action": "attack #10 cell 40",
+      "player": "0xc4554EBcDf976e9Cda9B97081b3c115d55B01966",
+      "hash": "0x9e6fc9115d7ba0184acde6dbe2d354657089376d3cfa3110abec2ee044697c65",
+      "gasUsed": "4141982",
+      "gasPriceWei": "20000000",
+      "feeWei": "82839640000000",
+      "walletToReceiptMs": 2581
+    },
+    {
+      "action": "finalizeAttackWithProof #10",
+      "player": "0xAB3ed31F47F5Fd28E356a2B2FC6268C1Ec4c3910",
+      "hash": "0xf5f44d618ae804200d87889b78a2161be74a81de2bc43d122cfa8adeba1c1d91",
+      "gasUsed": "258677",
+      "gasPriceWei": "20122000",
+      "feeWei": "5205098594000",
+      "walletToReceiptMs": 2650
+    },
+    {
+      "action": "attack #11 cell 41",
+      "player": "0xc4554EBcDf976e9Cda9B97081b3c115d55B01966",
+      "hash": "0xbf574e16adea34f619a368a038180b603182f790c25342bf9d2de147e5e6c5d7",
+      "gasUsed": "4141905",
+      "gasPriceWei": "20060000",
+      "feeWei": "83086614300000",
+      "walletToReceiptMs": 7570
+    },
+    {
+      "action": "finalizeAttackWithProof #11",
+      "player": "0xAB3ed31F47F5Fd28E356a2B2FC6268C1Ec4c3910",
+      "hash": "0x1bd27aaa93ae387f233a8edc99c70c29b1fecce829f90dec5e60aac7e835ea7e",
+      "gasUsed": "260352",
+      "gasPriceWei": "20072000",
+      "feeWei": "5225785344000",
+      "walletToReceiptMs": 3083
+    },
+    {
+      "action": "attack #12 cell 42",
+      "player": "0xc4554EBcDf976e9Cda9B97081b3c115d55B01966",
+      "hash": "0x148b4c2b72fd7a4ef042587c9f7e616d8e34dd6cf726d8fae30c492069f3e4d7",
+      "gasUsed": "4141813",
+      "gasPriceWei": "20132000",
+      "feeWei": "83382979316000",
+      "walletToReceiptMs": 7620
+    },
+    {
+      "action": "finalizeAttackWithProof #12",
+      "player": "0xAB3ed31F47F5Fd28E356a2B2FC6268C1Ec4c3910",
+      "hash": "0xe282162f84e17cdc5b0740770afcbbdfb9e08f0e0c5584c1e7a62a45fa5167a4",
+      "gasUsed": "280595",
+      "gasPriceWei": "20000000",
+      "feeWei": "5611900000000",
+      "walletToReceiptMs": 3223
+    },
+    {
+      "action": "attack #13 cell 60",
+      "player": "0xc4554EBcDf976e9Cda9B97081b3c115d55B01966",
+      "hash": "0x29d427de454741d9212a35817b10e121bb9805cd37e4a61fe722c466c1d46c21",
+      "gasUsed": "4141982",
+      "gasPriceWei": "20000000",
+      "feeWei": "82839640000000",
+      "walletToReceiptMs": 7469
+    },
+    {
+      "action": "finalizeAttackWithProof #13",
+      "player": "0xAB3ed31F47F5Fd28E356a2B2FC6268C1Ec4c3910",
+      "hash": "0xe01a21ac475c9030bee0ab3f903e70c4e80fde56e95a7ce598ef922b6f52cdce",
+      "gasUsed": "258798",
+      "gasPriceWei": "20082000",
+      "feeWei": "5197181436000",
+      "walletToReceiptMs": 7142
+    },
+    {
+      "action": "attack #14 cell 61",
+      "player": "0xc4554EBcDf976e9Cda9B97081b3c115d55B01966",
+      "hash": "0x30bed4d7e7c9ce46fd26aa4caae378d7c711c7ffd925412240c54aeff4c94855",
+      "gasUsed": "4141833",
+      "gasPriceWei": "20116000",
+      "feeWei": "83317112628000",
+      "walletToReceiptMs": 7885
+    },
+    {
+      "action": "finalizeAttackWithProof #14",
+      "player": "0xAB3ed31F47F5Fd28E356a2B2FC6268C1Ec4c3910",
+      "hash": "0x12225a780897473df799338eb9383aca4ce1d6f056d7831104c75b9341351190",
+      "gasUsed": "279952",
+      "gasPriceWei": "20078000",
+      "feeWei": "5620876256000",
+      "walletToReceiptMs": 2896
+    },
+    {
+      "action": "attack #15 cell 80",
+      "player": "0xc4554EBcDf976e9Cda9B97081b3c115d55B01966",
+      "hash": "0x4309240329553be551b0bb3ae073109bf49118a3b5b6354c16bd1b8c5d82013b",
+      "gasUsed": "4141982",
+      "gasPriceWei": "20000000",
+      "feeWei": "82839640000000",
+      "walletToReceiptMs": 7586
+    },
+    {
+      "action": "finalizeAttackWithProof #15",
+      "player": "0xAB3ed31F47F5Fd28E356a2B2FC6268C1Ec4c3910",
+      "hash": "0x3706152f71d5d3b387c7556015cda820b8b408fc81221ec5de1686ac87300ea5",
+      "gasUsed": "260274",
+      "gasPriceWei": "20108000",
+      "feeWei": "5233589592000",
+      "walletToReceiptMs": 7007
+    },
+    {
+      "action": "attack #16 cell 81",
+      "player": "0xc4554EBcDf976e9Cda9B97081b3c115d55B01966",
+      "hash": "0x8fa863d0d99c580d4dfd5f10952406d71496375c727e7a23f00e5e6e487d7fc3",
+      "gasUsed": "4141982",
+      "gasPriceWei": "20000000",
+      "feeWei": "82839640000000",
+      "walletToReceiptMs": 7571
+    },
+    {
+      "action": "finalizeAttackWithProof #16",
+      "player": "0xAB3ed31F47F5Fd28E356a2B2FC6268C1Ec4c3910",
+      "hash": "0x41f0be29aee892f64c53a3f724ed6ac229af669976d0b566e13f854c9edb747d",
+      "gasUsed": "279923",
+      "gasPriceWei": "20084000",
+      "feeWei": "5621973532000",
+      "walletToReceiptMs": 2579
+    },
+    {
+      "action": "attack #17 cell 5",
+      "player": "0xc4554EBcDf976e9Cda9B97081b3c115d55B01966",
+      "hash": "0x8c5c07c1260146a2565df566ed0587f97c9fa3e14703d57ee9d692419ff992de",
+      "gasUsed": "4137861",
+      "gasPriceWei": "20094000",
+      "feeWei": "83146178934000",
+      "walletToReceiptMs": 7371
+    },
+    {
+      "action": "finalizeAttackWithProof #17",
+      "player": "0xAB3ed31F47F5Fd28E356a2B2FC6268C1Ec4c3910",
+      "hash": "0xd259e8e2d2d892cac4df0c1849d136fafb18bf1bfc2b387d69eef6d708268b73",
+      "gasUsed": "258468",
+      "gasPriceWei": "20514000",
+      "feeWei": "5302212552000",
+      "walletToReceiptMs": 3291
+    },
+    {
+      "action": "attack #18 cell 6",
+      "player": "0xc4554EBcDf976e9Cda9B97081b3c115d55B01966",
+      "hash": "0x6366c1a867a548e1ae23a804637e890342f11b8a90ebf2d21f63a24b2d548864",
+      "gasUsed": "4137821",
+      "gasPriceWei": "20126000",
+      "feeWei": "83277785446000",
+      "walletToReceiptMs": 7391
+    },
+    {
+      "action": "finalizeAttackWithProof #18",
+      "player": "0xAB3ed31F47F5Fd28E356a2B2FC6268C1Ec4c3910",
+      "hash": "0x1d925acd9ce17ce1d275bbbdf6baee422e3b283451fca2ec910739f39fcad05e",
+      "gasUsed": "278690",
+      "gasPriceWei": "20024000",
+      "feeWei": "5580488560000",
+      "walletToReceiptMs": 7186
+    },
+    {
+      "action": "attack #19 cell 25",
+      "player": "0xc4554EBcDf976e9Cda9B97081b3c115d55B01966",
+      "hash": "0xeb3910f2155dc844d722ec052a85d81f58edc6f7a90884d8b00b2f03065c824e",
+      "gasUsed": "4141890",
+      "gasPriceWei": "20072000",
+      "feeWei": "83136016080000",
+      "walletToReceiptMs": 8380
+    },
+    {
+      "action": "finalizeAttackWithProof #19",
+      "player": "0xAB3ed31F47F5Fd28E356a2B2FC6268C1Ec4c3910",
+      "hash": "0xd4f9707563ccc1d7b0cc220fef12ef44b5f142c3b1cb38fbb92781ae0de7a2f6",
+      "gasUsed": "279609",
+      "gasPriceWei": "20100000",
+      "feeWei": "5620140900000",
+      "walletToReceiptMs": 7362
+    },
+    {
+      "action": "attack #20 cell 45",
+      "player": "0xc4554EBcDf976e9Cda9B97081b3c115d55B01966",
+      "hash": "0x8f9671faa328cd2612e05725736ebec83586d19917f7d305607e097f4b212d02",
+      "gasUsed": "4141900",
+      "gasPriceWei": "20064000",
+      "feeWei": "83103081600000",
+      "walletToReceiptMs": 7620
+    },
+    {
+      "action": "finalizeAttackWithProof #20",
+      "player": "0xAB3ed31F47F5Fd28E356a2B2FC6268C1Ec4c3910",
+      "hash": "0x0c45bc6e21806ee1496b2ae495fee71fc5aefa462b53ca1e16343d4fa0a28acc",
+      "gasUsed": "280021",
+      "gasPriceWei": "20104000",
+      "feeWei": "5629542184000",
+      "walletToReceiptMs": 2706
+    },
+    {
+      "action": "attack #21 cell 65",
+      "player": "0xc4554EBcDf976e9Cda9B97081b3c115d55B01966",
+      "hash": "0x4c53d5d1c330737206836b32bb6d6097113c587bdaef6d93401897d76e5ab4f9",
+      "gasUsed": "4141982",
+      "gasPriceWei": "20000000",
+      "feeWei": "82839640000000",
+      "walletToReceiptMs": 7610
+    },
+    {
+      "action": "finalizeAttackWithProof #21",
+      "player": "0xAB3ed31F47F5Fd28E356a2B2FC6268C1Ec4c3910",
+      "hash": "0x78a258ef5c73758a9ded8e3fd2d6ce93d9e4e73afdcb9768af4b2a0d45a70126",
+      "gasUsed": "279863",
+      "gasPriceWei": "20000000",
+      "feeWei": "5597260000000",
+      "walletToReceiptMs": 7195
+    },
+    {
+      "action": "attack #22 cell 85",
+      "player": "0xc4554EBcDf976e9Cda9B97081b3c115d55B01966",
+      "hash": "0x303a6d94d17a8e7e9a193221f9166248b35b3530928fffd6c18eb561c4a7d0e4",
+      "gasUsed": "4141961",
+      "gasPriceWei": "20016000",
+      "feeWei": "82905491376000",
+      "walletToReceiptMs": 3121
+    },
+    {
+      "action": "finalizeAttackWithProof #22",
+      "player": "0xAB3ed31F47F5Fd28E356a2B2FC6268C1Ec4c3910",
+      "hash": "0x0f7f23e90b437db4b5e2e4f5772cc67b58c85a4cdcc5fcff6f449a1f68c57a82",
+      "gasUsed": "287155",
+      "gasPriceWei": "20186000",
+      "feeWei": "5796510830000",
+      "walletToReceiptMs": 8080
     }
   ],
-  "shots": [],
-  "matchId": "5",
-  "error": "execution reverted (no data present; likely require(false) occurred (action=\"estimateGas\", data=\"0x\", reason=\"require(false)\", [calldata truncated; upstream CoFHE TaskManager removed createDecryptTask — see docs/phase-10-release.md]"
+  "shots": [
+    {
+      "moveId": "1",
+      "attacker": "0xc4554EBcDf976e9Cda9B97081b3c115d55B01966",
+      "cellIndex": 99,
+      "expectedResult": "1",
+      "result": "1",
+      "sunkShipId": "0",
+      "attackGas": "4140321",
+      "finalizeGas": "230236",
+      "decryptReadyMs": 1453
+    },
+    {
+      "moveId": "2",
+      "attacker": "0xAB3ed31F47F5Fd28E356a2B2FC6268C1Ec4c3910",
+      "cellIndex": 99,
+      "expectedResult": "1",
+      "result": "1",
+      "sunkShipId": "0",
+      "attackGas": "4125421",
+      "finalizeGas": "232611",
+      "decryptReadyMs": 1743
+    },
+    {
+      "moveId": "3",
+      "attacker": "0xc4554EBcDf976e9Cda9B97081b3c115d55B01966",
+      "cellIndex": 0,
+      "expectedResult": "2",
+      "result": "2",
+      "sunkShipId": "0",
+      "attackGas": "4121438",
+      "finalizeGas": "241120",
+      "decryptReadyMs": 1572
+    },
+    {
+      "moveId": "4",
+      "attacker": "0xc4554EBcDf976e9Cda9B97081b3c115d55B01966",
+      "cellIndex": 1,
+      "expectedResult": "2",
+      "result": "2",
+      "sunkShipId": "0",
+      "attackGas": "4121460",
+      "finalizeGas": "223969",
+      "decryptReadyMs": 1413
+    },
+    {
+      "moveId": "5",
+      "attacker": "0xc4554EBcDf976e9Cda9B97081b3c115d55B01966",
+      "cellIndex": 2,
+      "expectedResult": "2",
+      "result": "2",
+      "sunkShipId": "0",
+      "attackGas": "4121507",
+      "finalizeGas": "223846",
+      "decryptReadyMs": 1457
+    },
+    {
+      "moveId": "6",
+      "attacker": "0xc4554EBcDf976e9Cda9B97081b3c115d55B01966",
+      "cellIndex": 3,
+      "expectedResult": "3",
+      "result": "3",
+      "sunkShipId": "1",
+      "attackGas": "4121460",
+      "finalizeGas": "243918",
+      "decryptReadyMs": 1528
+    },
+    {
+      "moveId": "7",
+      "attacker": "0xc4554EBcDf976e9Cda9B97081b3c115d55B01966",
+      "cellIndex": 20,
+      "expectedResult": "2",
+      "result": "2",
+      "sunkShipId": "0",
+      "attackGas": "4125493",
+      "finalizeGas": "223879",
+      "decryptReadyMs": 2104
+    },
+    {
+      "moveId": "8",
+      "attacker": "0xc4554EBcDf976e9Cda9B97081b3c115d55B01966",
+      "cellIndex": 21,
+      "expectedResult": "2",
+      "result": "2",
+      "sunkShipId": "0",
+      "attackGas": "4125463",
+      "finalizeGas": "223948",
+      "decryptReadyMs": 1268
+    },
+    {
+      "moveId": "9",
+      "attacker": "0xc4554EBcDf976e9Cda9B97081b3c115d55B01966",
+      "cellIndex": 22,
+      "expectedResult": "3",
+      "result": "3",
+      "sunkShipId": "2",
+      "attackGas": "4125490",
+      "finalizeGas": "280158",
+      "decryptReadyMs": 4141
+    },
+    {
+      "moveId": "10",
+      "attacker": "0xc4554EBcDf976e9Cda9B97081b3c115d55B01966",
+      "cellIndex": 40,
+      "expectedResult": "2",
+      "result": "2",
+      "sunkShipId": "0",
+      "attackGas": "4141982",
+      "finalizeGas": "258677",
+      "decryptReadyMs": 4144
+    },
+    {
+      "moveId": "11",
+      "attacker": "0xc4554EBcDf976e9Cda9B97081b3c115d55B01966",
+      "cellIndex": 41,
+      "expectedResult": "2",
+      "result": "2",
+      "sunkShipId": "0",
+      "attackGas": "4141905",
+      "finalizeGas": "260352",
+      "decryptReadyMs": 1398
+    },
+    {
+      "moveId": "12",
+      "attacker": "0xc4554EBcDf976e9Cda9B97081b3c115d55B01966",
+      "cellIndex": 42,
+      "expectedResult": "3",
+      "result": "3",
+      "sunkShipId": "3",
+      "attackGas": "4141813",
+      "finalizeGas": "280595",
+      "decryptReadyMs": 1549
+    },
+    {
+      "moveId": "13",
+      "attacker": "0xc4554EBcDf976e9Cda9B97081b3c115d55B01966",
+      "cellIndex": 60,
+      "expectedResult": "2",
+      "result": "2",
+      "sunkShipId": "0",
+      "attackGas": "4141982",
+      "finalizeGas": "258798",
+      "decryptReadyMs": 1351
+    },
+    {
+      "moveId": "14",
+      "attacker": "0xc4554EBcDf976e9Cda9B97081b3c115d55B01966",
+      "cellIndex": 61,
+      "expectedResult": "3",
+      "result": "3",
+      "sunkShipId": "4",
+      "attackGas": "4141833",
+      "finalizeGas": "279952",
+      "decryptReadyMs": 1664
+    },
+    {
+      "moveId": "15",
+      "attacker": "0xc4554EBcDf976e9Cda9B97081b3c115d55B01966",
+      "cellIndex": 80,
+      "expectedResult": "2",
+      "result": "2",
+      "sunkShipId": "0",
+      "attackGas": "4141982",
+      "finalizeGas": "260274",
+      "decryptReadyMs": 1576
+    },
+    {
+      "moveId": "16",
+      "attacker": "0xc4554EBcDf976e9Cda9B97081b3c115d55B01966",
+      "cellIndex": 81,
+      "expectedResult": "3",
+      "result": "3",
+      "sunkShipId": "5",
+      "attackGas": "4141982",
+      "finalizeGas": "279923",
+      "decryptReadyMs": 1272
+    },
+    {
+      "moveId": "17",
+      "attacker": "0xc4554EBcDf976e9Cda9B97081b3c115d55B01966",
+      "cellIndex": 5,
+      "expectedResult": "2",
+      "result": "2",
+      "sunkShipId": "0",
+      "attackGas": "4137861",
+      "finalizeGas": "258468",
+      "decryptReadyMs": 5278
+    },
+    {
+      "moveId": "18",
+      "attacker": "0xc4554EBcDf976e9Cda9B97081b3c115d55B01966",
+      "cellIndex": 6,
+      "expectedResult": "3",
+      "result": "3",
+      "sunkShipId": "6",
+      "attackGas": "4137821",
+      "finalizeGas": "278690",
+      "decryptReadyMs": 2478
+    },
+    {
+      "moveId": "19",
+      "attacker": "0xc4554EBcDf976e9Cda9B97081b3c115d55B01966",
+      "cellIndex": 25,
+      "expectedResult": "3",
+      "result": "3",
+      "sunkShipId": "7",
+      "attackGas": "4141890",
+      "finalizeGas": "279609",
+      "decryptReadyMs": 10710
+    },
+    {
+      "moveId": "20",
+      "attacker": "0xc4554EBcDf976e9Cda9B97081b3c115d55B01966",
+      "cellIndex": 45,
+      "expectedResult": "3",
+      "result": "3",
+      "sunkShipId": "8",
+      "attackGas": "4141900",
+      "finalizeGas": "280021",
+      "decryptReadyMs": 1322
+    },
+    {
+      "moveId": "21",
+      "attacker": "0xc4554EBcDf976e9Cda9B97081b3c115d55B01966",
+      "cellIndex": 65,
+      "expectedResult": "3",
+      "result": "3",
+      "sunkShipId": "9",
+      "attackGas": "4141982",
+      "finalizeGas": "279863",
+      "decryptReadyMs": 9371
+    },
+    {
+      "moveId": "22",
+      "attacker": "0xc4554EBcDf976e9Cda9B97081b3c115d55B01966",
+      "cellIndex": 85,
+      "expectedResult": "4",
+      "result": "4",
+      "sunkShipId": "10",
+      "attackGas": "4141961",
+      "finalizeGas": "287155",
+      "decryptReadyMs": 6514
+    }
+  ],
+  "matchId": "1",
+  "winner": "0xc4554EBcDf976e9Cda9B97081b3c115d55B01966",
+  "moveCount": "22",
+  "totalGas": "107856450",
+  "totalFeeWei": "2162446261164000"
 }

@@ -729,12 +729,78 @@
         "type": "uint256"
       },
       {
+        "internalType": "uint32",
+        "name": "moveId",
+        "type": "uint32"
+      },
+      {
+        "internalType": "uint256",
+        "name": "result",
+        "type": "uint256"
+      },
+      {
+        "internalType": "bytes",
+        "name": "resultSignature",
+        "type": "bytes"
+      },
+      {
+        "internalType": "uint256",
+        "name": "sunkShipId",
+        "type": "uint256"
+      },
+      {
+        "internalType": "bytes",
+        "name": "sunkShipSignature",
+        "type": "bytes"
+      }
+    ],
+    "name": "finalizeAttackWithProof",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "matchId",
+        "type": "uint256"
+      },
+      {
         "internalType": "address",
         "name": "player",
         "type": "address"
       }
     ],
     "name": "finalizeFleetValidation",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "matchId",
+        "type": "uint256"
+      },
+      {
+        "internalType": "address",
+        "name": "player",
+        "type": "address"
+      },
+      {
+        "internalType": "uint256",
+        "name": "result",
+        "type": "uint256"
+      },
+      {
+        "internalType": "bytes",
+        "name": "signature",
+        "type": "bytes"
+      }
+    ],
+    "name": "finalizeFleetValidationWithProof",
     "outputs": [],
     "stateMutability": "nonpayable",
     "type": "function"
@@ -1028,6 +1094,47 @@
         "internalType": "uint256",
         "name": "matchId",
         "type": "uint256"
+      },
+      {
+        "internalType": "address",
+        "name": "player",
+        "type": "address"
+      }
+    ],
+    "name": "getPendingPlacementValidation",
+    "outputs": [
+      {
+        "components": [
+          {
+            "internalType": "bool",
+            "name": "exists",
+            "type": "bool"
+          },
+          {
+            "internalType": "uint256",
+            "name": "validityCtHash",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint64",
+            "name": "requestedAt",
+            "type": "uint64"
+          }
+        ],
+        "internalType": "struct BattleshipGame.PendingPlacementValidation",
+        "name": "",
+        "type": "tuple"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "matchId",
+        "type": "uint256"
       }
     ],
     "name": "getPendingShot",
@@ -1300,37 +1407,6 @@
       }
     ],
     "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "uint256",
-        "name": "matchId",
-        "type": "uint256"
-      },
-      {
-        "internalType": "address",
-        "name": "player",
-        "type": "address"
-      }
-    ],
-    "name": "retryFleetValidation",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "uint256",
-        "name": "matchId",
-        "type": "uint256"
-      }
-    ],
-    "name": "retryShotResolution",
-    "outputs": [],
-    "stateMutability": "nonpayable",
     "type": "function"
   },
   {

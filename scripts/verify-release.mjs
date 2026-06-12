@@ -94,7 +94,9 @@ for (const record of manifest) {
   if (contractRecord.address?.toLowerCase() !== record.address?.toLowerCase()) {
     problems.push(`${record.deploymentId} frontend and contract addresses differ`)
   }
-  if (contractRecord.abiSha256 !== abiSha256) {
+  // A retired deployment's ABI is historical (e.g. pre-CoFHE-upgrade); only
+  // playable deployments must match the committed ABI.
+  if (record.status !== 'retired' && contractRecord.abiSha256 !== abiSha256) {
     problems.push(`${record.deploymentId} deployment ABI hash differs from committed ABI`)
   }
   if (!/^keccak256:0x[0-9a-f]{64}$/.test(contractRecord.deployedBytecodeKeccak256)) {

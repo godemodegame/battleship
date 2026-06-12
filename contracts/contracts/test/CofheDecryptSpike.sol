@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.25;
 
-import {FHE, InEuint8, euint8, ebool} from "cofhe-contracts-next/FHE.sol";
+import {FHE, InEuint8, euint8, ebool} from "@fhenixprotocol/cofhe-contracts/FHE.sol";
 
 /// @notice Spike for the cofhe-contracts 0.1.x decrypt model on the live
 ///         CoFHE testnet (the 0.0.13 `FHE.decrypt` entrypoint was removed

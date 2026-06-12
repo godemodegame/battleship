@@ -90,6 +90,13 @@ export interface BattleshipWriteClient {
     player: HexAddress,
     onState: (state: TxState) => void,
   ): Promise<WriteResult>
+  /**
+   * Legacy recovery action. The June 2026 CoFHE upgrade replaced on-chain
+   * decrypt re-requests with client-published threshold-network proofs
+   * (`finalizeFleetValidationWithProof`); the real client no longer
+   * implements this, and it will be replaced by the proof-publishing flow
+   * with the @cofhe/sdk frontend migration.
+   */
   retryFleetValidation?(
     matchId: bigint,
     player: HexAddress,
@@ -105,6 +112,7 @@ export interface BattleshipWriteClient {
     moveId: number,
     onState: (state: TxState) => void,
   ): Promise<WriteResult>
+  /** Legacy recovery action; see retryFleetValidation. */
   retryShotResolution?(matchId: bigint, onState: (state: TxState) => void): Promise<WriteResult>
   claimTimeoutWin?(matchId: bigint, onState: (state: TxState) => void): Promise<WriteResult>
 }
@@ -303,10 +311,8 @@ export function createBattleshipWriteClient(
       | 'forfeit'
       | 'submitFleet'
       | 'finalizeFleetValidation'
-      | 'retryFleetValidation'
       | 'attack'
       | 'finalizeAttack'
-      | 'retryShotResolution'
       | 'claimTimeoutWin',
     args: readonly unknown[],
     onState: (state: TxState) => void,
@@ -380,15 +386,6 @@ export function createBattleshipWriteClient(
       return result.ok ? { ok: true, hash: result.receipt.transactionHash } : result
     },
 
-    async retryFleetValidation(matchId, player, onState) {
-      const result = await performWrite(
-        'retryFleetValidation',
-        [matchId, player],
-        onState,
-      )
-      return result.ok ? { ok: true, hash: result.receipt.transactionHash } : result
-    },
-
     async attack(matchId, cellIndex, onState) {
       const result = await performWrite('attack', [matchId, cellIndex], onState)
       return result.ok ? { ok: true, hash: result.receipt.transactionHash } : result
@@ -396,11 +393,6 @@ export function createBattleshipWriteClient(
 
     async finalizeAttack(matchId, moveId, onState) {
       const result = await performWrite('finalizeAttack', [matchId, moveId], onState)
-      return result.ok ? { ok: true, hash: result.receipt.transactionHash } : result
-    },
-
-    async retryShotResolution(matchId, onState) {
-      const result = await performWrite('retryShotResolution', [matchId], onState)
       return result.ok ? { ok: true, hash: result.receipt.transactionHash } : result
     },
 

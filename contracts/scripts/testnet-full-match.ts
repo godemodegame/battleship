@@ -6,7 +6,13 @@
  * join, both encrypted fleet submissions, CoFHE placement validation, one
  * miss per side (exercising turn handoff), and a full sink-out to Win by the
  * invited opponent. Every transaction's gas/fee/latency and every CoFHE
- * decrypt-ready wait is measured and optionally written as evidence.
+ * threshold-network proof fetch is measured and optionally written as
+ * evidence.
+ *
+ * Decrypt model (cofhe-contracts 0.1.x): the script fetches each result's
+ * threshold-network decrypt signature off-chain via @cofhe/sdk decryptForTx
+ * and finalizes through the contract's *WithProof entrypoints, which verify
+ * the network signature on-chain before accepting the plaintext.
  *
  * It verifies chain id, deployment bytecode, record hash, wallet separation,
  * and balances before spending gas.
@@ -48,9 +54,8 @@ import { validateRecordSchema, type DeploymentRecord } from './deploymentRecord'
 // Full match sends ~50 transactions including two FHE-heavy fleet
 // submissions, so the floor is higher than the create/join/cancel run.
 const MIN_BALANCE = 2_000_000_000_000_000n
-const DECRYPT_POLL_MS = 3_000
-const DECRYPT_RETRY_AFTER_MS = 4 * 60_000
-const DECRYPT_TIMEOUT_MS = 10 * 60_000
+const PROOF_RETRY_MS = 3_000
+const PROOF_TIMEOUT_MS = 5 * 60_000
 
 const SHIP_LENGTHS = [4, 3, 3, 2, 2, 2, 1, 1, 1, 1] as const
 
@@ -125,13 +130,9 @@ function required(name: string): string {
   return value
 }
 
-/// Encrypts a fleet in the frozen InEuint8[20] shape as `privateKey`'s
-/// account, signature-bound to that account by the CoFHE zk verifier.
-async function encryptFleetAs(
-  privateKey: string,
-  rpcUrl: string,
-  segments: readonly number[],
-) {
+/// One connected CoFHE client per wallet: encrypts signature-bound inputs
+/// and fetches threshold-network decrypt proofs.
+async function connectCofheClient(privateKey: string, rpcUrl: string) {
   const account = privateKeyToAccount(privateKey as `0x${string}`)
   const publicClient = createPublicClient({ chain: arbitrumSepolia, transport: http(rpcUrl) })
   const walletClient = createWalletClient({
@@ -144,8 +145,43 @@ async function encryptFleetAs(
   )
   await client.connect(publicClient, walletClient)
   return client
+}
+type CofheClient = Awaited<ReturnType<typeof connectCofheClient>>
+
+async function encryptFleet(client: CofheClient, segments: readonly number[]) {
+  return client
     .encryptInputs(segments.map((segment) => Encryptable.uint8(BigInt(segment))))
     .execute()
+}
+
+interface DecryptProof {
+  value: bigint
+  signature: `0x${string}`
+}
+
+/// Fetches the threshold-network decrypt proof for a globally-allowed
+/// handle, retrying until the network has produced it.
+async function fetchProof(
+  client: CofheClient,
+  label: string,
+  ctHash: bigint,
+): Promise<DecryptProof> {
+  const startedAt = Date.now()
+  for (;;) {
+    try {
+      const result = await client.decryptForTx(ctHash).withoutPermit().execute()
+      return { value: result.decryptedValue, signature: result.signature }
+    } catch (error) {
+      const waited = Date.now() - startedAt
+      if (waited > PROOF_TIMEOUT_MS) {
+        throw new Error(
+          `${label}: decrypt proof unavailable after ${waited} ms: ${(error as Error).message}`,
+        )
+      }
+      console.warn(`${label}: proof not ready yet, retrying (${(error as Error).message})`)
+      await sleep(PROOF_RETRY_MS)
+    }
+  }
 }
 
 function parseEvent(
@@ -164,57 +200,8 @@ function parseEvent(
   throw new Error(`event ${eventName} not found in receipt ${receipt.hash}`)
 }
 
-function revertName(game: Contract, error: unknown): string | null {
-  const data =
-    (error as { data?: unknown })?.data ??
-    (error as { info?: { error?: { data?: unknown } } })?.info?.error?.data
-  if (typeof data !== 'string' || !data.startsWith('0x')) return null
-  try {
-    return game.interface.parseError(data)?.name ?? null
-  } catch {
-    return null
-  }
-}
-
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms))
-}
-
-/// Polls a finalize static call until the CoFHE decrypt result is ready,
-/// sending one on-chain retry request if it takes suspiciously long.
-/// Returns the wait in milliseconds from `startedAt`.
-async function waitForDecrypt(
-  game: Contract,
-  label: string,
-  probe: () => Promise<unknown>,
-  retry: () => Promise<ContractTransactionResponse>,
-  startedAt: number,
-): Promise<number> {
-  let retried = false
-  for (;;) {
-    try {
-      await probe()
-      return Date.now() - startedAt
-    } catch (error) {
-      const name = revertName(game, error)
-      if (name && name !== 'DecryptionResultNotReady') {
-        throw new Error(`${label} failed with ${name}`)
-      }
-      if (name === null) {
-        console.warn(`${label}: retryable probe error: ${(error as Error).message}`)
-      }
-    }
-    const waited = Date.now() - startedAt
-    if (waited > DECRYPT_TIMEOUT_MS) {
-      throw new Error(`${label}: decrypt result not ready after ${waited} ms`)
-    }
-    if (!retried && waited > DECRYPT_RETRY_AFTER_MS) {
-      retried = true
-      console.warn(`${label}: re-requesting decryption after ${waited} ms`)
-      await (await retry()).wait()
-    }
-    await sleep(DECRYPT_POLL_MS)
-  }
 }
 
 async function main(): Promise<void> {
@@ -324,8 +311,11 @@ async function main(): Promise<void> {
     await measuredWrite('joinMatch', opponent, () => opponentGame.joinMatch(matchId))
 
     // --- encrypted fleet submission and validation -----------------------
+    const creatorCofhe = await connectCofheClient(creatorKey, rpcUrl)
+    const opponentCofhe = await connectCofheClient(opponentKey, rpcUrl)
+
     const creatorEncryptStart = Date.now()
-    const creatorFleet = await encryptFleetAs(creatorKey, rpcUrl, CREATOR_FLEET)
+    const creatorFleet = await encryptFleet(creatorCofhe, CREATOR_FLEET)
     evidence.cofhe.creatorEncryptMs = Date.now() - creatorEncryptStart
     console.log(`creator fleet encrypted in ${evidence.cofhe.creatorEncryptMs} ms`)
     await measuredWrite('submitFleet (creator)', creator, () =>
@@ -333,30 +323,38 @@ async function main(): Promise<void> {
     )
 
     const opponentEncryptStart = Date.now()
-    const opponentFleet = await encryptFleetAs(opponentKey, rpcUrl, OPPONENT_FLEET)
+    const opponentFleet = await encryptFleet(opponentCofhe, OPPONENT_FLEET)
     evidence.cofhe.opponentEncryptMs = Date.now() - opponentEncryptStart
     console.log(`opponent fleet encrypted in ${evidence.cofhe.opponentEncryptMs} ms`)
     await measuredWrite('submitFleet (opponent)', opponent, () =>
       opponentGame.submitFleet(matchId, opponentFleet),
     )
 
-    for (const [player, key] of [
-      [creator, 'creatorValidationReadyMs'],
-      [opponent, 'opponentValidationReadyMs'],
+    for (const [player, role, key] of [
+      [creator, 'creator', 'creatorValidationReadyMs'],
+      [opponent, 'opponent', 'opponentValidationReadyMs'],
     ] as const) {
-      const waitMs = await waitForDecrypt(
-        creatorGame,
-        `fleet validation (${player.address})`,
-        () => creatorGame.finalizeFleetValidation.staticCall(matchId, player.address),
-        () => creatorGame.retryFleetValidation(matchId, player.address),
-        Date.now(),
+      const pending = await creatorGame.getPendingPlacementValidation(matchId, player.address)
+      const proofStart = Date.now()
+      // The opposite wallet fetches and publishes: validation finalization
+      // is permissionless by design.
+      const proof = await fetchProof(
+        player === creator ? opponentCofhe : creatorCofhe,
+        `fleet validation (${role})`,
+        pending.validityCtHash as bigint,
       )
-      evidence.cofhe[key] = waitMs
-      console.log(`fleet validation ready for ${player.address} after ${waitMs} ms`)
+      evidence.cofhe[key] = Date.now() - proofStart
+      console.log(`fleet validation proof for ${role} in ${evidence.cofhe[key]} ms`)
       const receipt = await measuredWrite(
-        `finalizeFleetValidation (${player.address === creator.address ? 'creator' : 'opponent'})`,
+        `finalizeFleetValidationWithProof (${role})`,
         creator,
-        () => creatorGame.finalizeFleetValidation(matchId, player.address),
+        () =>
+          creatorGame.finalizeFleetValidationWithProof(
+            matchId,
+            player.address,
+            proof.value,
+            proof.signature,
+          ),
       )
       const validated = parseEvent(creatorGame, receipt, 'FleetValidated')
       if (validated.valid !== true) {
@@ -406,18 +404,32 @@ async function main(): Promise<void> {
         () => shot.game.attack(matchId, shot.cellIndex),
       )
       const moveId = parseEvent(creatorGame, attackReceipt, 'ShotSubmitted').moveId as bigint
+      const requested = parseEvent(creatorGame, attackReceipt, 'ShotResolutionRequested')
 
-      const decryptReadyMs = await waitForDecrypt(
-        creatorGame,
-        `shot #${index + 1} resolution`,
-        () => creatorGame.finalizeAttack.staticCall(matchId, moveId),
-        () => creatorGame.retryShotResolution(matchId),
-        Date.now(),
+      const proofStart = Date.now()
+      const resultProof = await fetchProof(
+        creatorCofhe,
+        `shot #${index + 1} result`,
+        requested.resultCtHash as bigint,
       )
+      const sunkProof = await fetchProof(
+        creatorCofhe,
+        `shot #${index + 1} sunk ship`,
+        requested.sunkShipCtHash as bigint,
+      )
+      const decryptReadyMs = Date.now() - proofStart
       const finalizeReceipt = await measuredWrite(
-        `finalizeAttack #${index + 1}`,
+        `finalizeAttackWithProof #${index + 1}`,
         creator,
-        () => creatorGame.finalizeAttack(matchId, moveId),
+        () =>
+          creatorGame.finalizeAttackWithProof(
+            matchId,
+            moveId,
+            resultProof.value,
+            resultProof.signature,
+            sunkProof.value,
+            sunkProof.signature,
+          ),
       )
       const resolved = parseEvent(creatorGame, finalizeReceipt, 'ShotResolved')
       const result = resolved.result as bigint

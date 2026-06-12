@@ -1,10 +1,11 @@
 import '@nomicfoundation/hardhat-ethers'
 import '@nomicfoundation/hardhat-chai-matchers'
 // GAME-401: the CoFHE Hardhat plugin deploys the mock CoFHE environment
-// (task manager, ACL, zk verifier, query decrypter) onto the in-process
+// (task manager, ACL, zk verifier, threshold network) onto the in-process
 // hardhat network before tests, so encrypted-rule tests run without live
-// CoFHE infrastructure.
-import 'cofhe-hardhat-plugin'
+// CoFHE infrastructure. @cofhe/hardhat-plugin is the post-June-2026 stack
+// matching cofhe-contracts 0.1.x (see docs/phase-10-release.md).
+import '@cofhe/hardhat-plugin'
 import type { HardhatUserConfig } from 'hardhat/config'
 
 const ARBITRUM_SEPOLIA_CHAIN_ID = 421614
@@ -40,6 +41,12 @@ const config: HardhatUserConfig = {
       // cofhe-hardhat-plugin etches at that address. Cancun matches the solc
       // evmVersion above and keeps the address free for the mock.
       hardfork: 'cancun',
+      // The @cofhe/mock-contracts ops build log strings unconditionally
+      // (gated only at emit time), so FHE-heavy calls like submitFleet
+      // (~130 ops) blow the default 30M limit under mocks. Mock gas numbers
+      // are not meaningful; live gas is measured on Arbitrum Sepolia.
+      blockGasLimit: 1_000_000_000,
+      gas: 500_000_000,
     },
     localhost: {
       url: 'http://127.0.0.1:8545',
@@ -59,6 +66,7 @@ const config: HardhatUserConfig = {
   },
   mocha: {
     timeout: 60_000,
+    require: ['test/mochaRootHooks.ts'],
   },
 }
 

@@ -293,15 +293,11 @@ describe('battle writes (GAME-704/705/710/712)', () => {
     }
   })
 
-  it('exposes finalizeAttack, retryShotResolution, and claimTimeoutWin', async () => {
+  it('exposes finalizeAttack and claimTimeoutWin', async () => {
     const publicClient = okReceipt()
     const client = writeClientFor(publicClient)
 
     await expect(client.finalizeAttack!(7n, 3, () => {})).resolves.toEqual({
-      ok: true,
-      hash: TX_HASH,
-    })
-    await expect(client.retryShotResolution!(7n, () => {})).resolves.toEqual({
       ok: true,
       hash: TX_HASH,
     })
@@ -314,11 +310,14 @@ describe('battle writes (GAME-704/705/710/712)', () => {
       expect.objectContaining({ functionName: 'finalizeAttack', args: [7n, 3] }),
     )
     expect(publicClient.simulateContract).toHaveBeenCalledWith(
-      expect.objectContaining({ functionName: 'retryShotResolution', args: [7n] }),
-    )
-    expect(publicClient.simulateContract).toHaveBeenCalledWith(
       expect.objectContaining({ functionName: 'claimTimeoutWin', args: [7n] }),
     )
+  })
+
+  it('does not implement the legacy decrypt re-request actions (post-CoFHE-upgrade)', () => {
+    const client = writeClientFor(okReceipt())
+    expect(client.retryFleetValidation).toBeUndefined()
+    expect(client.retryShotResolution).toBeUndefined()
   })
 
   it('finalizeAttack maps a not-ready decryption onto retryable copy', async () => {
@@ -430,9 +429,6 @@ describe('createBattleshipWriteClient (GAME-503/506/507)', () => {
     await expect(
       client.finalizeFleetValidation!(7n, CREATOR, () => {}),
     ).resolves.toEqual({ ok: true, hash: TX_HASH })
-    await expect(
-      client.retryFleetValidation!(7n, CREATOR, () => {}),
-    ).resolves.toEqual({ ok: true, hash: TX_HASH })
 
     expect(publicClient.simulateContract).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -444,12 +440,6 @@ describe('createBattleshipWriteClient (GAME-503/506/507)', () => {
     expect(publicClient.simulateContract).toHaveBeenCalledWith(
       expect.objectContaining({
         functionName: 'finalizeFleetValidation',
-        args: [7n, CREATOR],
-      }),
-    )
-    expect(publicClient.simulateContract).toHaveBeenCalledWith(
-      expect.objectContaining({
-        functionName: 'retryFleetValidation',
         args: [7n, CREATOR],
       }),
     )

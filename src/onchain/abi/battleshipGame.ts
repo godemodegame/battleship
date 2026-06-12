@@ -11,7 +11,7 @@
 export const BATTLESHIP_GAME_CONTRACT_NAME = 'BattleshipGame'
 
 /** sha256 of the compact ABI JSON; must match `abiSha256` in the active deployment record. */
-export const BATTLESHIP_GAME_ABI_SHA256 = 'sha256:283d4196c0f6421c3e712aaceb08c2f8c79f3ed8e8f4520f8dd443831e6d7484'
+export const BATTLESHIP_GAME_ABI_SHA256 = 'sha256:14c061d46cea4971fec557c8d025536d778e6d048afa7b1492367b33fb4f1bd7'
 
 export const battleshipGameAbi = [
   {
@@ -744,12 +744,78 @@ export const battleshipGameAbi = [
         "type": "uint256"
       },
       {
+        "internalType": "uint32",
+        "name": "moveId",
+        "type": "uint32"
+      },
+      {
+        "internalType": "uint256",
+        "name": "result",
+        "type": "uint256"
+      },
+      {
+        "internalType": "bytes",
+        "name": "resultSignature",
+        "type": "bytes"
+      },
+      {
+        "internalType": "uint256",
+        "name": "sunkShipId",
+        "type": "uint256"
+      },
+      {
+        "internalType": "bytes",
+        "name": "sunkShipSignature",
+        "type": "bytes"
+      }
+    ],
+    "name": "finalizeAttackWithProof",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "matchId",
+        "type": "uint256"
+      },
+      {
         "internalType": "address",
         "name": "player",
         "type": "address"
       }
     ],
     "name": "finalizeFleetValidation",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "matchId",
+        "type": "uint256"
+      },
+      {
+        "internalType": "address",
+        "name": "player",
+        "type": "address"
+      },
+      {
+        "internalType": "uint256",
+        "name": "result",
+        "type": "uint256"
+      },
+      {
+        "internalType": "bytes",
+        "name": "signature",
+        "type": "bytes"
+      }
+    ],
+    "name": "finalizeFleetValidationWithProof",
     "outputs": [],
     "stateMutability": "nonpayable",
     "type": "function"
@@ -1043,6 +1109,47 @@ export const battleshipGameAbi = [
         "internalType": "uint256",
         "name": "matchId",
         "type": "uint256"
+      },
+      {
+        "internalType": "address",
+        "name": "player",
+        "type": "address"
+      }
+    ],
+    "name": "getPendingPlacementValidation",
+    "outputs": [
+      {
+        "components": [
+          {
+            "internalType": "bool",
+            "name": "exists",
+            "type": "bool"
+          },
+          {
+            "internalType": "uint256",
+            "name": "validityCtHash",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint64",
+            "name": "requestedAt",
+            "type": "uint64"
+          }
+        ],
+        "internalType": "struct BattleshipGame.PendingPlacementValidation",
+        "name": "",
+        "type": "tuple"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "matchId",
+        "type": "uint256"
       }
     ],
     "name": "getPendingShot",
@@ -1315,37 +1422,6 @@ export const battleshipGameAbi = [
       }
     ],
     "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "uint256",
-        "name": "matchId",
-        "type": "uint256"
-      },
-      {
-        "internalType": "address",
-        "name": "player",
-        "type": "address"
-      }
-    ],
-    "name": "retryFleetValidation",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "uint256",
-        "name": "matchId",
-        "type": "uint256"
-      }
-    ],
-    "name": "retryShotResolution",
-    "outputs": [],
-    "stateMutability": "nonpayable",
     "type": "function"
   },
   {
