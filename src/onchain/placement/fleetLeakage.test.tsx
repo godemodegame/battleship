@@ -21,12 +21,12 @@ import type { BattleshipWriteClient } from '../client/battleshipClient'
 import type { ChainMatchView } from '../client/mapping'
 import type { TxState } from '../client/txTracker'
 import {
-  CofheEncryptorFactoryContext,
-  type CofheEncryptorFactory,
-} from '../fhenix/useCofheFleetClient'
+  CofheClientFactoryContext,
+  type CofheClientFactory,
+} from '../fhenix/useCofheMatchClient'
 import {
   cofheScopeKey,
-  type CofheFleetEncryptor,
+  type CofheMatchClient,
   type EncryptedFleetSegment,
 } from '../fhenix/types'
 import type { MatchPhase } from '../phaseResolver'
@@ -71,8 +71,8 @@ const encryptorLog: { plaintext: number[][]; produced: EncryptedFleetSegment[][]
   produced: [],
 }
 
-const factory: CofheEncryptorFactory = (config) => {
-  const client: CofheFleetEncryptor = {
+const factory: CofheClientFactory = (config) => {
+  const client: CofheMatchClient = {
     execution: 'worker',
     scopeKey: cofheScopeKey(config.scope),
     initialize: async () => {},
@@ -88,6 +88,7 @@ const factory: CofheEncryptorFactory = (config) => {
       encryptorLog.produced.push(produced)
       return produced
     },
+    fetchDecryptProof: async () => ({ value: 0n, signature: '0x00' }),
     dispose: () => {},
   }
   return client
@@ -144,15 +145,16 @@ describe('plaintext fleet leakage across browser surfaces (GAME-904)', () => {
       walletClient: {} as never,
     })
     render(
-      <CofheEncryptorFactoryContext.Provider value={factory}>
+      <CofheClientFactoryContext.Provider value={factory}>
         <EncryptedFleetPanel
           phase={PHASE}
           match={MATCH}
+          readClient={null}
           writeClient={writeClient}
           wallet={wallet}
           onRefetch={() => {}}
         />
-      </CofheEncryptorFactoryContext.Provider>,
+      </CofheClientFactoryContext.Provider>,
     )
     await waitFor(() => expect(screen.queryByTestId('cofhe-initializing')).toBeNull())
 

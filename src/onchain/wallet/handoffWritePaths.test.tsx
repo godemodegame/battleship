@@ -114,8 +114,12 @@ describe('mobile wallet handoff on write paths (GAME-801)', () => {
 
     await waitFor(() => expect(screen.getByTestId('shot-resolving')).toBeTruthy())
     order.length = 0
+    // The finalize action needs the scoped CoFHE client before it enables.
+    await waitFor(() =>
+      expect(screen.getByTestId('finalize-shot').hasAttribute('disabled')).toBe(false),
+    )
     await userEvent.click(screen.getByTestId('finalize-shot'))
-    expectHandoffBefore(order, 'write:finalizeAttack')
+    await waitFor(() => expectHandoffBefore(order, 'write:finalizeAttackWithProof'))
 
     await waitFor(() => expect(screen.getByTestId('forfeit-button')).toBeTruthy())
     order.length = 0
@@ -147,16 +151,24 @@ describe('mobile wallet handoff on write paths (GAME-801)', () => {
     }
     const { order, wallet, clients } = instrumented(CREATOR, contract)
     // The fake omits placement writes; add a stub so the button enables.
-    clients.writeClient!.finalizeFleetValidation = (_matchId, _player, onState) => {
-      order.push('write:finalizeFleetValidation')
+    clients.writeClient!.finalizeFleetValidationWithProof = (
+      _matchId,
+      _player,
+      _proof,
+      onState,
+    ) => {
+      order.push('write:finalizeFleetValidationWithProof')
       onState({ phase: 'success', hash: TX_HASH, replaced: false, error: null })
       return Promise.resolve({ ok: true, hash: TX_HASH })
     }
 
     renderApp({ route: ROUTE, wallet, clients })
     await waitFor(() => expect(screen.getByTestId('placement-validating')).toBeTruthy())
-    await userEvent.click(screen.getByText('Finalize Validation'))
+    await waitFor(() =>
+      expect(screen.getByTestId('finalize-validation').hasAttribute('disabled')).toBe(false),
+    )
+    await userEvent.click(screen.getByTestId('finalize-validation'))
 
-    await waitFor(() => expectHandoffBefore(order, 'write:finalizeFleetValidation'))
+    await waitFor(() => expectHandoffBefore(order, 'write:finalizeFleetValidationWithProof'))
   })
 })

@@ -9,28 +9,28 @@ import type {
   PublicClientLike,
   WalletClientLike,
 } from '../client/battleshipClient'
-import { createCofheFleetEncryptor, type CofheClientConfig } from './cofheClient'
-import { cofheScopeKey, type CofheFleetEncryptor, type CofheScope } from './types'
+import { createCofheMatchClient, type CofheClientConfig } from './cofheClient'
+import { cofheScopeKey, type CofheMatchClient, type CofheScope } from './types'
 
-export type CofheEncryptorFactory = (config: CofheClientConfig) => CofheFleetEncryptor
+export type CofheClientFactory = (config: CofheClientConfig) => CofheMatchClient
 
-export const CofheEncryptorFactoryContext =
-  createContext<CofheEncryptorFactory>(createCofheFleetEncryptor)
+export const CofheClientFactoryContext =
+  createContext<CofheClientFactory>(createCofheMatchClient)
 
 export interface CofheClientState {
   status: 'idle' | 'initializing' | 'ready' | 'error'
-  client: CofheFleetEncryptor | null
+  client: CofheMatchClient | null
   error: string | null
 }
 
-export function useCofheFleetClient(params: {
+export function useCofheMatchClient(params: {
   enabled: boolean
   scope: CofheScope | null
   publicClient: PublicClientLike | null
   walletClient: WalletClientLike | null
 }): CofheClientState {
   const { enabled, scope, publicClient, walletClient } = params
-  const factory = useContext(CofheEncryptorFactoryContext)
+  const factory = useContext(CofheClientFactoryContext)
   const scopeKey = scope ? cofheScopeKey(scope) : null
   const [state, setState] = useState<CofheClientState>({
     status: 'idle',

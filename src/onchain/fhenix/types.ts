@@ -24,16 +24,35 @@ export interface EncryptedFleetSegment {
   signature: string
 }
 
+/**
+ * One threshold-network decrypt result for a globally-allowed ciphertext
+ * handle. The contract's `*WithProof` entrypoints verify the network
+ * signature on-chain before accepting the plaintext value.
+ */
+export interface DecryptProof {
+  value: bigint
+  signature: `0x${string}`
+}
+
+/**
+ * Encryption pipeline states surfaced to the UI. `initializing`/`done` are
+ * ours; the rest mirror the @cofhe/sdk `EncryptStep` values verbatim.
+ */
 export type CofheProgress =
   | 'initializing'
-  | 'extract'
+  | 'initTfhe'
+  | 'fetchKeys'
   | 'pack'
   | 'prove'
   | 'verify'
-  | 'replace'
   | 'done'
 
-export interface CofheFleetEncryptor {
+/**
+ * One account/chain/match-bound CoFHE session: encrypts fleet inputs for
+ * `submitFleet` and fetches threshold-network decrypt proofs for the
+ * `finalize*WithProof` entrypoints.
+ */
+export interface CofheMatchClient {
   readonly execution: 'worker' | 'main-thread'
   readonly scopeKey: string
   initialize(): Promise<void>
@@ -41,5 +60,6 @@ export interface CofheFleetEncryptor {
     segments: readonly number[],
     onProgress?: (progress: CofheProgress) => void,
   ): Promise<readonly EncryptedFleetSegment[]>
+  fetchDecryptProof(ctHash: bigint): Promise<DecryptProof>
   dispose(): void
 }

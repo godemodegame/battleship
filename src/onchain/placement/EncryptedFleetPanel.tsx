@@ -7,13 +7,16 @@ import { errorMessage, type ErrorCode } from '../../copy/errors'
 import type { TxState } from '../client/txTracker'
 import { pendingTxScope } from '../client/pendingTxStore'
 import { useTrackedWrite } from '../client/useTrackedWrite'
-import type { BattleshipWriteClient } from '../client/battleshipClient'
+import type {
+  BattleshipReadClient,
+  BattleshipWriteClient,
+} from '../client/battleshipClient'
 import type { ChainMatchView } from '../client/mapping'
 import type { MatchPhase } from '../phaseResolver'
 import type { WalletContextValue } from '../wallet/WalletSessionContext'
 import { TxStatusLine } from '../match/TxStatusLine'
 import { cofheScopeKey, type CofheProgress, type CofheScope } from '../fhenix/types'
-import { useCofheFleetClient } from '../fhenix/useCofheFleetClient'
+import { useCofheMatchClient } from '../fhenix/useCofheMatchClient'
 import { encodeFleetSegments } from './fleetEncoding'
 import {
   completedFleet,
@@ -44,6 +47,7 @@ function progressLabel(progress: CofheProgress): string {
 export interface EncryptedFleetPanelProps {
   phase: PlacementPhase
   match: ChainMatchView
+  readClient: BattleshipReadClient | null
   writeClient: BattleshipWriteClient | null
   wallet: WalletContextValue
   onRefetch: () => void
@@ -52,6 +56,7 @@ export interface EncryptedFleetPanelProps {
 export function EncryptedFleetPanel({
   phase,
   match,
+  readClient,
   writeClient,
   wallet,
   onRefetch,
@@ -85,6 +90,8 @@ export function EncryptedFleetPanel({
   const [encryptionError, setEncryptionError] = useState<ErrorCode | null>(null)
   const [encrypting, setEncrypting] = useState(false)
   const [awaitingAuthoritativeRead, setAwaitingAuthoritativeRead] = useState(false)
+  const [fetchingProof, setFetchingProof] = useState(false)
+  const [proofError, setProofError] = useState<ErrorCode | null>(null)
 
   const address = wallet.session.address
   const chainId = wallet.session.chainId
@@ -126,8 +133,14 @@ export function EncryptedFleetPanel({
     }
   }, [phase.invalid, phase.validating, phase.waitingForOpponent])
 
-  const cofhe = useCofheFleetClient({
-    enabled: phase.canSubmit && wallet.canWrite && Boolean(writeClient?.submitFleet),
+  // The CoFHE session is needed for fleet encryption while placing and for
+  // the validation decrypt-proof fetch while the result is pending.
+  const validating = phase.validating || awaitingAuthoritativeRead
+  const cofhe = useCofheMatchClient({
+    enabled:
+      wallet.canWrite &&
+      ((phase.canSubmit && Boolean(writeClient?.submitFleet)) ||
+        (validating && Boolean(writeClient?.finalizeFleetValidationWithProof))),
     scope: cofheScope,
     publicClient: wallet.publicClient,
     walletClient: wallet.walletClient,
@@ -136,7 +149,7 @@ export function EncryptedFleetPanel({
   const complete = isFleetComplete(placements)
   const placedCount = placements.filter(Boolean).length
   const cells = useMemo(() => occupiedSlots(placements), [placements])
-  const busy = encrypting || submitWrite.busy || validationWrite.busy
+  const busy = encrypting || fetchingProof || submitWrite.busy || validationWrite.busy
 
   async function submitFleet() {
     const fleet = completedFleet(usePlacementStore.getState())
@@ -152,7 +165,7 @@ export function EncryptedFleetPanel({
     }
 
     setEncryptionError(null)
-    setEncryptionProgress('extract')
+    setEncryptionProgress('initializing')
     setEncrypting(true)
     submitWrite.reset()
     let encrypted: Awaited<ReturnType<typeof cofhe.client.encryptFleet>> | null = null
@@ -179,8 +192,9 @@ export function EncryptedFleetPanel({
       )
       if (result?.ok) {
         // GAME-607: clear plaintext immediately after the receipt confirms.
+        // The CoFHE session stays alive: the validation decrypt-proof fetch
+        // needs it, and it holds no fleet data after the encrypt call.
         clearFleet()
-        cofhe.client.dispose()
         setAwaitingAuthoritativeRead(true)
         onRefetch()
       }
@@ -193,41 +207,94 @@ export function EncryptedFleetPanel({
     }
   }
 
-  async function validationAction(action: 'finalize' | 'retry') {
-    if (!address || !wallet.canWrite || !writeClient) return
-    const method =
-      action === 'finalize'
-        ? writeClient.finalizeFleetValidation
-        : writeClient.retryFleetValidation
-    if (!method) return
+  /**
+   * Fetch the threshold-network decrypt proof for the pending validation and
+   * publish it through `finalizeFleetValidationWithProof`. Re-running this
+   * action after a failure is the recovery path — every step is re-entrant.
+   */
+  async function finalizeValidation() {
+    if (
+      !address ||
+      !wallet.canWrite ||
+      !writeClient?.finalizeFleetValidationWithProof ||
+      !readClient?.getPendingPlacementValidation ||
+      !cofhe.client
+    ) {
+      return
+    }
 
     validationWrite.reset()
+    setProofError(null)
+    setFetchingProof(true)
+    let proof: Awaited<ReturnType<typeof cofhe.client.fetchDecryptProof>>
+    try {
+      const pending = await readClient.getPendingPlacementValidation(
+        match.matchIdBig,
+        address,
+      )
+      if (!pending) {
+        // Someone already finalized this validation; the read shows it.
+        onRefetch()
+        return
+      }
+      proof = await cofhe.client.fetchDecryptProof(pending.validityCtHash)
+    } catch {
+      setProofError('proof-unavailable')
+      return
+    } finally {
+      setFetchingProof(false)
+    }
+
     wallet.actions.prepareHandoff()
     const result = await validationWrite.run((onState) =>
-      method(match.matchIdBig, address, onState),
+      writeClient.finalizeFleetValidationWithProof!(
+        match.matchIdBig,
+        address,
+        proof,
+        onState,
+      ),
     )
     if (result?.ok) onRefetch()
   }
 
-  if (phase.validating || awaitingAuthoritativeRead) {
+  if (validating) {
     return (
       <section className="onchain-placement panel" data-testid="placement-validating">
         <span className="status-label">{encryptedPlacementCopy.validatingTitle}</span>
         <p className="status-sub">{encryptedPlacementCopy.validatingBody}</p>
         <button
           className="btn primary wide"
-          disabled={busy || !wallet.canWrite || !writeClient?.finalizeFleetValidation}
-          onClick={() => void validationAction('finalize')}
+          data-testid="finalize-validation"
+          disabled={
+            busy ||
+            !wallet.canWrite ||
+            !writeClient?.finalizeFleetValidationWithProof ||
+            cofhe.status !== 'ready'
+          }
+          onClick={() => void finalizeValidation()}
         >
           {encryptedPlacementCopy.finalize}
         </button>
-        <button
-          className="btn small"
-          disabled={busy || !wallet.canWrite || !writeClient?.retryFleetValidation}
-          onClick={() => void validationAction('retry')}
-        >
-          {encryptedPlacementCopy.retryRequest}
-        </button>
+        {cofhe.status === 'initializing' && (
+          <p className="status-sub" data-testid="cofhe-initializing">
+            {encryptedPlacementCopy.preparing}
+          </p>
+        )}
+        {cofhe.status === 'error' && (
+          <p className="error-note" role="alert">
+            {errorMessage('encryption-failed')}
+          </p>
+        )}
+        {fetchingProof && (
+          <p className="status-sub" data-testid="proof-fetching" role="status">
+            {encryptedPlacementCopy.fetchingProof}
+          </p>
+        )}
+        {proofError && (
+          <p className="error-note" role="alert" data-testid="proof-error">
+            {errorMessage(proofError)}
+          </p>
+        )}
         <TxStatusLine state={validationWrite.state} onRetry={validationWrite.reset} />
       </section>
     )

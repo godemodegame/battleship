@@ -41,10 +41,22 @@ frontend still never supplies result authority. The migrated contract is
 deployed as `arb-sepolia-staging-v2` and a funded two-wallet **full
 encrypted match** (create, join, both encrypted fleets, CoFHE validation,
 22 shots including misses/turn handoffs, win) **passed live** (see Staging
-Contract and Funded Staging Regression below). Remaining: the frontend
-migration from `cofhejs` to `@cofhe/sdk/web` plus the new proof-publish
-step in the match flow, staging frontend promotion, and physical mobile
-acceptance.
+Contract and Funded Staging Regression below).
+
+**Frontend migration completed June 12, 2026.** The browser stack moved
+from `cofhejs` 0.3.1 (hand-rolled encryption worker, since deleted) to
+`@cofhe/sdk/web` 0.6.0, which manages its own zk-prove Web Worker and
+IndexedDB key cache. The match flow now performs the proof-publish step
+itself: the client reads the pending `validityCtHash` /
+`resultCtHash`+`sunkShipCtHash` handles, fetches threshold-network decrypt
+proofs via `decryptForTx(...).withoutPermit()`, and publishes them through
+`finalizeFleetValidationWithProof` / `finalizeAttackWithProof`. The legacy
+decrypt re-request retry buttons were removed; recovery is re-running the
+re-entrant fetch-and-publish action, with proof-fetch status and a
+retryable `proof-unavailable` error surfaced in both panels. Full suite
+(build, 336 unit, 40 screen, release scripts, 12 e2e) passes. Remaining:
+staging frontend promotion to an `arb-sepolia-staging-v2` build, and
+physical mobile acceptance.
 
 Stable origins:
 
@@ -229,11 +241,11 @@ Contract redeploy:
 
 ## Known Limitations
 
-- The frontend still bundles `cofhejs` 0.3.1, which cannot parse the FHE
-  keys served by the upgraded CoFHE testnet: browser-side encrypted play is
-  broken until the frontend migrates to `@cofhe/sdk/web` and adopts the
-  proof-publish finalize flow (`finalizeFleetValidationWithProof` /
-  `finalizeAttackWithProof`). The contract side is migrated and proven live.
+- The frontend's browser-side encrypted flow (`@cofhe/sdk/web` encryption,
+  threshold-network decrypt-proof fetches, `finalizeFleetValidationWithProof`
+  / `finalizeAttackWithProof` publishing) has passed the full local suite but
+  has not yet run against the live testnet from a real browser/wallet; that
+  is exercised by the staging promotion and physical mobile acceptance.
 - The deployed staging/production frontends still embed the superseded
   `arb-sepolia-staging-v1` / pending `arb-sepolia-v1` ids; the staging
   origin must be promoted to a migrated build configured for

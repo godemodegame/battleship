@@ -16,20 +16,23 @@
 import { parseEventLogs } from 'viem'
 import type { ErrorCode } from '../../copy/errors'
 import { battleshipGameAbi } from '../abi/battleshipGame'
-import type { EncryptedFleetSegment } from '../fhenix/types'
+import type { DecryptProof, EncryptedFleetSegment } from '../fhenix/types'
 import type { HexAddress } from '../phaseResolver'
 import { decodeReadError, decodeTxError } from './decodeError'
 import {
   toChainMatchView,
   toChainMoveView,
   toMatchPlayersView,
+  toPendingPlacementValidationView,
   toPendingShotView,
   type ChainMatchView,
   type ChainMoveView,
   type ChainPendingShotView,
   type MatchPlayersView,
+  type PendingPlacementValidationView,
   type RawMatchView,
   type RawMoveView,
+  type RawPendingPlacementValidation,
   type RawPendingShotView,
   type RawPlayerPublicView,
 } from './mapping'
@@ -58,6 +61,14 @@ export interface BattleshipReadClient {
   /** The match's unresolved shot, or `null` when none is pending (GAME-705). */
   getPendingShot?(matchId: bigint): Promise<ChainPendingShotView | null>
   /**
+   * One player's unresolved placement validation, or `null` when none is
+   * pending. Source of the `validityCtHash` for the proof-publish step.
+   */
+  getPendingPlacementValidation?(
+    matchId: bigint,
+    player: HexAddress,
+  ): Promise<PendingPlacementValidationView | null>
+  /**
    * Watch this match's contract events. The callback receives event identities
    * only — consumers must follow with authoritative reads. Returns unwatch.
    */
@@ -85,21 +96,15 @@ export interface BattleshipWriteClient {
     segments: readonly EncryptedFleetSegment[],
     onState: (state: TxState) => void,
   ): Promise<WriteResult>
-  finalizeFleetValidation?(
-    matchId: bigint,
-    player: HexAddress,
-    onState: (state: TxState) => void,
-  ): Promise<WriteResult>
   /**
-   * Legacy recovery action. The June 2026 CoFHE upgrade replaced on-chain
-   * decrypt re-requests with client-published threshold-network proofs
-   * (`finalizeFleetValidationWithProof`); the real client no longer
-   * implements this, and it will be replaced by the proof-publishing flow
-   * with the @cofhe/sdk frontend migration.
+   * Publish the client-fetched threshold-network decrypt proof and finalize
+   * the player's placement validation. Permissionless; idempotent over an
+   * already-published proof (`_publishIfNeeded` on the contract).
    */
-  retryFleetValidation?(
+  finalizeFleetValidationWithProof?(
     matchId: bigint,
     player: HexAddress,
+    proof: DecryptProof,
     onState: (state: TxState) => void,
   ): Promise<WriteResult>
   attack?(
@@ -107,13 +112,17 @@ export interface BattleshipWriteClient {
     cellIndex: number,
     onState: (state: TxState) => void,
   ): Promise<WriteResult>
-  finalizeAttack?(
+  /**
+   * Publish both decrypt proofs (shot result, sunk-ship id) and finalize the
+   * pending shot. Permissionless, like fleet-validation finalization.
+   */
+  finalizeAttackWithProof?(
     matchId: bigint,
     moveId: number,
+    result: DecryptProof,
+    sunkShip: DecryptProof,
     onState: (state: TxState) => void,
   ): Promise<WriteResult>
-  /** Legacy recovery action; see retryFleetValidation. */
-  retryShotResolution?(matchId: bigint, onState: (state: TxState) => void): Promise<WriteResult>
   claimTimeoutWin?(matchId: bigint, onState: (state: TxState) => void): Promise<WriteResult>
 }
 
@@ -252,6 +261,16 @@ export function createBattleshipReadClient(
       return toPendingShotView(raw as RawPendingShotView)
     },
 
+    async getPendingPlacementValidation(matchId, player) {
+      const raw = await publicClient.readContract({
+        address: contractAddress,
+        abi: battleshipGameAbi,
+        functionName: 'getPendingPlacementValidation',
+        args: [matchId, player],
+      })
+      return toPendingPlacementValidationView(raw as RawPendingPlacementValidation)
+    },
+
     watchMatch(matchId, onEvents) {
       return publicClient.watchContractEvent({
         address: contractAddress,
@@ -310,9 +329,9 @@ export function createBattleshipWriteClient(
       | 'cancelMatch'
       | 'forfeit'
       | 'submitFleet'
-      | 'finalizeFleetValidation'
+      | 'finalizeFleetValidationWithProof'
       | 'attack'
-      | 'finalizeAttack'
+      | 'finalizeAttackWithProof'
       | 'claimTimeoutWin',
     args: readonly unknown[],
     onState: (state: TxState) => void,
@@ -377,10 +396,10 @@ export function createBattleshipWriteClient(
       return result.ok ? { ok: true, hash: result.receipt.transactionHash } : result
     },
 
-    async finalizeFleetValidation(matchId, player, onState) {
+    async finalizeFleetValidationWithProof(matchId, player, proof, onState) {
       const result = await performWrite(
-        'finalizeFleetValidation',
-        [matchId, player],
+        'finalizeFleetValidationWithProof',
+        [matchId, player, proof.value, proof.signature],
         onState,
       )
       return result.ok ? { ok: true, hash: result.receipt.transactionHash } : result
@@ -391,9 +410,13 @@ export function createBattleshipWriteClient(
       return result.ok ? { ok: true, hash: result.receipt.transactionHash } : result
     },
 
-    async finalizeAttack(matchId, moveId, onState) {
-      const result = await performWrite('finalizeAttack', [matchId, moveId], onState)
-      return result.ok ? { ok: true, hash: result.receipt.transactionHash } : result
+    async finalizeAttackWithProof(matchId, moveId, result, sunkShip, onState) {
+      const outcome = await performWrite(
+        'finalizeAttackWithProof',
+        [matchId, moveId, result.value, result.signature, sunkShip.value, sunkShip.signature],
+        onState,
+      )
+      return outcome.ok ? { ok: true, hash: outcome.receipt.transactionHash } : outcome
     },
 
     async claimTimeoutWin(matchId, onState) {

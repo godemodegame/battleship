@@ -161,14 +161,13 @@ describe('on-chain battle flow (Phase 7)', () => {
     await waitFor(() => expect(screen.getByTestId('shot-resolving')).toBeTruthy())
     expect(screen.getByTestId('shot-resolving').textContent).toContain(cellLabelOf(40))
 
-    // The permissionless CoFHE re-request stays available.
-    await userEvent.click(screen.getByTestId('retry-shot-resolution'))
-    await waitFor(() =>
-      expect(screen.getByTestId('shot-resolving')).toBeTruthy(),
-    )
-
-    // Finalizing after the refresh resolves the same move exactly once.
+    // Finalizing after the refresh resolves the same move exactly once: the
+    // fresh mount re-reads the pending ctHashes, re-fetches the decrypt
+    // proofs, and publishes them through finalizeAttackWithProof.
     contract.nextResults.push({ result: 'Miss' })
+    await waitFor(() =>
+      expect(screen.getByTestId('finalize-shot').hasAttribute('disabled')).toBe(false),
+    )
     await userEvent.click(screen.getByTestId('finalize-shot'))
     await waitFor(() => expect(contract.moves[0].finalized).toBe(true))
     // The pre-refresh prime means no replay of older moves, only this one.

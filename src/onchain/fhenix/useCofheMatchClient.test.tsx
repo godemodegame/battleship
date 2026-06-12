@@ -2,11 +2,11 @@ import { renderHook, waitFor } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { describe, expect, it, vi } from 'vitest'
 import {
-  CofheEncryptorFactoryContext,
-  useCofheFleetClient,
-  type CofheEncryptorFactory,
-} from './useCofheFleetClient'
-import { cofheScopeKey, type CofheFleetEncryptor, type CofheScope } from './types'
+  CofheClientFactoryContext,
+  useCofheMatchClient,
+  type CofheClientFactory,
+} from './useCofheMatchClient'
+import { cofheScopeKey, type CofheMatchClient, type CofheScope } from './types'
 
 const ADDRESS = '0xaaaa000000000000000000000000000000000001' as const
 
@@ -20,31 +20,32 @@ function scope(over: Partial<CofheScope> = {}): CofheScope {
   }
 }
 
-describe('useCofheFleetClient (GAME-604/605/610)', () => {
+describe('useCofheMatchClient (GAME-604/605/610)', () => {
   it('initializes only when enabled and disposes on every account/chain/match scope change', async () => {
-    const clients: CofheFleetEncryptor[] = []
-    const factory: CofheEncryptorFactory = (config) => {
-      const client: CofheFleetEncryptor = {
+    const clients: CofheMatchClient[] = []
+    const factory: CofheClientFactory = (config) => {
+      const client: CofheMatchClient = {
         execution: 'worker',
         scopeKey: cofheScopeKey(config.scope),
         initialize: vi.fn(async () => {}),
         encryptFleet: vi.fn(async () => []),
+        fetchDecryptProof: vi.fn(async () => ({ value: 0n, signature: '0x00' as const })),
         dispose: vi.fn(),
       }
       clients.push(client)
       return client
     }
     const wrapper = ({ children }: { children: ReactNode }) => (
-      <CofheEncryptorFactoryContext.Provider value={factory}>
+      <CofheClientFactoryContext.Provider value={factory}>
         {children}
-      </CofheEncryptorFactoryContext.Provider>
+      </CofheClientFactoryContext.Provider>
     )
     const publicClient = {} as never
     const walletClient = {} as never
 
     const { result, rerender, unmount } = renderHook(
       ({ enabled, activeScope }: { enabled: boolean; activeScope: CofheScope }) =>
-        useCofheFleetClient({
+        useCofheMatchClient({
           enabled,
           scope: activeScope,
           publicClient,
