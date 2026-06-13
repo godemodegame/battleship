@@ -27,7 +27,7 @@ export const MVP_CHAIN_ID = ARBITRUM_SEPOLIA_CHAIN_ID
  * on-chain; production builds override it via `VITE_ACTIVE_DEPLOYMENT_ID`
  * (enforced by `check-release-config.mjs`).
  */
-export const DEFAULT_DEPLOYMENT_ID = 'arb-sepolia-staging-v3'
+export const DEFAULT_DEPLOYMENT_ID = 'arb-sepolia-staging-v4'
 
 /**
  * Committed deployment record. Mirrors the minimum record schema in

@@ -37,12 +37,25 @@
     "chainId": 421614,
     "contractName": "BattleshipGame",
     "address": "0xea9499673761C12c8E01B7fcB8DbD59819a1fc93",
-    "status": "active",
+    "status": "retired",
     "deploymentTx": "0x2b47b3d0e6f74b0db8ef9318a77d50fbd6d3fdba90ce55ae875dd1dd188ed4bb",
     "deploymentBlock": 276752158,
     "sourceCommit": "b6e722a851ca214a7b374324913d9c22ea9ef5ed",
     "compilerVersion": "0.8.25+commit.b61c2a91",
     "abiSha256": "sha256:2d96eb5c4adcf86344e8f0eb03464f774d55014d7eed307c0903496a26bf8669",
     "deployedAt": "2026-06-13T09:34:16.755Z"
+  },
+  {
+    "deploymentId": "arb-sepolia-staging-v4",
+    "chainId": 421614,
+    "contractName": "BattleshipGame",
+    "address": "0x62062900DF827380A7b6e7a4A9Bf43884c6365B7",
+    "status": "active",
+    "deploymentTx": "0xf0b2fae2164cf55a3f0bfd4f37f6c8aa87d5b2c7aa07c2c2774390cd2604a255",
+    "deploymentBlock": 276813905,
+    "sourceCommit": "1694894ee1607ae65f664cb61d45f62ee596cb80",
+    "compilerVersion": "0.8.25+commit.b61c2a91",
+    "abiSha256": "sha256:98b573b4feb823718eec5cc1888b9d9b1e03952c13eff8dbeb3a1cc45cc7af19",
+    "deployedAt": "2026-06-13T13:51:28.225Z"
   }
 ]
