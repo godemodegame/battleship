@@ -13,6 +13,7 @@ import { createContext, useContext } from 'react'
 import type { ErrorCode } from '../../copy/errors'
 import type {
   PublicClientLike,
+  SponsoredSend,
   WalletClientLike,
 } from '../client/battleshipClient'
 import { DISCONNECTED_SESSION, type WalletSession } from './session'
@@ -82,6 +83,20 @@ export interface WalletContextValue {
    * wallet is connected and its EIP-1193 provider resolves.
    */
   walletClient: WalletClientLike | null
+  /**
+   * True when the active wallet is a Privy embedded wallet whose writes are
+   * sent gaslessly (sponsored gas, EIP-7702). External-wallet users keep paying
+   * their own gas, so this is false for them. Used to gate funding/low-balance
+   * UX, which is meaningless under sponsorship.
+   */
+  gasSponsored: boolean
+  /**
+   * Sponsored (gasless) send for the active embedded wallet, or undefined when
+   * the session pays its own gas. The write client routes through it when
+   * present; the address is unchanged from `session.address` (7702), so the
+   * contract's `msg.sender` and CoFHE permits stay consistent.
+   */
+  sponsoredSend?: SponsoredSend
   actions: WalletActions
 }
 
@@ -99,6 +114,7 @@ export const DISCONNECTED_CONTEXT: WalletContextValue = {
   accountEpoch: 0,
   publicClient: null,
   walletClient: null,
+  gasSponsored: false,
   actions: {
     connect: noop,
     disconnect: noop,

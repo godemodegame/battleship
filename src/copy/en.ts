@@ -48,15 +48,15 @@ export const resultCopy = {
 
 /** Wallet session + network copy (GAME-204 / GAME-207). */
 export const walletCopy = {
-  connect: 'Connect Wallet',
+  connect: 'Sign in',
   connecting: 'Connecting…',
-  disconnect: 'Disconnect',
+  disconnect: 'Sign out',
   networkBadge: 'Arbitrum Sepolia',
   walletLabel: 'Wallet',
   /** Truncate a checksum/lowercased address for display: 0x1234…abcd */
   shortAddress: (address: string) =>
     address.length > 10 ? `${address.slice(0, 6)}…${address.slice(-4)}` : address,
-  connectPrompt: 'Connect an external wallet on Arbitrum Sepolia to play on-chain.',
+  connectPrompt: 'Sign in with email, a social account, or a wallet to play on-chain.',
   configMissing:
     'Wallet connection is not configured in this build. Local practice still works.',
   wrongNetworkHeading: 'Wrong Network',

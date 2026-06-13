@@ -397,6 +397,53 @@ describe('createBattleshipWriteClient (GAME-503/506/507)', () => {
     expect(walletClient.writeContract).toHaveBeenCalled()
   })
 
+  it('routes the send through sponsoredSend (gasless) while still simulating for error decoding', async () => {
+    const publicClient = makePublicClient()
+    const sponsoredSend = vi.fn(async () => TX_HASH)
+    const onlyWalletWrite = vi.fn(async () => TX_HASH)
+    const client = createBattleshipWriteClient({
+      publicClient,
+      walletClient: { writeContract: onlyWalletWrite },
+      contractAddress: CONTRACT,
+      deploymentId: 'arb-sepolia-v1',
+      account: CREATOR,
+      sponsoredSend,
+    })
+
+    const result = await client.createMatch(INVITED, () => {})
+
+    expect(result).toEqual({ ok: true, hash: TX_HASH, matchId: 7n })
+    // Simulation still runs as the EOA account (custom-error decoding path).
+    expect(publicClient.simulateContract).toHaveBeenCalledWith(
+      expect.objectContaining({ functionName: 'createMatch', args: [INVITED], account: CREATOR }),
+    )
+    // The send goes through the sponsored sender, not the viem wallet client.
+    expect(sponsoredSend).toHaveBeenCalledWith(
+      expect.objectContaining({ to: CONTRACT, data: expect.stringMatching(/^0x/) }),
+    )
+    expect(onlyWalletWrite).not.toHaveBeenCalled()
+  })
+
+  it('still surfaces simulation reverts on the sponsored path before any send', async () => {
+    const publicClient = makePublicClient({
+      simulateContract: vi.fn(async () => {
+        throw revertError('SelfInviteNotAllowed')
+      }),
+    })
+    const sponsoredSend = vi.fn(async () => TX_HASH)
+    const client = createBattleshipWriteClient({
+      publicClient,
+      walletClient,
+      contractAddress: CONTRACT,
+      deploymentId: 'arb-sepolia-v1',
+      account: CREATOR,
+      sponsoredSend,
+    })
+    const result = await client.createMatch(CREATOR, () => {})
+    expect(result).toEqual({ ok: false, error: 'self-invite' })
+    expect(sponsoredSend).not.toHaveBeenCalled()
+  })
+
   it('surfaces simulation reverts before the wallet ever opens', async () => {
     const publicClient = makePublicClient({
       simulateContract: vi.fn(async () => {

@@ -40,7 +40,7 @@ export const BattleshipClientsOverrideContext =
 export function useBattleshipClients(deploymentId: string): BattleshipClients {
   const override = useContext(BattleshipClientsOverrideContext)
   const wallet = useWalletSession()
-  const { publicClient, walletClient } = wallet
+  const { publicClient, walletClient, sponsoredSend } = wallet
   const account = wallet.session.address
 
   return useMemo(() => {
@@ -66,8 +66,9 @@ export function useBattleshipClients(deploymentId: string): BattleshipClients {
             contractAddress,
             deploymentId,
             account,
+            sponsoredSend,
           })
         : null
     return { resolution, readClient, writeClient }
-  }, [override, deploymentId, publicClient, walletClient, account])
+  }, [override, deploymentId, publicClient, walletClient, account, sponsoredSend])
 }

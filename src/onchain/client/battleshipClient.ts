@@ -13,7 +13,7 @@
  * GAME-511). Reads are authoritative; events only trigger refetches.
  */
 
-import { parseEventLogs } from 'viem'
+import { encodeFunctionData, parseEventLogs } from 'viem'
 import type { ErrorCode } from '../../copy/errors'
 import { battleshipGameAbi } from '../abi/battleshipGame'
 import type { DecryptProof, EncryptedFleetSegment } from '../fhenix/types'
@@ -205,6 +205,20 @@ export interface WalletClientLike {
   writeContract(request: never): Promise<Hash>
 }
 
+/**
+ * Sponsored (gasless) send for embedded-wallet sessions (EIP-7702). Receives a
+ * fully-encoded contract call and returns the broadcast transaction hash. The
+ * embedded wallet keeps the SAME address as the EOA the contract sees as
+ * `msg.sender` and that CoFHE binds permits to, so sponsorship is transparent
+ * to the contract and the encryption layer. Built from Privy's
+ * `useSendTransaction({ sponsor: true })` in `PrivyWalletBridge`.
+ */
+export type SponsoredSend = (request: {
+  to: HexAddress
+  data: `0x${string}`
+  value?: bigint
+}) => Promise<Hash>
+
 export interface BattleshipClientConfig {
   publicClient: PublicClientLike
   contractAddress: HexAddress
@@ -215,6 +229,12 @@ export interface BattleshipWriteClientConfig extends BattleshipClientConfig {
   walletClient: WalletClientLike
   /** The active wallet address; every write is simulated and sent as it. */
   account: HexAddress
+  /**
+   * When present (embedded-wallet sessions), writes are sent gaslessly through
+   * this sponsored sender instead of `walletClient.writeContract`. The
+   * simulate-for-error-decoding step runs either way.
+   */
+  sponsoredSend?: SponsoredSend
 }
 
 interface WatchedLog {
@@ -367,7 +387,7 @@ export function extractCreatedMatchId(
 export function createBattleshipWriteClient(
   config: BattleshipWriteClientConfig,
 ): BattleshipWriteClient {
-  const { publicClient, walletClient, contractAddress, account } = config
+  const { publicClient, walletClient, contractAddress, account, sponsoredSend } = config
 
   async function performWrite(
     functionName:
@@ -388,7 +408,9 @@ export function createBattleshipWriteClient(
     const outcome = await trackTransaction<ReceiptLike>({
       send: async () => {
         // Simulation decodes contract reverts into named errors before the
-        // wallet prompt; the returned request is what the wallet signs.
+        // wallet prompt; the returned request is what the EOA path signs. It
+        // runs as `account` (the EOA, unchanged under 7702), so the decode is
+        // accurate for both the sponsored and the wallet-pays paths.
         const { request } = await publicClient.simulateContract({
           address: contractAddress,
           abi: battleshipGameAbi,
@@ -396,6 +418,17 @@ export function createBattleshipWriteClient(
           args,
           account,
         })
+        if (sponsoredSend) {
+          // Embedded wallet: send gaslessly. simulate() returns no encoded
+          // calldata, so re-encode the same call. All BattleshipGame writes are
+          // non-payable, so no value is forwarded.
+          const data = encodeFunctionData({
+            abi: battleshipGameAbi,
+            functionName: functionName as never,
+            args: args as never,
+          })
+          return sponsoredSend({ to: contractAddress, data })
+        }
         return walletClient.writeContract(request as never)
       },
       wait: (hash: Hash, onReplaced: (info: ReplacementInfo) => void) =>

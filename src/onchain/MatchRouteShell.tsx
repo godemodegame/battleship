@@ -417,8 +417,10 @@ export function MatchRouteShell() {
         />
       )}
 
-      {/* GAME-209: surface funding guidance for zero-balance wallets on real routes. */}
+      {/* GAME-209: surface funding guidance for zero-balance wallets on real routes.
+          Skipped under sponsored gas — embedded-wallet writes are gasless. */}
       {!hasDemoMarker &&
+        !wallet.gasSponsored &&
         wallet.session.isConnected &&
         wallet.session.isCorrectChain &&
         wallet.balanceStatus === 'zero' && (
@@ -436,6 +438,7 @@ export function MatchRouteShell() {
 
       {/* GAME-804: non-blocking low-balance warning before long write flows. */}
       {!hasDemoMarker &&
+        !wallet.gasSponsored &&
         wallet.session.isConnected &&
         wallet.session.isCorrectChain &&
         wallet.balanceStatus === 'low' && <LowBalanceWarning balanceWei={wallet.balance} />}
