@@ -5,7 +5,7 @@ import { applyAttack, createMatch, sunkHalo } from '../game/engine'
 import { chooseBotTarget } from '../game/bot'
 import type { Difficulty, MatchState, Orientation, Placement, Side } from '../game/types'
 import { sfx } from '../lib/sfx'
-import { resultCopy } from '../copy/en'
+import { botBattleCopy, resultCopy } from '../copy/en'
 import { comicResultFor, type ComicResultSfx } from '../lib/comicSfx'
 
 export type Screen = 'home' | 'placement' | 'battle' | 'gameover'
@@ -35,6 +35,27 @@ export interface Toast {
   comic?: ComicResultSfx
 }
 
+/**
+ * Optional async bridge that mirrors the local battle on-chain. When set (only
+ * by the on-chain bot match route), `fire()` interleaves contract writes with
+ * the local visual sequence: it submits the player's shot, takes the bot's cell
+ * FROM the contract (never the local bot), and lets the route auto-finalize. The
+ * default is `null`, so practice mode behaves exactly as before — every call
+ * site is guarded.
+ */
+export interface BattleDriver {
+  /** Submit the player's shot on-chain (attack) and finalize it. Throws on failure. */
+  submitPlayerShot: (cell: number) => Promise<void>
+  /** Run the bot's move on-chain (executeBotMove); resolves to the contract-chosen cell. */
+  resolveBotShot: () => Promise<number>
+  /** Drive the on-chain forfeit; the route refetch lands the terminal summary. */
+  forfeit?: () => Promise<void>
+  /** Toggle the "confirming on-chain" indicator (e.g. while a write settles). */
+  onConfirming?: (active: boolean) => void
+  /** Surface a driver error to the caller (logging / diagnostics). */
+  onError?: (message: string) => void
+}
+
 interface AppState {
   screen: Screen
   difficulty: Difficulty
@@ -50,11 +71,16 @@ interface AppState {
   focus: Focus
   selectedCell: number | null
   busy: boolean
+  /** True while a shot/turn is settling on-chain (bot-match route only). */
+  confirming: boolean
+  /** On-chain mirror for the bot match; null in practice mode. */
+  battleDriver: BattleDriver | null
   effects: EffectSpec[]
   projectiles: ProjectileSpec[]
   toast: Toast | null
   forfeited: boolean
 
+  setBattleDriver: (driver: BattleDriver | null) => void
   setDifficulty: (d: Difficulty) => void
   setHowItWorksOpen: (open: boolean) => void
   startPlacement: () => void
@@ -102,11 +128,18 @@ export function resetPracticeState() {
     focus: 'enemy',
     selectedCell: null,
     busy: false,
+    confirming: false,
+    battleDriver: null,
     effects: [],
     projectiles: [],
     toast: null,
     forfeited: false,
   })
+}
+
+/** Toast shown when an on-chain mirror write fails mid-battle (driver path). */
+function driverErrorToast(): Toast {
+  return { id: nextId++, text: botBattleCopy.syncFailed, tone: 'red' }
 }
 
 function shotToast(result: 'miss' | 'hit' | 'sunk', by: Side, label: string | undefined): Toast {
@@ -190,11 +223,14 @@ export const useStore = create<AppState>((set, get) => {
     focus: 'enemy',
     selectedCell: null,
     busy: false,
+    confirming: false,
+    battleDriver: null,
     effects: [],
     projectiles: [],
     toast: null,
     forfeited: false,
 
+    setBattleDriver: (battleDriver) => set({ battleDriver }),
     setDifficulty: (difficulty) => set({ difficulty }),
     setHowItWorksOpen: (howItWorksOpen) => set({ howItWorksOpen }),
 
@@ -295,16 +331,51 @@ export const useStore = create<AppState>((set, get) => {
 
     fire: async () => {
       const sessionId = practiceSessionId
-      const { match, busy, selectedCell, difficulty } = get()
+      const { match, busy, selectedCell, difficulty, battleDriver } = get()
       if (!match || match.winner || busy || match.turn !== 'player') return
       if (selectedCell === null || match.boards.bot.shots[selectedCell] !== 0) return
+      const cell = selectedCell
       set({ busy: true, selectedCell: null })
 
-      const result = await resolveShot('player', selectedCell, sessionId)
+      // On-chain mirror: kick off the player's attack+finalize in parallel with
+      // the local animation so the transaction latency overlaps the projectile
+      // flight. The local result already matches what the contract will finalize
+      // (both sides hold the same fleets), so the animation never waits on it.
+      const playerMirror = battleDriver
+        ? battleDriver.submitPlayerShot(cell).then(
+            () => true,
+            (err: unknown) => {
+              battleDriver.onError?.(err instanceof Error ? err.message : String(err))
+              return false
+            },
+          )
+        : null
+
+      const result = await resolveShot('player', cell, sessionId)
       if (result === 'aborted' || interrupted(sessionId)) {
         releaseBusy(sessionId)
         return
       }
+
+      // The contract serializes turns: wait for the player's shot to settle
+      // on-chain before advancing. The local boards already reflect the outcome.
+      if (playerMirror) {
+        battleDriver?.onConfirming?.(true)
+        set({ confirming: true })
+        const ok = await playerMirror
+        battleDriver?.onConfirming?.(false)
+        set({ confirming: false })
+        if (!ok) {
+          set({ toast: driverErrorToast() })
+          releaseBusy(sessionId)
+          return
+        }
+        if (interrupted(sessionId)) {
+          releaseBusy(sessionId)
+          return
+        }
+      }
+
       if (result === 'won') {
         sfx.win()
         set({ screen: 'gameover', busy: false })
@@ -323,7 +394,36 @@ export const useStore = create<AppState>((set, get) => {
       }
 
       while (get().match?.turn === 'bot') {
-        const target = chooseBotTarget(get().match!.boards.player, difficulty, randomSource)
+        let target: number
+        if (battleDriver) {
+          // Authoritative: the contract picks the bot's cell. Run it on-chain,
+          // read the chosen cell back, then animate that exact shot locally so
+          // the boards stay in lockstep with the chain.
+          battleDriver.onConfirming?.(true)
+          set({ confirming: true })
+          let botCell: number | null
+          try {
+            botCell = await battleDriver.resolveBotShot()
+          } catch (err) {
+            battleDriver.onError?.(err instanceof Error ? err.message : String(err))
+            botCell = null
+          } finally {
+            battleDriver.onConfirming?.(false)
+            set({ confirming: false })
+          }
+          if (botCell === null) {
+            set({ toast: driverErrorToast() })
+            releaseBusy(sessionId)
+            return
+          }
+          if (interrupted(sessionId)) {
+            releaseBusy(sessionId)
+            return
+          }
+          target = botCell
+        } else {
+          target = chooseBotTarget(get().match!.boards.player, difficulty, randomSource)
+        }
         const botResult = await resolveShot('bot', target, sessionId)
         if (botResult === 'aborted' || interrupted(sessionId)) {
           releaseBusy(sessionId)
@@ -353,8 +453,13 @@ export const useStore = create<AppState>((set, get) => {
     },
 
     forfeit: () => {
-      const { match } = get()
+      const { match, battleDriver } = get()
       if (!match || match.winner) return
+      if (battleDriver?.forfeit) {
+        // On-chain forfeit: the route refetch lands the terminal summary.
+        void battleDriver.forfeit()
+        return
+      }
       sfx.lose()
       set({
         forfeited: true,

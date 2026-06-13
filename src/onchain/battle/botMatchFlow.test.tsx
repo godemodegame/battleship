@@ -13,10 +13,13 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   BOT_OPPONENT,
   CREATOR,
+  DEPLOYMENT_ID,
   connectedWalletValue,
   makeFakeContract,
   renderApp,
 } from '../testSupport'
+import { autoPlaceFleet } from '../../game/board'
+import { resetBotFleetStash, stashBotFleets } from '../match/botFleetStash'
 import { resetMoveFx } from './moveFx'
 
 vi.mock('../../three/Scene', () => ({
@@ -35,6 +38,7 @@ const ROUTE = '/match/arb-sepolia-v1/1'
 
 beforeEach(() => {
   resetMoveFx()
+  resetBotFleetStash()
 })
 
 describe('bot match frontend flow', () => {
@@ -98,5 +102,40 @@ describe('bot match frontend flow', () => {
     await waitFor(() => expect(screen.getByTestId('fire-button')).toBeTruthy())
     expect(contract.match!.currentTurn).toBe(CREATOR)
     expect(screen.queryByTestId('advance-bot-turn')).toBeNull()
+  })
+
+  it('renders the 3D battle through the practice engine when fleets are retained', async () => {
+    const contract = makeFakeContract()
+    await contract.writeClientFor(CREATOR).createBotMatch!([], [], () => {})
+    // The create screen retains both plaintext fleets for the 3D match.
+    stashBotFleets(DEPLOYMENT_ID, '1', { player: autoPlaceFleet(), bot: autoPlaceFleet() })
+
+    renderApp({
+      route: ROUTE,
+      wallet: connectedWalletValue(CREATOR),
+      clients: contract.clientsFor(CREATOR),
+    })
+
+    // The 3D controller mounts instead of the flat DOM battle panel; there are
+    // no manual Finalize-Shot / Advance-Opponent buttons on this path.
+    expect(await screen.findByTestId('bot-battle-3d')).toBeTruthy()
+    expect(screen.queryByTestId('onchain-battle-panel')).toBeNull()
+    expect(screen.queryByTestId('finalize-shot')).toBeNull()
+    expect(screen.queryByTestId('advance-bot-turn')).toBeNull()
+  })
+
+  it('falls back to the DOM battle panel when the fleets were not retained (refresh)', async () => {
+    const contract = makeFakeContract()
+    await contract.writeClientFor(CREATOR).createBotMatch!([], [], () => {})
+    // No stash: a refresh or another device dropped the in-memory fleets.
+
+    renderApp({
+      route: ROUTE,
+      wallet: connectedWalletValue(CREATOR),
+      clients: contract.clientsFor(CREATOR),
+    })
+
+    expect(await screen.findByTestId('onchain-battle-panel')).toBeTruthy()
+    expect(screen.queryByTestId('bot-battle-3d')).toBeNull()
   })
 })

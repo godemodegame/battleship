@@ -21,6 +21,32 @@ export function MuteButton() {
   )
 }
 
+/**
+ * Full-screen status overlay for an in-flight async flow (encrypting a fleet,
+ * opening a match, confirming a shot on-chain). Unlike `LoadingOverlay`, which
+ * tracks 3D-asset progress, this shows caller-supplied copy with an animated
+ * pulse so a long encryption / transaction wait never reads as a frozen UI.
+ */
+export function StatusOverlay({
+  title,
+  sub,
+  testId,
+}: {
+  title: string
+  sub?: string
+  testId?: string
+}) {
+  return (
+    <div className="overlay loading" role="status" aria-live="polite" data-testid={testId}>
+      <div className="loading-box">
+        <div className="loading-spinner" aria-hidden="true" />
+        <div className="loading-title">{title}</div>
+        {sub && <div className="loading-sub">{sub}</div>}
+      </div>
+    </div>
+  )
+}
+
 /** Per docs: don't show the field until required models are loaded. */
 export function LoadingOverlay() {
   const { active, progress, errors } = useProgress()

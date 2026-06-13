@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { FLEET } from '../../game/constants'
 import { isFleetComplete } from '../../game/board'
-import { encryptedPlacementCopy } from '../../copy/en'
+import { botBattleCopy, encryptedPlacementCopy } from '../../copy/en'
+import { StatusOverlay } from '../../ui/common'
 import { errorMessage, type ErrorCode } from '../../copy/errors'
 import type { TxState } from '../client/txTracker'
 import { pendingTxScope } from '../client/pendingTxStore'
@@ -208,9 +209,46 @@ export function EncryptedFleetPanel({
     if (result?.ok) onRefetch()
   }
 
+  // Bot match: the player should never press "Finalize Validation". The bot's
+  // fleet is auto-valid on-chain, so once the CoFHE session is ready we publish
+  // the player's validation proof automatically and flow straight into battle.
+  // Latched to one auto-attempt; on failure the manual button below is the
+  // fallback (re-armed only when the panel remounts).
+  const isBot = match.matchType === 'Bot'
+  const autoFinalizeRef = useRef(false)
+  const validationFailed =
+    proofError !== null ||
+    cofhe.status === 'error' ||
+    validationWrite.state.phase === 'error'
+  useEffect(() => {
+    if (
+      isBot &&
+      validating &&
+      !autoFinalizeRef.current &&
+      !validationFailed &&
+      wallet.canWrite &&
+      cofhe.status === 'ready' &&
+      Boolean(writeClient?.finalizeFleetValidationWithProof) &&
+      Boolean(readClient?.getPendingPlacementValidation) &&
+      !busy
+    ) {
+      autoFinalizeRef.current = true
+      void finalizeValidation()
+    }
+    // finalizeValidation is a stable closure over the same deps tracked here.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isBot, validating, validationFailed, wallet.canWrite, cofhe.status, busy])
+
   if (validating) {
     return (
       <section className="onchain-placement panel" data-testid="placement-validating">
+        {isBot && !validationFailed && (
+          <StatusOverlay
+            title={botBattleCopy.startingTitle}
+            sub={botBattleCopy.startingSub}
+            testId="bot-validation-loading"
+          />
+        )}
         <span className="status-label">{encryptedPlacementCopy.validatingTitle}</span>
         <p className="status-sub">{encryptedPlacementCopy.validatingBody}</p>
         <button

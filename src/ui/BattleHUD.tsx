@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useStore } from '../practice/practiceStore'
+import { botBattleCopy } from '../copy/en'
 import { cellLabel } from '../game/constants'
 import type { BoardState, Side } from '../game/types'
 import { MuteButton } from './common'
@@ -26,6 +27,7 @@ function FleetStrip({ board, label, enemy }: { board: BoardState; label: string;
 export function BattleHUD() {
   const match = useStore((s) => s.match)
   const busy = useStore((s) => s.busy)
+  const confirming = useStore((s) => s.confirming)
   const selectedCell = useStore((s) => s.selectedCell)
   const fire = useStore((s) => s.fire)
   const forfeit = useStore((s) => s.forfeit)
@@ -52,7 +54,9 @@ export function BattleHUD() {
         </button>
         <div className="topbar-status">
           <span className={`status-label pulse-${status.tone}`}>{status.text}</span>
-          <span className="status-sub">Move {match.moves.length + 1}</span>
+          <span className="status-sub">
+            {confirming ? botBattleCopy.confirming : `Move ${match.moves.length + 1}`}
+          </span>
         </div>
         <MuteButton />
       </div>

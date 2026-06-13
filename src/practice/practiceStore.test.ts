@@ -286,6 +286,93 @@ describe('placement and match lifecycle', () => {
   })
 })
 
+describe('on-chain battle driver', () => {
+  beforeEach(() => {
+    vi.useFakeTimers()
+    mocks.chooseBotTarget.mockReset()
+    setPracticeRandomSource(seededRandom(1))
+    resetPracticeState()
+  })
+
+  afterEach(() => {
+    setPracticeRandomSource()
+    vi.useRealTimers()
+  })
+
+  it('mirrors the player shot and takes the bot target from the driver', async () => {
+    startBattle(10)
+    const submitPlayerShot = vi.fn().mockResolvedValue(undefined)
+    const resolveBotShot = vi.fn().mockResolvedValueOnce(0).mockResolvedValueOnce(10)
+    useStore.setState({ battleDriver: { submitPlayerShot, resolveBotShot } })
+
+    const firing = useStore.getState().fire()
+    await vi.runAllTimersAsync()
+    await firing
+
+    const state = useStore.getState()
+    expect(submitPlayerShot).toHaveBeenCalledWith(10)
+    // The local bot is never consulted on the driver path — the contract picks.
+    expect(mocks.chooseBotTarget).not.toHaveBeenCalled()
+    expect(resolveBotShot).toHaveBeenCalledTimes(2)
+    expect(state.match?.moves.map((m) => [m.by, m.result])).toEqual([
+      ['player', 'miss'],
+      ['bot', 'hit'],
+      ['bot', 'miss'],
+    ])
+    expect(state.match?.turn).toBe('player')
+    expect(state.busy).toBe(false)
+    expect(state.confirming).toBe(false)
+  })
+
+  it('does not run the bot driver when the player hits (player fires again)', async () => {
+    startBattle(0)
+    const submitPlayerShot = vi.fn().mockResolvedValue(undefined)
+    const resolveBotShot = vi.fn()
+    useStore.setState({ battleDriver: { submitPlayerShot, resolveBotShot } })
+
+    const firing = useStore.getState().fire()
+    await vi.runAllTimersAsync()
+    await firing
+
+    expect(submitPlayerShot).toHaveBeenCalledWith(0)
+    expect(resolveBotShot).not.toHaveBeenCalled()
+    expect(useStore.getState().match?.turn).toBe('player')
+    expect(useStore.getState().busy).toBe(false)
+  })
+
+  it('routes forfeit through the driver and leaves the terminal state to the route', () => {
+    startBattle(0)
+    const forfeit = vi.fn().mockResolvedValue(undefined)
+    useStore.setState({
+      battleDriver: { submitPlayerShot: vi.fn(), resolveBotShot: vi.fn(), forfeit },
+    })
+
+    useStore.getState().forfeit()
+
+    expect(forfeit).toHaveBeenCalledTimes(1)
+    // No local game-over: the route refetch lands the contract summary.
+    expect(useStore.getState().screen).toBe('battle')
+    expect(useStore.getState().match?.winner).toBeNull()
+  })
+
+  it('aborts the turn and toasts when a shot fails on-chain', async () => {
+    startBattle(0)
+    const submitPlayerShot = vi.fn().mockRejectedValue(new Error('rpc down'))
+    const resolveBotShot = vi.fn()
+    useStore.setState({ battleDriver: { submitPlayerShot, resolveBotShot } })
+
+    const firing = useStore.getState().fire()
+    await vi.runAllTimersAsync()
+    await firing
+
+    const state = useStore.getState()
+    expect(state.busy).toBe(false)
+    expect(state.confirming).toBe(false)
+    expect(state.toast?.tone).toBe('red')
+    expect(resolveBotShot).not.toHaveBeenCalled()
+  })
+})
+
 describe('matchSummary', () => {
   it('reports moves, rounded accuracy, ships left, and forfeit state', () => {
     const match: MatchState = createMatch(twoCellShip, twoCellShip)

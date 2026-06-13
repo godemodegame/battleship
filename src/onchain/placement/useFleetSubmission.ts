@@ -66,6 +66,22 @@ export interface UseFleetSubmissionResult {
   encryptFleet: (
     placements: ReadonlyArray<Placement | null>,
   ) => Promise<readonly EncryptedFleetSegment[] | null>
+  /**
+   * Encrypt the player's fleet AND a second (bot) fleet in a single CoFHE proof
+   * round — the 40 inputs are packed and proven together, roughly halving the
+   * pre-transaction wait versus two separate `encrypt` calls. Both fleets seal
+   * under one sender-bound proof; the result is split back into two `[20]`
+   * arrays for `createBotMatch(playerFleet, botFleet)`. Returns `null` on an
+   * incomplete fleet, an unready session, a failed encryption, or a mid-flight
+   * scope drift (same guards as `encrypt`).
+   */
+  encryptBotPair: (
+    playerPlacements: ReadonlyArray<Placement | null>,
+    botPlacements: ReadonlyArray<Placement | null>,
+  ) => Promise<{
+    player: readonly EncryptedFleetSegment[]
+    bot: readonly EncryptedFleetSegment[]
+  } | null>
 }
 
 export function useFleetSubmission(
@@ -146,6 +162,46 @@ export function useFleetSubmission(
     }
   }
 
+  async function encryptBotPair(
+    playerPlacements: ReadonlyArray<Placement | null>,
+    botPlacements: ReadonlyArray<Placement | null>,
+  ): Promise<{
+    player: readonly EncryptedFleetSegment[]
+    bot: readonly EncryptedFleetSegment[]
+  } | null> {
+    if (!cofhe.client || !expectedCofheKey) return null
+    setError(null)
+    setProgress('initializing')
+    setEncrypting(true)
+    const stopEncryptTimer = perf.start('encrypt-fleet')
+    try {
+      // Pack both fleets into one proof: the contract reads the first 20 inputs
+      // as the player fleet and the last 20 as the bot fleet.
+      const playerSegments = encodeFleetSegments(playerPlacements)
+      const botSegments = encodeFleetSegments(botPlacements)
+      const encrypted = await cofhe.client.encryptFleet(
+        [...playerSegments, ...botSegments],
+        setProgress,
+      )
+      stopEncryptTimer()
+      if (cofhe.client.scopeKey !== expectedCofheKey) {
+        throw new Error('CoFHE scope changed during encryption')
+      }
+      if (encrypted.length !== playerSegments.length + botSegments.length) {
+        throw new Error('Unexpected encrypted segment count')
+      }
+      return {
+        player: encrypted.slice(0, playerSegments.length),
+        bot: encrypted.slice(playerSegments.length),
+      }
+    } catch {
+      setError('encryption-failed')
+      return null
+    } finally {
+      setEncrypting(false)
+    }
+  }
+
   return {
     cofhe,
     encrypting,
@@ -154,5 +210,6 @@ export function useFleetSubmission(
     resetError: () => setError(null),
     encrypt,
     encryptFleet,
+    encryptBotPair,
   }
 }

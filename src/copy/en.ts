@@ -168,6 +168,18 @@ export const botMatchCopy = {
   submittingFleet: 'Starting Match',
 } as const
 
+/** Loading + status copy for the on-chain bot battle (3D, auto-chained txs). */
+export const botBattleCopy = {
+  preparingTitle: 'Preparing your encrypted battle',
+  preparingSub: 'Encrypting both fleets and opening the match on-chain…',
+  startingTitle: 'Starting the battle',
+  startingSub: 'Validating your fleet on-chain…',
+  warmingTitle: 'Securing the battlefield',
+  warmingSub: 'Preparing the encryption session…',
+  confirming: 'Confirming on-chain…',
+  syncFailed: 'On-chain sync failed — tap Fire to retry.',
+} as const
+
 /** Open-match lobby ("Find a Game") + Quick Match (random matchmaking). */
 export const lobbyCopy = {
   kicker: 'Random Matchmaking',

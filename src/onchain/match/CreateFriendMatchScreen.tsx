@@ -17,11 +17,13 @@ import {
   createMatchCopy,
   openMatchCopy,
   botMatchCopy,
+  botBattleCopy,
   deploymentCopy,
   encryptedPlacementCopy,
   matchStateCopy,
   walletCopy,
 } from '../../copy/en'
+import { StatusOverlay } from '../../ui/common'
 import { errorMessage } from '../../copy/errors'
 import { autoPlaceFleet, isFleetComplete } from '../../game/board'
 import { useBattleshipClients } from '../client/useBattleshipClients'
@@ -39,10 +41,12 @@ import { LowBalanceNotice, LowBalanceWarning, FAUCET_URL } from '../wallet/LowBa
 import { FleetPlacementBoard } from '../placement/FleetPlacementBoard'
 import { useFleetSubmission } from '../placement/useFleetSubmission'
 import {
+  completedFleet,
   placementScopeKey,
   usePlacementStore,
   type PlacementScope,
 } from '../placement/placementStore'
+import { stashBotFleets } from './botFleetStash'
 import { TxStatusLine } from './TxStatusLine'
 
 const ADDRESS_RE = /^0x[0-9a-fA-F]{40}$/
@@ -184,33 +188,46 @@ function CreateMatchScreen({ mode }: { mode: 'friend' | 'open' | 'bot' }) {
       return
     }
 
-    const encrypted = await submission.encrypt()
-    if (!encrypted) return
-
-    // A mobile wallet confirmation may background the browser; record the
-    // route so the return path restores match creation (GAME-210).
-    wallet.actions.prepareHandoff()
     let result
     if (isBot) {
-      // The bot's fleet is auto-placed and encrypted client-side, then stored
-      // under the bot sentinel on-chain (no usable on-chain randomness; see
-      // docs/computer-opponent-design.md). Both fleets are encrypted by — and
-      // bound to — this wallet, which submits them in one createBotMatch tx.
-      const botSegments = await submission.encryptFleet(autoPlaceFleet())
-      if (!botSegments) return
+      // The bot's fleet is auto-placed and encrypted client-side ALONGSIDE the
+      // player's — both in one CoFHE proof round (≈2× faster than two) — then
+      // stored under the bot sentinel on-chain (no usable on-chain randomness;
+      // see docs/computer-opponent-design.md). Both fleets are bound to this
+      // wallet, which submits them in one createBotMatch tx. We retain both
+      // plaintext fleets in memory so the battle route can render the 3D match
+      // locally while every move is mirrored on-chain (see botFleetStash).
+      const botPlacements = autoPlaceFleet()
+      const pair = await submission.encryptBotPair(placements, botPlacements)
+      if (!pair) return
+      // A mobile wallet confirmation may background the browser; record the
+      // route so the return path restores match creation (GAME-210).
+      wallet.actions.prepareHandoff()
       result = await tx.run((onState) =>
-        writeClient!.createBotMatch!(encrypted, botSegments, onState),
+        writeClient!.createBotMatch!(pair.player, pair.bot, onState),
       )
-    } else if (isOpen) {
-      result = await tx.run((onState) => writeClient!.createOpenWithFleet!(encrypted, onState))
+      const playerFleet = completedFleet({ placements })
+      if (result?.ok && playerFleet) {
+        stashBotFleets(deploymentId, result.matchId.toString(), {
+          player: playerFleet,
+          bot: botPlacements,
+        })
+      }
     } else {
-      result = await tx.run((onState) =>
-        writeClient!.createWithFleet!(
-          address.trim().toLowerCase() as HexAddress,
-          encrypted,
-          onState,
-        ),
-      )
+      const encrypted = await submission.encrypt()
+      if (!encrypted) return
+      wallet.actions.prepareHandoff()
+      if (isOpen) {
+        result = await tx.run((onState) => writeClient!.createOpenWithFleet!(encrypted, onState))
+      } else {
+        result = await tx.run((onState) =>
+          writeClient!.createWithFleet!(
+            address.trim().toLowerCase() as HexAddress,
+            encrypted,
+            onState,
+          ),
+        )
+      }
     }
     if (result?.ok) {
       // GAME-607: clear the plaintext fleet once the fleet is on-chain.
@@ -301,7 +318,7 @@ function CreateMatchScreen({ mode }: { mode: 'friend' | 'open' | 'bot' }) {
         )}
 
       {session.isConnected && session.isCorrectChain && deploymentReady && (
-        <div className="home-actions" data-testid="create-match-form">
+        <section className="onchain-placement panel" data-testid="create-match-form">
           {isFriend && (
             <>
               <label className="field-label" htmlFor="invited-address">
@@ -410,7 +427,7 @@ function CreateMatchScreen({ mode }: { mode: 'friend' | 'open' | 'bot' }) {
           </button>
 
           <TxStatusLine state={tx.state} onRetry={tx.reset} />
-        </div>
+        </section>
       )}
 
       <div className="home-actions">
@@ -423,6 +440,21 @@ function CreateMatchScreen({ mode }: { mode: 'friend' | 'open' | 'bot' }) {
           {matchStateCopy.backToMenu}
         </Link>
       </div>
+
+      {/* A bot match encrypts both fleets then opens the match on-chain; that
+          whole gap reads as one continuous load so the frozen button is never
+          on screen (the layout above stays behind it). */}
+      {isBot && busy && (
+        <StatusOverlay
+          title={botBattleCopy.preparingTitle}
+          sub={
+            submission.encrypting
+              ? encryptedPlacementCopy.progress[submission.progress]
+              : botBattleCopy.preparingSub
+          }
+          testId="bot-create-loading"
+        />
+      )}
     </div>
   )
 }
