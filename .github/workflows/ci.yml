@@ -7,7 +7,10 @@ on:
 jobs:
   practice:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    # The Playwright e2e step renders the 3D scenes (ocean shader, placement
+    # boards) under CI's software WebGL (swiftshader), which is ~7-10x slower
+    # than a GPU; the full suite passes locally in ~2m but needs more room here.
+    timeout-minutes: 30
 
     steps:
       - uses: actions/checkout@v6
