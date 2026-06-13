@@ -14,6 +14,10 @@ test('two wallets create and join one friend match against local mocks', async (
   )
 
   await creatorPage.getByTestId('invited-address-input').fill(OPPONENT)
+  // Placement-first: arrange the fleet, then the single action encrypts and
+  // submits createWithFleet once the create button enables.
+  await creatorPage.getByRole('button', { name: 'Auto Place' }).click()
+  await expect(creatorPage.getByTestId('create-match')).toBeEnabled()
   await creatorPage.getByTestId('create-match').click()
   await expect(creatorPage.getByTestId('invite-panel')).toBeVisible()
   const inviteLink = await creatorPage.getByTestId('invite-link').textContent()
@@ -25,6 +29,9 @@ test('two wallets create and join one friend match against local mocks', async (
   await expect(opponentPage.getByTestId('wallet-address')).toContainText(
     `${OPPONENT.slice(0, 6)}…${OPPONENT.slice(-4)}`,
   )
+  // Placement-first join: arrange the fleet, then joinWithFleet.
+  await opponentPage.getByRole('button', { name: 'Auto Place' }).click()
+  await expect(opponentPage.getByTestId('join-match')).toBeEnabled()
   await opponentPage.getByTestId('join-match').click()
 
   await expect(opponentPage.getByTestId('match-phase-kind')).toContainText('placement')

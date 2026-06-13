@@ -178,13 +178,14 @@ export function useMatchList(params: UseMatchListParams): MatchListQuery {
           const settled = await Promise.allSettled(ids.map((id) => client.getMatch(id)))
           if (seq !== seqRef.current) return
           for (const result of settled) {
-            if (result.status === 'fulfilled' && result.value !== null) {
-              loaded.push(toMatchListEntry(result.value, viewer))
-            } else {
-              // The index guarantees the match exists, so a null read means a
-              // lagging RPC replica — surface it like a failed hydration.
+            if (result.status === 'rejected') {
+              // A failed hydration read leaves the window incomplete.
               sawFailure = true
+            } else if (result.value !== null) {
+              loaded.push(toMatchListEntry(result.value, viewer))
             }
+            // A fulfilled null is dropped silently: the id resolved cleanly to
+            // "no such match", which is not a load failure.
           }
           // Display newest first; the contract returns oldest first.
           loaded.reverse()

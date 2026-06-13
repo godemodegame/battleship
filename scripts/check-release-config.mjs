@@ -32,7 +32,11 @@ for (const path of runtimeSources) {
     problems.push(`${path.slice(root.length + 1)} contains runtime console logging`)
   }
   if (
-    /\b(posthog|mixpanel|amplitude|gtag)\b/i.test(source) ||
+    /\b(?:posthog|mixpanel|gtag)\b/i.test(source) ||
+    // "amplitude" is also a wave/shader math term, so require real SDK usage —
+    // a method call or a single-line package import — not a bare mention.
+    /\bamplitude\s*\.\s*\w+\s*\(/i.test(source) ||
+    /\b(?:from|require\s*\()\s*['"][^'"\n]*amplitude[^'"\n]*['"]/i.test(source) ||
     /\b(?:analytics)\.(?:track|identify|page)\s*\(/i.test(source)
   ) {
     problems.push(`${path.slice(root.length + 1)} contains an analytics integration`)

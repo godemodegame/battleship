@@ -11,6 +11,8 @@ import type {
   BattleshipReadClient,
   BattleshipWriteClient,
   MatchEventRef,
+  PublicClientLike,
+  WalletClientLike,
 } from '../client/battleshipClient'
 import type { ChainMatchView, MatchPlayersView } from '../client/mapping'
 import type { TxState } from '../client/txTracker'
@@ -18,6 +20,11 @@ import {
   BattleshipClientsOverrideContext,
   type BattleshipClients,
 } from '../client/useBattleshipClients'
+import {
+  CofheClientFactoryContext,
+  type CofheClientFactory,
+} from '../fhenix/useCofheMatchClient'
+import { cofheScopeKey } from '../fhenix/types'
 import type { HexAddress } from '../phaseResolver'
 import {
   DISCONNECTED_CONTEXT,
@@ -303,6 +310,31 @@ function makeClients(account: HexAddress | null): BattleshipClients {
   }
 }
 
+// Non-null stub clients so useCofheMatchClient activates (it only checks they
+// exist); the mock CoFHE factory below ignores them.
+const STUB_PUBLIC_CLIENT = {} as unknown as PublicClientLike
+const STUB_WALLET_CLIENT = {} as unknown as WalletClientLike
+
+// Mock CoFHE client so the placement-first encrypt step resolves instantly in
+// e2e; encryptFleet returns opaque dummy ciphertext, never real keys.
+const e2eCofheFactory: CofheClientFactory = (config) => ({
+  execution: 'worker',
+  scopeKey: cofheScopeKey(config.scope),
+  initialize: async () => {},
+  encryptFleet: async (segments) =>
+    segments.map((segment, index) => ({
+      ctHash: BigInt(segment + index + 1),
+      securityZone: 0,
+      utype: 2,
+      signature: `0x${index.toString(16).padStart(2, '0')}`,
+    })),
+  fetchDecryptProof: async (ctHash) => ({
+    value: ctHash & 0xffn,
+    signature: '0xproof' as `0x${string}`,
+  }),
+  dispose: () => {},
+})
+
 function walletValue(account: HexAddress | null): WalletContextValue {
   if (!account) return DISCONNECTED_CONTEXT
   return {
@@ -314,6 +346,8 @@ function walletValue(account: HexAddress | null): WalletContextValue {
       isCorrectChain: true,
       isConnected: true,
     },
+    publicClient: STUB_PUBLIC_CLIENT,
+    walletClient: STUB_WALLET_CLIENT,
     writeBlockedReason: null,
     canWrite: true,
     balance: 10n ** 18n,
@@ -329,7 +363,9 @@ export default function E2EMockProviders({ children }: { children: ReactNode }) 
   return (
     <WalletSessionContext.Provider value={wallet}>
       <BattleshipClientsOverrideContext.Provider value={() => clients}>
-        {children}
+        <CofheClientFactoryContext.Provider value={e2eCofheFactory}>
+          {children}
+        </CofheClientFactoryContext.Provider>
       </BattleshipClientsOverrideContext.Provider>
     </WalletSessionContext.Provider>
   )
