@@ -162,6 +162,11 @@ export function emptyPlayerView(
 export interface FakeContract {
   /** Current single match state (this fake hosts at most one match). */
   match: ChainMatchView | null
+  /**
+   * Per-address indexed match ids, oldest first — mirrors the contract's
+   * `playerMatchIds` (pushed at create and join).
+   */
+  playerMatchIds: Map<string, bigint[]>
   /** Public per-player boards, mirrored into getPlayers reads. */
   players: MatchPlayersView | null
   /** Public move history, oldest first. */
@@ -192,6 +197,16 @@ export function makeFakeContract(): FakeContract {
   const watchers = new Map<string, (events: MatchEventRef[]) => void>()
   let watcherSeq = 0
 
+  const playerMatchIds = new Map<string, bigint[]>()
+  const indexMatchFor = (player: HexAddress, id: bigint) => {
+    const key = player.toLowerCase()
+    const ids = playerMatchIds.get(key) ?? []
+    if (!ids.includes(id)) {
+      ids.push(id)
+      playerMatchIds.set(key, ids)
+    }
+  }
+
   const walk = (onState: (s: TxState) => void) => {
     onState({ phase: 'wallet', hash: null, replaced: false, error: null })
     onState({ phase: 'pending', hash: TX_HASH, replaced: false, error: null })
@@ -200,6 +215,7 @@ export function makeFakeContract(): FakeContract {
 
   const fake: FakeContract = {
     match: null,
+    playerMatchIds,
     players: null,
     moves: [],
     pendingShot: null,
@@ -221,6 +237,8 @@ export function makeFakeContract(): FakeContract {
     startBattle(options = {}) {
       const currentTurn = options.currentTurn ?? INVITED
       const nowTs = Math.floor(Date.now() / 1000)
+      indexMatchFor(CREATOR, 1n)
+      indexMatchFor(INVITED, 1n)
       fake.match = {
         deploymentId: DEPLOYMENT_ID,
         matchId: '1',
@@ -259,6 +277,20 @@ export function makeFakeContract(): FakeContract {
         fake.getMatchCalls += 1
         if (!fake.match || fake.match.matchIdBig !== matchId) return null
         return { ...fake.match }
+      },
+      async getPlayerMatchCount(player: HexAddress) {
+        return fake.playerMatchIds.get(player.toLowerCase())?.length ?? 0
+      },
+      async getPlayerMatches(player: HexAddress, offset: number, limit: number) {
+        // Mirrors the contract's InvalidPaginationLimit guard (MAX_PAGE_LIMIT
+        // 50), in the decoded-custom-error shape viem reverts carry.
+        if (limit === 0 || limit > 50) {
+          throw Object.assign(new Error('InvalidPaginationLimit'), {
+            data: { errorName: 'InvalidPaginationLimit' },
+          })
+        }
+        const ids = fake.playerMatchIds.get(player.toLowerCase()) ?? []
+        return ids.slice(offset, offset + limit)
       },
       async getPlayers() {
         const players = fake.players ?? {
@@ -317,6 +349,39 @@ export function makeFakeContract(): FakeContract {
               resolvingDeadline: 0,
             },
           }
+          indexMatchFor(account, 1n)
+          fake.emit('MatchCreated')
+          return { ok: true, hash: TX_HASH, matchId: 1n }
+        },
+
+        async createWithFleet(invitedOpponent, _segments, onState) {
+          walk(onState)
+          fake.match = {
+            deploymentId: DEPLOYMENT_ID,
+            matchId: '1',
+            matchIdBig: 1n,
+            status: 'WaitingForOpponent',
+            matchType: 'Friend',
+            creator: account,
+            opponent: null,
+            invitedOpponent,
+            currentTurn: null,
+            winner: null,
+            createdAt: 1_000,
+            joinedAt: 0,
+            startedAt: 0,
+            finishedAt: 0,
+            lastActionAt: 1_000,
+            moveCount: 0,
+            pendingMoveId: 0,
+            deadlines: {
+              joinDeadline: Math.floor(Date.now() / 1000) + DAY,
+              placementDeadline: 0,
+              turnDeadline: 0,
+              resolvingDeadline: 0,
+            },
+          }
+          indexMatchFor(account, 1n)
           fake.emit('MatchCreated')
           return { ok: true, hash: TX_HASH, matchId: 1n }
         },
@@ -330,6 +395,22 @@ export function makeFakeContract(): FakeContract {
               status: 'WaitingForPlacement',
               joinedAt: 2_000,
             }
+            indexMatchFor(account, matchId)
+            fake.emit('MatchJoined')
+          }
+          return { ok: true, hash: TX_HASH }
+        },
+
+        async joinWithFleet(matchId, _segments, onState) {
+          walk(onState)
+          if (fake.match && fake.match.matchIdBig === matchId) {
+            fake.match = {
+              ...fake.match,
+              opponent: account,
+              status: 'ValidatingPlacement',
+              joinedAt: 2_000,
+            }
+            indexMatchFor(account, matchId)
             fake.emit('MatchJoined')
           }
           return { ok: true, hash: TX_HASH }

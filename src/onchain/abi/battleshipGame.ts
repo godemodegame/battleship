@@ -11,7 +11,7 @@
 export const BATTLESHIP_GAME_CONTRACT_NAME = 'BattleshipGame'
 
 /** sha256 of the compact ABI JSON; must match `abiSha256` in the active deployment record. */
-export const BATTLESHIP_GAME_ABI_SHA256 = 'sha256:14c061d46cea4971fec557c8d025536d778e6d048afa7b1492367b33fb4f1bd7'
+export const BATTLESHIP_GAME_ABI_SHA256 = 'sha256:2d96eb5c4adcf86344e8f0eb03464f774d55014d7eed307c0903496a26bf8669'
 
 export const battleshipGameAbi = [
   {
@@ -721,6 +721,52 @@ export const battleshipGameAbi = [
   {
     "inputs": [
       {
+        "internalType": "address",
+        "name": "invitedOpponent",
+        "type": "address"
+      },
+      {
+        "components": [
+          {
+            "internalType": "uint256",
+            "name": "ctHash",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint8",
+            "name": "securityZone",
+            "type": "uint8"
+          },
+          {
+            "internalType": "uint8",
+            "name": "utype",
+            "type": "uint8"
+          },
+          {
+            "internalType": "bytes",
+            "name": "signature",
+            "type": "bytes"
+          }
+        ],
+        "internalType": "struct InEuint8[20]",
+        "name": "segments",
+        "type": "tuple[20]"
+      }
+    ],
+    "name": "createWithFleet",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "matchId",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
         "internalType": "uint256",
         "name": "matchId",
         "type": "uint256"
@@ -1407,6 +1453,46 @@ export const battleshipGameAbi = [
       }
     ],
     "name": "joinMatch",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "matchId",
+        "type": "uint256"
+      },
+      {
+        "components": [
+          {
+            "internalType": "uint256",
+            "name": "ctHash",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint8",
+            "name": "securityZone",
+            "type": "uint8"
+          },
+          {
+            "internalType": "uint8",
+            "name": "utype",
+            "type": "uint8"
+          },
+          {
+            "internalType": "bytes",
+            "name": "signature",
+            "type": "bytes"
+          }
+        ],
+        "internalType": "struct InEuint8[20]",
+        "name": "segments",
+        "type": "tuple[20]"
+      }
+    ],
+    "name": "joinWithFleet",
     "outputs": [],
     "stateMutability": "nonpayable",
     "type": "function"

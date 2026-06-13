@@ -1369,6 +1369,72 @@ body,
   margin-top: 8px;
 }
 
+/* ---------- "My Battles" wallet-scoped match list ---------- */
+
+.match-list-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.match-list-section h2 {
+  margin: 0 0 2px;
+}
+
+.match-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px 14px;
+  text-decoration: none;
+  color: var(--white);
+}
+
+.match-card:active {
+  border-color: var(--cyan);
+}
+
+.match-card-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.match-card-id {
+  font: 600 14px/1.2 inherit;
+  letter-spacing: 0.04em;
+}
+
+.match-card-when {
+  font-size: 11px;
+  color: rgba(232, 247, 255, 0.55);
+}
+
+.match-card-opponent {
+  font-size: 12px;
+  color: rgba(232, 247, 255, 0.66);
+  letter-spacing: 0.03em;
+}
+
+.match-card-status {
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: rgba(33, 244, 255, 0.85);
+  white-space: nowrap;
+}
+
+.match-card-status.won {
+  color: var(--cyan);
+  text-shadow: 0 0 8px rgba(33, 244, 255, 0.6);
+}
+
+.match-card-status.lost {
+  color: var(--magenta);
+}
+
 .explorer-link {
   color: rgba(33, 244, 255, 0.75);
   text-decoration: underline;

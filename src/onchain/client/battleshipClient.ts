@@ -54,6 +54,14 @@ export interface MatchEventRef {
 export interface BattleshipReadClient {
   /** Authoritative match read; `null` when the match does not exist. */
   getMatch(matchId: bigint): Promise<ChainMatchView | null>
+  /** Total matches the contract indexed for this player (creator or joiner). */
+  getPlayerMatchCount?(player: HexAddress): Promise<number>
+  /**
+   * One page of the player's match ids, oldest first. The contract reverts
+   * `InvalidPaginationLimit` on a zero limit or a limit above
+   * MAX_PAGE_LIMIT (50); an offset at/past the end returns an empty page.
+   */
+  getPlayerMatches?(player: HexAddress, offset: number, limit: number): Promise<bigint[]>
   /** Public placement/board state for both player slots. */
   getPlayers?(matchId: bigint): Promise<MatchPlayersView>
   /** Complete public move history, oldest first (GAME-708). */
@@ -88,7 +96,26 @@ export interface BattleshipWriteClient {
     invitedOpponent: HexAddress,
     onState: (state: TxState) => void,
   ): Promise<CreateMatchResult>
+  /**
+   * Placement-first creation: create a friend match and submit the creator's
+   * encrypted fleet in one transaction. The match stays WaitingForOpponent;
+   * the creator's fleet validates asynchronously (GAME-505/506).
+   */
+  createWithFleet?(
+    invitedOpponent: HexAddress,
+    segments: readonly EncryptedFleetSegment[],
+    onState: (state: TxState) => void,
+  ): Promise<CreateMatchResult>
   joinMatch(matchId: bigint, onState: (state: TxState) => void): Promise<WriteResult>
+  /**
+   * Placement-first join: join a match and submit the encrypted fleet in one
+   * transaction. The match advances to ValidatingPlacement (GAME-507).
+   */
+  joinWithFleet?(
+    matchId: bigint,
+    segments: readonly EncryptedFleetSegment[],
+    onState: (state: TxState) => void,
+  ): Promise<WriteResult>
   cancelMatch(matchId: bigint, onState: (state: TxState) => void): Promise<WriteResult>
   forfeit(matchId: bigint, onState: (state: TxState) => void): Promise<WriteResult>
   submitFleet?(
@@ -221,6 +248,26 @@ export function createBattleshipReadClient(
       }
     },
 
+    async getPlayerMatchCount(player) {
+      const raw = await publicClient.readContract({
+        address: contractAddress,
+        abi: battleshipGameAbi,
+        functionName: 'getPlayerMatchCount',
+        args: [player],
+      })
+      return Number(raw as bigint)
+    },
+
+    async getPlayerMatches(player, offset, limit) {
+      const raw = await publicClient.readContract({
+        address: contractAddress,
+        abi: battleshipGameAbi,
+        functionName: 'getPlayerMatches',
+        args: [player, offset, limit],
+      })
+      return [...(raw as readonly bigint[])]
+    },
+
     async getPlayers(matchId) {
       const raw = await publicClient.readContract({
         address: contractAddress,
@@ -325,7 +372,9 @@ export function createBattleshipWriteClient(
   async function performWrite(
     functionName:
       | 'createMatch'
+      | 'createWithFleet'
       | 'joinMatch'
+      | 'joinWithFleet'
       | 'cancelMatch'
       | 'forfeit'
       | 'submitFleet'
@@ -376,8 +425,27 @@ export function createBattleshipWriteClient(
       return { ok: true, hash: result.receipt.transactionHash, matchId }
     },
 
+    async createWithFleet(invitedOpponent, segments, onState) {
+      const result = await performWrite(
+        'createWithFleet',
+        [invitedOpponent, segments],
+        onState,
+      )
+      if (!result.ok) return result
+      const matchId = extractCreatedMatchId(result.receipt.logs, contractAddress)
+      if (matchId === null) {
+        return { ok: false, error: 'unknown' }
+      }
+      return { ok: true, hash: result.receipt.transactionHash, matchId }
+    },
+
     async joinMatch(matchId, onState) {
       const result = await performWrite('joinMatch', [matchId], onState)
+      return result.ok ? { ok: true, hash: result.receipt.transactionHash } : result
+    },
+
+    async joinWithFleet(matchId, segments, onState) {
+      const result = await performWrite('joinWithFleet', [matchId, segments], onState)
       return result.ok ? { ok: true, hash: result.receipt.transactionHash } : result
     },
 

@@ -412,6 +412,27 @@ contract BattleshipGame {
 
     /// @notice Create a strict friend match that only `invitedOpponent` can join.
     function createMatch(address invitedOpponent) external returns (uint256 matchId) {
+        matchId = _createMatchBase(invitedOpponent);
+    }
+
+    /// @notice Create a friend match and submit the creator's encrypted fleet
+    ///         in a single transaction (placement-first UX, GAME-505/506).
+    ///         The match stays WaitingForOpponent so the invited player can
+    ///         still join; the creator's fleet validation runs concurrently
+    ///         and may finalize before anyone joins.
+    function createWithFleet(
+        address invitedOpponent,
+        InEuint8[20] calldata segments
+    ) external returns (uint256 matchId) {
+        matchId = _createMatchBase(invitedOpponent);
+        Match storage m = matches[matchId];
+        // Status intentionally stays WaitingForOpponent: joinMatch/joinWithFleet
+        // still require it, and finalizeFleetValidation accepts it.
+        _storeAndValidateFleet(matchId, m, msg.sender, segments);
+    }
+
+    /// @dev Shared match-creation core for createMatch and createWithFleet.
+    function _createMatchBase(address invitedOpponent) private returns (uint256 matchId) {
         if (invitedOpponent == address(0)) revert InvalidInvitedOpponent();
         if (invitedOpponent == msg.sender) revert SelfInviteNotAllowed();
 
@@ -445,7 +466,22 @@ contract BattleshipGame {
     /// @notice Join a match as the invited opponent before the join deadline.
     function joinMatch(uint256 matchId) external {
         Match storage m = _getMatch(matchId);
+        _joinMatchBase(matchId, m);
+    }
 
+    /// @notice Join a match and submit the encrypted fleet in a single
+    ///         transaction (placement-first UX). Validation for each player
+    ///         proceeds asynchronously; the match starts once both fleets are
+    ///         valid (invited opponent moves first).
+    function joinWithFleet(uint256 matchId, InEuint8[20] calldata segments) external {
+        Match storage m = _getMatch(matchId);
+        _joinMatchBase(matchId, m);
+        _storeAndValidateFleet(matchId, m, msg.sender, segments);
+        m.status = MatchStatus.ValidatingPlacement;
+    }
+
+    /// @dev Shared join core for joinMatch and joinWithFleet.
+    function _joinMatchBase(uint256 matchId, Match storage m) private {
         if (msg.sender == m.creator) revert CreatorCannotJoinOwnMatch();
         if (m.status != MatchStatus.WaitingForOpponent) {
             if (m.opponent != address(0)) revert OpponentAlreadyJoined();
@@ -487,13 +523,29 @@ contract BattleshipGame {
             m.status != MatchStatus.ValidatingPlacement
         ) revert InvalidMatchStatus();
 
-        PlayerState storage ps = _playerStateOf(m, msg.sender);
+        _storeAndValidateFleet(matchId, m, msg.sender, segments);
+        m.status = MatchStatus.ValidatingPlacement;
+    }
+
+    /// @dev Stores `player`'s encrypted fleet, runs encrypted placement
+    ///      validation (~130 FHE ops), and records the pending validity
+    ///      decryption. Deliberately does NOT set m.status — each caller owns
+    ///      the lifecycle transition, because the creator's fleet may validate
+    ///      while the match is still WaitingForOpponent. Reverts if the player
+    ///      already has a pending or already-valid placement.
+    function _storeAndValidateFleet(
+        uint256 matchId,
+        Match storage m,
+        address player,
+        InEuint8[20] calldata segments
+    ) private {
+        PlayerState storage ps = _playerStateOf(m, player);
         if (ps.placementStatus == PlacementStatus.ResolvingValidation) {
             revert PlacementValidationPending();
         }
         if (ps.placementStatus == PlacementStatus.Valid) revert FleetAlreadySubmitted();
 
-        EncryptedFleet storage fleet = fleets[matchId][msg.sender];
+        EncryptedFleet storage fleet = fleets[matchId][player];
         for (uint256 i = 0; i < TOTAL_SHIP_CELLS; i++) {
             euint8 segment = FHE.asEuint8(segments[i]);
             FHE.allowThis(segment);
@@ -513,7 +565,7 @@ contract BattleshipGame {
         FHE.allowGlobal(valid);
 
         uint256 validityCtHash = uint256(ebool.unwrap(valid));
-        pendingValidations[matchId][msg.sender] = PendingPlacementValidation({
+        pendingValidations[matchId][player] = PendingPlacementValidation({
             exists: true,
             validityCtHash: validityCtHash,
             requestedAt: uint64(block.timestamp)
@@ -524,11 +576,10 @@ contract BattleshipGame {
         ps.fleetSubmitted = true;
         ps.fleetValid = false;
         ps.fleetSubmittedAt = nowTs;
-        m.status = MatchStatus.ValidatingPlacement;
         m.lastActionAt = nowTs;
 
-        emit FleetSubmitted(matchId, msg.sender);
-        emit FleetValidationRequested(matchId, msg.sender, validityCtHash);
+        emit FleetSubmitted(matchId, player);
+        emit FleetValidationRequested(matchId, player, validityCtHash);
     }
 
     /// @notice Publish a resolved placement-validity result. Permissionless:
@@ -538,7 +589,14 @@ contract BattleshipGame {
     ///         (invited opponent moves first).
     function finalizeFleetValidation(uint256 matchId, address player) public {
         Match storage m = _getMatch(matchId);
-        if (m.status != MatchStatus.ValidatingPlacement) revert InvalidMatchStatus();
+        // createWithFleet validates the creator's fleet while the match is
+        // still WaitingForOpponent, so all three placement-phase statuses are
+        // accepted; the pending-existence check below gates the real work.
+        if (
+            m.status != MatchStatus.WaitingForOpponent &&
+            m.status != MatchStatus.WaitingForPlacement &&
+            m.status != MatchStatus.ValidatingPlacement
+        ) revert InvalidMatchStatus();
 
         PlayerState storage ps = _playerStateOf(m, player);
         PendingPlacementValidation storage pending = pendingValidations[matchId][player];
@@ -584,7 +642,11 @@ contract BattleshipGame {
         bytes calldata signature
     ) external {
         Match storage m = _getMatch(matchId);
-        if (m.status != MatchStatus.ValidatingPlacement) revert InvalidMatchStatus();
+        if (
+            m.status != MatchStatus.WaitingForOpponent &&
+            m.status != MatchStatus.WaitingForPlacement &&
+            m.status != MatchStatus.ValidatingPlacement
+        ) revert InvalidMatchStatus();
         _playerStateOf(m, player);
 
         PendingPlacementValidation storage pending = pendingValidations[matchId][player];

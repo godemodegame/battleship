@@ -143,6 +143,9 @@ export function HomeScreen() {
         <button className="btn" onClick={() => navigate('/match/new')}>
           Play Against Friend
         </button>
+        <button className="btn" onClick={() => navigate('/matches')}>
+          My Battles
+        </button>
         <button className="btn" disabled title="Open matchmaking coming soon">
           Open Match
         </button>

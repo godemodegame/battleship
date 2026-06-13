@@ -134,6 +134,45 @@ export const createMatchCopy = {
   validationInvalid: 'Invalid address.',
   validationSelf: 'You cannot invite yourself.',
   created: 'Match Created',
+  // Placement-first creation (GAME-505/506): arrange the fleet, then create the
+  // match and submit the encrypted fleet in one transaction.
+  placementTitle: 'Place Your Fleet',
+  placementHelper: 'Arrange your ships, then create the match and send your fleet.',
+  placementIncomplete: 'Place all ten ships before creating the match.',
+  createAndSubmit: 'Create Match & Send Fleet',
+  submittingFleet: 'Sending Fleet',
+} as const
+
+/** Wallet-scoped match list ("My Battles"). */
+export const matchListCopy = {
+  kicker: 'On-chain Battles',
+  title: 'My Battles',
+  menuEntry: 'My Battles',
+  sectionWaiting: 'Waiting for Opponent',
+  sectionActive: 'In Progress',
+  sectionFinished: 'Finished',
+  roleCreator: 'You created',
+  roleJoiner: 'You joined',
+  opponentLabel: 'vs',
+  noOpponentYet: 'No opponent yet',
+  statusPlacement: 'Placing Fleet',
+  statusStarting: 'Starting Match',
+  resultWon: 'Won',
+  resultLost: 'Lost',
+  open: 'Open',
+  empty: 'No battles yet. Create a match to start one.',
+  emptyCta: 'Play Against Friend',
+  loading: 'Loading battles…',
+  loadError: 'Could not load your battles.',
+  partialError: 'Some battles failed to load.',
+  retry: 'Retry',
+  loadMore: 'Load Older Battles',
+  loadingMore: 'Loading…',
+  back: 'Back',
+  connectPrompt: 'Connect your wallet to see your battles.',
+  // The contract indexes matches at create/join; an invite a wallet never
+  // joined only surfaces through its invite link.
+  invitedNote: 'Invites you have not joined appear once you join them.',
 } as const
 
 /** Invite link sharing + creator waiting state (GAME-506/508, Flow 7). */
@@ -158,6 +197,13 @@ export const joinCopy = {
   join: 'Join Match',
   joining: 'Joining Match',
   wrongWallet: 'This invite is for another wallet.',
+  // Placement-first join (GAME-507): arrange the fleet, then join and submit the
+  // encrypted fleet in one transaction.
+  placementTitle: 'Place Your Fleet',
+  placementHelper: 'Arrange your ships, then join the match and send your fleet.',
+  placementIncomplete: 'Place all ten ships before joining the match.',
+  joinAndSubmit: 'Join & Send Fleet',
+  submittingFleet: 'Sending Fleet',
 } as const
 
 /** Encrypted on-chain fleet placement (GAME-602..611). */

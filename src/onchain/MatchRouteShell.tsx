@@ -22,7 +22,6 @@ import { usePendingTxRecovery } from './client/usePendingTxRecovery'
 import { useMatchView } from './useMatchView'
 import {
   InviteWaitingPanel,
-  JoinPanel,
   MatchIdentityPanel,
 } from './match/MatchLifecyclePanels'
 import { useDeploymentHealth } from './useDeploymentHealth'
@@ -35,6 +34,11 @@ import type { ChainMatchView } from './client/mapping'
 const EncryptedFleetPanel = lazy(async () => {
   const module = await import('./placement/EncryptedFleetPanel')
   return { default: module.EncryptedFleetPanel }
+})
+
+const JoinWithFleetPanel = lazy(async () => {
+  const module = await import('./placement/JoinWithFleetPanel')
+  return { default: module.JoinWithFleetPanel }
 })
 
 const OnchainBattlePanel = lazy(async () => {
@@ -338,6 +342,7 @@ export function MatchRouteShell() {
 
   // Placement, battle, and terminal phases hold tall panels; the route scrolls.
   const scrollingPhase =
+    phase.kind === 'join' ||
     phase.kind === 'placement' ||
     phase.kind === 'battle' ||
     phase.kind === 'resolving' ||
@@ -487,13 +492,14 @@ export function MatchRouteShell() {
           {phase.kind !== 'placement' && <PhasePanel phase={phase} />}
 
           {phase.kind === 'join' && (
-            <JoinPanel
-              match={match}
-              writeClient={writeClient}
-              canWrite={wallet.canWrite}
-              onJoined={query.refetch}
-              prepareHandoff={wallet.actions.prepareHandoff}
-            />
+            <Suspense fallback={<PlacementLoading />}>
+              <JoinWithFleetPanel
+                match={match}
+                writeClient={writeClient}
+                wallet={wallet}
+                onJoined={query.refetch}
+              />
+            </Suspense>
           )}
 
           {phase.kind === 'waiting-for-opponent' &&

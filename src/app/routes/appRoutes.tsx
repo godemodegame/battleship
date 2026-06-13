@@ -25,6 +25,11 @@ const CreateFriendMatchScreen = lazy(async () => {
   return { default: module.CreateFriendMatchScreen }
 })
 
+const MatchListScreen = lazy(async () => {
+  const module = await import('../../onchain/match/MatchListScreen')
+  return { default: module.MatchListScreen }
+})
+
 function RouteFallback() {
   return (
     <div className="overlay home" data-testid="route-loading">
@@ -44,6 +49,7 @@ export const appRoutes = (
     <Route index element={<EntryScreen />} />
     <Route path="practice" element={suspended(<PracticeApp />)} />
     <Route path="match/new" element={suspended(<CreateFriendMatchScreen />)} />
+    <Route path="matches" element={suspended(<MatchListScreen />)} />
     <Route path="match/:deploymentId/:matchId" element={suspended(<MatchRouteShell />)} />
     <Route path="*" element={<NotFoundScreen />} />
   </Route>

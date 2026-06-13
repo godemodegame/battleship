@@ -132,6 +132,53 @@ export async function makeShotReady(game: GameContract, matchId: bigint) {
   }
 }
 
+/// Creates a friend match with the creator's encrypted fleet attached in one
+/// transaction (placement-first path). Returns the receipt so callers can read
+/// the assigned match id from MatchCreated.
+export async function createWithEncryptedFleet(
+  game: GameContract,
+  creator: HardhatEthersSigner,
+  invitedOpponent: string,
+  fleet: readonly number[] = VALID_FLEET,
+): Promise<ContractTransactionReceipt> {
+  const input = await encryptFleetAs(creator, fleet)
+  const receipt = await (await game.connect(creator).createWithFleet(invitedOpponent, input)).wait()
+  return receipt!
+}
+
+/// Joins a match with the opponent's encrypted fleet attached in one
+/// transaction (placement-first path).
+export async function joinWithEncryptedFleet(
+  game: GameContract,
+  opponent: HardhatEthersSigner,
+  matchId: bigint,
+  fleet: readonly number[] = VALID_FLEET_ALT,
+): Promise<ContractTransactionReceipt> {
+  const input = await encryptFleetAs(opponent, fleet)
+  const receipt = await (await game.connect(opponent).joinWithFleet(matchId, input)).wait()
+  return receipt!
+}
+
+/// Drives the full placement-first flow: createWithFleet, joinWithFleet, then
+/// finalizes both validations, leaving the match InProgress with the invited
+/// opponent on turn. Mirrors startEncryptedMatch but for the atomic entrypoints.
+export async function startAtomicMatch(
+  game: GameContract,
+  creator: HardhatEthersSigner,
+  opponent: HardhatEthersSigner,
+  matchId: bigint = 1n,
+  creatorFleet: readonly number[] = VALID_FLEET,
+  opponentFleet: readonly number[] = VALID_FLEET_ALT,
+) {
+  await createWithEncryptedFleet(game, creator, opponent.address, creatorFleet)
+  await joinWithEncryptedFleet(game, opponent, matchId, opponentFleet)
+
+  await makeValidationReady(game, matchId, creator)
+  await (await game.finalizeFleetValidation(matchId, creator.address)).wait()
+  await makeValidationReady(game, matchId, opponent)
+  await (await game.finalizeFleetValidation(matchId, opponent.address)).wait()
+}
+
 /// Submits and finalizes both fleets, leaving the match InProgress with the
 /// invited opponent on turn.
 export async function startEncryptedMatch(

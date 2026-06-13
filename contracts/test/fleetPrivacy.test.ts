@@ -33,7 +33,9 @@ const ALLOWED_FUNCTIONS = [
   'getShipLengths',
   // lifecycle writes
   'createMatch',
+  'createWithFleet',
   'joinMatch',
+  'joinWithFleet',
   'cancelMatch',
   'forfeit',
   'claimTimeoutWin',

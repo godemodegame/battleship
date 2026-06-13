@@ -13,6 +13,9 @@ import {
   makeValidationReady,
   makeShotReady,
   startEncryptedMatch,
+  createWithEncryptedFleet,
+  joinWithEncryptedFleet,
+  startAtomicMatch,
   playShot,
   parseEvent,
   deployEncryptedMatchFixtureBase,
@@ -152,6 +155,181 @@ describe('BattleshipGame encrypted rules (Phase 4)', () => {
       const { game, creator, outsider, matchId } = await loadFixture(joinedFixture)
       const stolen = await encryptFleetAs(outsider, VALID_FLEET)
       await expect(game.connect(creator).submitFleet(matchId, stolen)).to.be.reverted
+    })
+  })
+
+  describe('atomic placement (createWithFleet / joinWithFleet)', () => {
+    async function deployGame() {
+      const [creator, opponent, outsider] = await ethers.getSigners()
+      const factory = await ethers.getContractFactory('BattleshipGame')
+      const game = await factory.deploy()
+      await game.waitForDeployment()
+      return { game, creator, opponent, outsider, matchId: 1n }
+    }
+
+    it('createWithFleet creates the match, stores the fleet, and stays WaitingForOpponent', async () => {
+      const { game, creator, opponent, matchId } = await loadFixture(deployGame)
+      const input = await encryptFleetAs(creator, VALID_FLEET)
+
+      const tx = await game.connect(creator).createWithFleet(opponent.address, input)
+      await expect(tx).to.emit(game, 'MatchCreated').withArgs(matchId, creator.address, opponent.address)
+      await expect(tx).to.emit(game, 'FleetSubmitted').withArgs(matchId, creator.address)
+      await expect(tx).to.emit(game, 'FleetValidationRequested')
+
+      const match = await game.getMatch(matchId)
+      expect(match.status).to.equal(MatchStatus.WaitingForOpponent)
+      expect(match.creator).to.equal(creator.address)
+      expect(match.invitedOpponent).to.equal(opponent.address)
+
+      const [creatorView, opponentView] = await game.getPlayers(matchId)
+      expect(creatorView.placementStatus).to.equal(PlacementStatus.ResolvingValidation)
+      expect(creatorView.fleetSubmitted).to.equal(true)
+      expect(creatorView.fleetValid).to.equal(false)
+      // Opponent slot stays empty until a join.
+      expect(opponentView.player).to.equal(ethers.ZeroAddress)
+      expect(opponentView.fleetSubmitted).to.equal(false)
+    })
+
+    it('finalizes the creator fleet while still WaitingForOpponent', async () => {
+      const { game, creator, opponent, matchId } = await loadFixture(deployGame)
+      await createWithEncryptedFleet(game, creator, opponent.address, VALID_FLEET)
+
+      await makeValidationReady(game, matchId, creator)
+      await expect(game.finalizeFleetValidation(matchId, creator.address))
+        .to.emit(game, 'FleetValidated')
+        .withArgs(matchId, creator.address, true)
+
+      const match = await game.getMatch(matchId)
+      // Validating the creator's fleet must not start or advance the match;
+      // the opponent has not joined yet.
+      expect(match.status).to.equal(MatchStatus.WaitingForOpponent)
+      const [creatorView] = await game.getPlayers(matchId)
+      expect(creatorView.placementStatus).to.equal(PlacementStatus.Valid)
+      expect(creatorView.fleetValid).to.equal(true)
+    })
+
+    it('rejects createWithFleet with the zero address or a self-invite', async () => {
+      const { game, creator } = await loadFixture(deployGame)
+      const input = await encryptFleetAs(creator, VALID_FLEET)
+      await expect(
+        game.connect(creator).createWithFleet(ethers.ZeroAddress, input),
+      ).to.be.revertedWithCustomError(game, 'InvalidInvitedOpponent')
+
+      const selfInput = await encryptFleetAs(creator, VALID_FLEET)
+      await expect(
+        game.connect(creator).createWithFleet(creator.address, selfInput),
+      ).to.be.revertedWithCustomError(game, 'SelfInviteNotAllowed')
+    })
+
+    it('lets the creator cancel after committing a fleet (absent-friend recovery)', async () => {
+      const { game, creator, opponent, matchId } = await loadFixture(deployGame)
+      await createWithEncryptedFleet(game, creator, opponent.address, VALID_FLEET)
+
+      await expect(game.connect(creator).cancelMatch(matchId))
+        .to.emit(game, 'MatchCancelled')
+        .withArgs(matchId)
+      const match = await game.getMatch(matchId)
+      expect(match.status).to.equal(MatchStatus.Cancelled)
+    })
+
+    it('joinWithFleet attaches the opponent fleet and moves to ValidatingPlacement', async () => {
+      const { game, creator, opponent, matchId } = await loadFixture(deployGame)
+      await createWithEncryptedFleet(game, creator, opponent.address, VALID_FLEET)
+
+      const input = await encryptFleetAs(opponent, VALID_FLEET_ALT)
+      const tx = await game.connect(opponent).joinWithFleet(matchId, input)
+      await expect(tx).to.emit(game, 'MatchJoined').withArgs(matchId, opponent.address)
+      await expect(tx).to.emit(game, 'FleetSubmitted').withArgs(matchId, opponent.address)
+      await expect(tx).to.emit(game, 'FleetValidationRequested')
+
+      const match = await game.getMatch(matchId)
+      expect(match.status).to.equal(MatchStatus.ValidatingPlacement)
+      expect(match.opponent).to.equal(opponent.address)
+      const [, opponentView] = await game.getPlayers(matchId)
+      expect(opponentView.placementStatus).to.equal(PlacementStatus.ResolvingValidation)
+      expect(opponentView.fleetSubmitted).to.equal(true)
+    })
+
+    it('rejects joinWithFleet from a wallet that was not invited', async () => {
+      const { game, creator, opponent, outsider, matchId } = await loadFixture(deployGame)
+      await createWithEncryptedFleet(game, creator, opponent.address, VALID_FLEET)
+
+      const input = await encryptFleetAs(outsider, VALID_FLEET_ALT)
+      await expect(
+        game.connect(outsider).joinWithFleet(matchId, input),
+      ).to.be.revertedWithCustomError(game, 'NotInvitedOpponent')
+    })
+
+    it('runs the full atomic flow and starts the match with the invited opponent first', async () => {
+      const { game, creator, opponent, matchId } = await loadFixture(deployGame)
+      await createWithEncryptedFleet(game, creator, opponent.address, VALID_FLEET)
+      await joinWithEncryptedFleet(game, opponent, matchId, VALID_FLEET_ALT)
+
+      await makeValidationReady(game, matchId, creator)
+      await (await game.finalizeFleetValidation(matchId, creator.address)).wait()
+
+      await makeValidationReady(game, matchId, opponent)
+      const startTx = game.finalizeFleetValidation(matchId, opponent.address)
+      await expect(startTx).to.emit(game, 'MatchStarted').withArgs(matchId, opponent.address)
+      await expect(startTx).to.emit(game, 'TurnChanged').withArgs(matchId, opponent.address)
+
+      const match = await game.getMatch(matchId)
+      expect(match.status).to.equal(MatchStatus.InProgress)
+      expect(match.currentTurn).to.equal(opponent.address)
+    })
+
+    it('starts the match even when the creator fleet was finalized before the opponent joined', async () => {
+      const { game, creator, opponent, matchId } = await loadFixture(deployGame)
+      await createWithEncryptedFleet(game, creator, opponent.address, VALID_FLEET)
+      // Finalize the creator while still WaitingForOpponent.
+      await makeValidationReady(game, matchId, creator)
+      await (await game.finalizeFleetValidation(matchId, creator.address)).wait()
+
+      await joinWithEncryptedFleet(game, opponent, matchId, VALID_FLEET_ALT)
+      await makeValidationReady(game, matchId, opponent)
+      const startTx = game.finalizeFleetValidation(matchId, opponent.address)
+      await expect(startTx).to.emit(game, 'MatchStarted').withArgs(matchId, opponent.address)
+
+      const match = await game.getMatch(matchId)
+      expect(match.status).to.equal(MatchStatus.InProgress)
+    })
+
+    it('recovers an invalid creator fleet via resubmission after the opponent joins', async () => {
+      const { game, creator, opponent, matchId } = await loadFixture(deployGame)
+      // Creator commits an invalid fleet through the atomic path.
+      await createWithEncryptedFleet(game, creator, opponent.address, FLEET_WITH_GAP)
+      await makeValidationReady(game, matchId, creator)
+      await expect(game.finalizeFleetValidation(matchId, creator.address))
+        .to.emit(game, 'FleetValidated')
+        .withArgs(matchId, creator.address, false)
+
+      // Opponent joins with a valid fleet; status becomes ValidatingPlacement.
+      await joinWithEncryptedFleet(game, opponent, matchId, VALID_FLEET_ALT)
+
+      // Creator resubmits a valid fleet (allowed now that placement is active).
+      const fixed = await encryptFleetAs(creator, VALID_FLEET)
+      await (await game.connect(creator).submitFleet(matchId, fixed)).wait()
+
+      await makeValidationReady(game, matchId, creator)
+      await (await game.finalizeFleetValidation(matchId, creator.address)).wait()
+      await makeValidationReady(game, matchId, opponent)
+      const startTx = game.finalizeFleetValidation(matchId, opponent.address)
+      await expect(startTx).to.emit(game, 'MatchStarted').withArgs(matchId, opponent.address)
+      expect((await game.getMatch(matchId)).status).to.equal(MatchStatus.InProgress)
+    })
+
+    it('rejects createWithFleet inputs encrypted for another wallet', async () => {
+      const { game, creator, opponent, outsider } = await loadFixture(deployGame)
+      const stolen = await encryptFleetAs(outsider, VALID_FLEET)
+      await expect(game.connect(creator).createWithFleet(opponent.address, stolen)).to.be.reverted
+    })
+
+    it('plays a shot after an atomic-flow start', async () => {
+      const { game, creator, opponent, matchId } = await loadFixture(deployGame)
+      await startAtomicMatch(game, creator, opponent, matchId)
+      // Invited opponent moves first.
+      const shot = await playShot(game, matchId, opponent, 0)
+      expect(shot.result).to.be.greaterThan(0n)
     })
   })
 

@@ -4,7 +4,12 @@ export interface CofheScope {
   address: HexAddress
   chainId: number
   deploymentId: string
-  matchId: bigint
+  /**
+   * Contract match id, or a provisional key (e.g. 'new') while a match is being
+   * created placement-first and no id exists yet. Used only for the session
+   * scope key; ciphertext binds to the account, not the match id.
+   */
+  matchId: bigint | string
 }
 
 export function cofheScopeKey(scope: CofheScope): string {
