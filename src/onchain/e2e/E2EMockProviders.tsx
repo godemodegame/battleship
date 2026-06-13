@@ -43,9 +43,12 @@ const LOCAL_EVENT = 'battleship:e2e-chain'
 interface StoredMatch {
   matchId: string
   status: 'WaitingForOpponent' | 'WaitingForPlacement' | 'ValidatingPlacement' | 'Cancelled'
+  /** 'Open' matches accept any non-creator joiner (random matchmaking). */
+  matchType: 'Friend' | 'Open'
   creator: HexAddress
   opponent: HexAddress | null
-  invitedOpponent: HexAddress
+  /** Null for open matches (no invited opponent). */
+  invitedOpponent: HexAddress | null
   createdAt: number
   joinedAt: number
   finishedAt: number
@@ -85,7 +88,7 @@ function toMatchView(match: StoredMatch): ChainMatchView {
     matchId: match.matchId,
     matchIdBig: BigInt(match.matchId),
     status: match.status,
-    matchType: 'Friend',
+    matchType: match.matchType,
     creator: match.creator,
     opponent: match.opponent,
     invitedOpponent: match.invitedOpponent,
@@ -140,6 +143,27 @@ function makeClients(account: HexAddress | null): BattleshipClients {
       : []
   }
 
+  // Friend matches stay invite-gated; open matches accept any non-creator.
+  const canJoin = (match: StoredMatch, joiner: HexAddress): boolean => {
+    if (joiner === match.creator) return false
+    return match.matchType === 'Open' ? true : joiner === match.invitedOpponent
+  }
+
+  // Mirrors the contract's openMatchIds index: an open match appears only while
+  // it is still waiting for any opponent (swap-popped on join/cancel).
+  const openMatchIds = (): bigint[] => {
+    const match = readStoredMatch()
+    if (
+      !match ||
+      match.matchType !== 'Open' ||
+      match.status !== 'WaitingForOpponent' ||
+      match.opponent !== null
+    ) {
+      return []
+    }
+    return [BigInt(match.matchId)]
+  }
+
   const readClient: BattleshipReadClient = {
     async getMatch(matchId) {
       const match = readStoredMatch()
@@ -155,6 +179,17 @@ function makeClients(account: HexAddress | null): BattleshipClients {
         })
       }
       return indexedIdsFor(player).slice(offset, offset + limit)
+    },
+    async getOpenMatchCount() {
+      return openMatchIds().length
+    },
+    async getOpenMatches(offset, limit) {
+      if (limit === 0 || limit > 50) {
+        throw Object.assign(new Error('InvalidPaginationLimit'), {
+          data: { errorName: 'InvalidPaginationLimit' },
+        })
+      }
+      return openMatchIds().slice(offset, offset + limit)
     },
     async getPlayers() {
       const match = readStoredMatch()
@@ -203,6 +238,7 @@ function makeClients(account: HexAddress | null): BattleshipClients {
             {
               matchId: '1',
               status: 'WaitingForOpponent',
+              matchType: 'Friend',
               creator: account,
               opponent: null,
               invitedOpponent,
@@ -221,6 +257,7 @@ function makeClients(account: HexAddress | null): BattleshipClients {
             {
               matchId: '1',
               status: 'WaitingForOpponent',
+              matchType: 'Friend',
               creator: account,
               opponent: null,
               invitedOpponent,
@@ -232,14 +269,48 @@ function makeClients(account: HexAddress | null): BattleshipClients {
           )
           return { ok: true, hash: TX_HASH, matchId: 1n }
         },
+        async createOpenMatch(onState) {
+          emitTx(onState)
+          const now = Math.floor(Date.now() / 1000)
+          writeStoredMatch(
+            {
+              matchId: '1',
+              status: 'WaitingForOpponent',
+              matchType: 'Open',
+              creator: account,
+              opponent: null,
+              invitedOpponent: null,
+              createdAt: now,
+              joinedAt: 0,
+              finishedAt: 0,
+            },
+            'MatchCreated',
+          )
+          return { ok: true, hash: TX_HASH, matchId: 1n }
+        },
+        async createOpenWithFleet(_segments, onState) {
+          emitTx(onState)
+          const now = Math.floor(Date.now() / 1000)
+          writeStoredMatch(
+            {
+              matchId: '1',
+              status: 'WaitingForOpponent',
+              matchType: 'Open',
+              creator: account,
+              opponent: null,
+              invitedOpponent: null,
+              createdAt: now,
+              joinedAt: 0,
+              finishedAt: 0,
+            },
+            'MatchCreated',
+          )
+          return { ok: true, hash: TX_HASH, matchId: 1n }
+        },
         async joinMatch(matchId, onState) {
           emitTx(onState)
           const match = readStoredMatch()
-          if (
-            !match ||
-            BigInt(match.matchId) !== matchId ||
-            account !== match.invitedOpponent
-          ) {
+          if (!match || BigInt(match.matchId) !== matchId || !canJoin(match, account)) {
             return { ok: false, error: 'not-invited' }
           }
           writeStoredMatch(
@@ -256,11 +327,7 @@ function makeClients(account: HexAddress | null): BattleshipClients {
         async joinWithFleet(matchId, _segments, onState) {
           emitTx(onState)
           const match = readStoredMatch()
-          if (
-            !match ||
-            BigInt(match.matchId) !== matchId ||
-            account !== match.invitedOpponent
-          ) {
+          if (!match || BigInt(match.matchId) !== matchId || !canJoin(match, account)) {
             return { ok: false, error: 'not-invited' }
           }
           writeStoredMatch(

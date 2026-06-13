@@ -133,6 +133,7 @@ export function HomeScreen() {
 
         <button
           className="btn primary"
+          data-ic="target"
           onClick={() => {
             haptics.prime()
             startPlacement()
@@ -140,20 +141,20 @@ export function HomeScreen() {
         >
           Practice vs Bot
         </button>
-        <button className="btn" onClick={() => navigate('/match/new')}>
+        <button className="btn" data-ic="globe" onClick={() => navigate('/lobby')}>
+          Find a Game
+        </button>
+        <button className="btn" data-ic="swords" onClick={() => navigate('/match/new')}>
           Play Against Friend
         </button>
-        <button className="btn" onClick={() => navigate('/matches')}>
+        <button className="btn" data-ic="list" onClick={() => navigate('/matches')}>
           My Battles
         </button>
-        <button className="btn" disabled title="Open matchmaking coming soon">
-          Open Match
-        </button>
         <DisplaySettings />
-        <button className="btn ghost" onClick={() => setHowItWorksOpen(true)}>
+        <button className="btn ghost" data-ic="info" onClick={() => setHowItWorksOpen(true)}>
           How It Works
         </button>
-        <p className="footnote">On-chain friend matches run on Arbitrum Sepolia.</p>
+        <p className="footnote">On-chain matches run on Arbitrum Sepolia.</p>
       </div>
 
       {howItWorksOpen && (

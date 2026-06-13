@@ -62,6 +62,15 @@ export interface BattleshipReadClient {
    * MAX_PAGE_LIMIT (50); an offset at/past the end returns an empty page.
    */
   getPlayerMatches?(player: HexAddress, offset: number, limit: number): Promise<bigint[]>
+  /** Number of open matches currently waiting for any opponent (lobby size). */
+  getOpenMatchCount?(): Promise<number>
+  /**
+   * One page of open-match ids waiting for any opponent, for the matchmaking
+   * lobby. Same pagination contract as `getPlayerMatches` (zero/over-cap limit
+   * reverts `InvalidPaginationLimit`). The set is swap-pop maintained, so order
+   * is not stable across joins — callers hydrate with `getMatch` and sort.
+   */
+  getOpenMatches?(offset: number, limit: number): Promise<bigint[]>
   /** Public placement/board state for both player slots. */
   getPlayers?(matchId: bigint): Promise<MatchPlayersView>
   /** Complete public move history, oldest first (GAME-708). */
@@ -103,6 +112,21 @@ export interface BattleshipWriteClient {
    */
   createWithFleet?(
     invitedOpponent: HexAddress,
+    segments: readonly EncryptedFleetSegment[],
+    onState: (state: TxState) => void,
+  ): Promise<CreateMatchResult>
+  /**
+   * Create an open match that any player may join (random matchmaking). No
+   * invited opponent; the match is listed in the public open-match lobby until
+   * someone joins or the creator cancels.
+   */
+  createOpenMatch?(onState: (state: TxState) => void): Promise<CreateMatchResult>
+  /**
+   * Placement-first open creation: create an open match and submit the
+   * creator's encrypted fleet in one transaction. Mirrors `createWithFleet`
+   * with no invited opponent.
+   */
+  createOpenWithFleet?(
     segments: readonly EncryptedFleetSegment[],
     onState: (state: TxState) => void,
   ): Promise<CreateMatchResult>
@@ -288,6 +312,26 @@ export function createBattleshipReadClient(
       return [...(raw as readonly bigint[])]
     },
 
+    async getOpenMatchCount() {
+      const raw = await publicClient.readContract({
+        address: contractAddress,
+        abi: battleshipGameAbi,
+        functionName: 'getOpenMatchCount',
+        args: [],
+      })
+      return Number(raw as bigint)
+    },
+
+    async getOpenMatches(offset, limit) {
+      const raw = await publicClient.readContract({
+        address: contractAddress,
+        abi: battleshipGameAbi,
+        functionName: 'getOpenMatches',
+        args: [offset, limit],
+      })
+      return [...(raw as readonly bigint[])]
+    },
+
     async getPlayers(matchId) {
       const raw = await publicClient.readContract({
         address: contractAddress,
@@ -393,6 +437,8 @@ export function createBattleshipWriteClient(
     functionName:
       | 'createMatch'
       | 'createWithFleet'
+      | 'createOpenMatch'
+      | 'createOpenWithFleet'
       | 'joinMatch'
       | 'joinWithFleet'
       | 'cancelMatch'
@@ -464,6 +510,26 @@ export function createBattleshipWriteClient(
         [invitedOpponent, segments],
         onState,
       )
+      if (!result.ok) return result
+      const matchId = extractCreatedMatchId(result.receipt.logs, contractAddress)
+      if (matchId === null) {
+        return { ok: false, error: 'unknown' }
+      }
+      return { ok: true, hash: result.receipt.transactionHash, matchId }
+    },
+
+    async createOpenMatch(onState) {
+      const result = await performWrite('createOpenMatch', [], onState)
+      if (!result.ok) return result
+      const matchId = extractCreatedMatchId(result.receipt.logs, contractAddress)
+      if (matchId === null) {
+        return { ok: false, error: 'unknown' }
+      }
+      return { ok: true, hash: result.receipt.transactionHash, matchId }
+    },
+
+    async createOpenWithFleet(segments, onState) {
+      const result = await performWrite('createOpenWithFleet', [segments], onState)
       if (!result.ok) return result
       const matchId = extractCreatedMatchId(result.receipt.logs, contractAddress)
       if (matchId === null) {

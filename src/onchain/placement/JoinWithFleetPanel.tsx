@@ -139,10 +139,11 @@ export function JoinWithFleetPanel({
     }
   }
 
+  const isOpen = match.matchType === 'Open'
   return (
     <section className="onchain-placement panel" data-testid="join-panel">
-      <p className="status-label">{joinCopy.title}</p>
-      <p className="status-sub">{joinCopy.invitedBody}</p>
+      <p className="status-label">{isOpen ? joinCopy.openTitle : joinCopy.title}</p>
+      <p className="status-sub">{isOpen ? joinCopy.openBody : joinCopy.invitedBody}</p>
       {match.creator && (
         <p className="footnote">
           {joinCopy.creatorLabel}: {walletCopy.shortAddress(match.creator)}
@@ -189,6 +190,7 @@ export function JoinWithFleetPanel({
 
       <button
         className="btn primary wide"
+        data-ic="check"
         data-testid="join-match"
         disabled={
           busy ||

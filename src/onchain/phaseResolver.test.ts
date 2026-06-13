@@ -69,6 +69,47 @@ describe('resolveMatchPhase', () => {
     expect(result.kind).toBe('waiting-for-opponent')
   })
 
+  describe('open matches (random matchmaking)', () => {
+    function openMatch(overrides: Partial<MatchView> = {}): MatchView {
+      return baseMatch({
+        status: 'WaitingForOpponent',
+        matchType: 'Open',
+        invitedOpponent: null,
+        opponent: null,
+        ...overrides,
+      })
+    }
+
+    it('offers join to ANY non-creator wallet on an open match', () => {
+      expect(resolveMatchPhase(input({ walletAddress: SPECTATOR, match: openMatch() })).kind).toBe(
+        'join',
+      )
+      expect(resolveMatchPhase(input({ walletAddress: OPPONENT, match: openMatch() })).kind).toBe(
+        'join',
+      )
+    })
+
+    it('shows the host the waiting state for their own open match', () => {
+      expect(resolveMatchPhase(input({ walletAddress: CREATOR, match: openMatch() })).kind).toBe(
+        'waiting-for-opponent',
+      )
+    })
+
+    it('does not offer join once an open match already has an opponent', () => {
+      const filled = openMatch({ opponent: OPPONENT })
+      expect(resolveMatchPhase(input({ walletAddress: SPECTATOR, match: filled })).kind).toBe(
+        'waiting-for-opponent',
+      )
+    })
+
+    it('keeps friend matches invite-gated (a stranger cannot join)', () => {
+      const friend = baseMatch({ status: 'WaitingForOpponent', opponent: null })
+      expect(resolveMatchPhase(input({ walletAddress: SPECTATOR, match: friend })).kind).toBe(
+        'waiting-for-opponent',
+      )
+    })
+  })
+
   it('enters placement for a participant on WaitingForPlacement', () => {
     const result = resolveMatchPhase(
       input({ walletAddress: CREATOR, match: baseMatch({ status: 'WaitingForPlacement' }) }),

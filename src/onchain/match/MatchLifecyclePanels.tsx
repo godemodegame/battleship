@@ -88,6 +88,7 @@ export function JoinPanel({ match, writeClient, canWrite, onJoined, prepareHando
       )}
       <button
         className="btn primary"
+        data-ic="check"
         data-testid="join-match"
         disabled={busy || !canWrite || !writeClient}
         onClick={onJoin}
@@ -156,6 +157,11 @@ export function InviteWaitingPanel({
             {matchStateCopy.expiredTitle}
           </p>
           <p className="status-sub">{matchStateCopy.expiredBody}</p>
+        </>
+      ) : match.matchType === 'Open' ? (
+        <>
+          <p className="status-label">{inviteCopy.openWaitingTitle}</p>
+          <p className="status-sub">{inviteCopy.openWaitingBody}</p>
         </>
       ) : (
         <>

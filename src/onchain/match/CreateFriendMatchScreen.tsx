@@ -15,6 +15,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import {
   createMatchCopy,
+  openMatchCopy,
   deploymentCopy,
   encryptedPlacementCopy,
   matchStateCopy,
@@ -64,7 +65,15 @@ export function validateInvitedAddress(
   return null
 }
 
-export function CreateFriendMatchScreen() {
+/**
+ * Shared placement-first creation screen for both match modes:
+ *   - `friend` → invite a specific wallet, then `createWithFleet`;
+ *   - `open`   → host a game any random player can join, then `createOpenWithFleet`.
+ * Open mode drops the invited-address input entirely (random matchmaking).
+ */
+function CreateMatchScreen({ mode }: { mode: 'friend' | 'open' }) {
+  const isOpen = mode === 'open'
+  const copy = isOpen ? openMatchCopy : createMatchCopy
   const wallet = useWalletSession()
   const navigate = useNavigate()
   const location = useLocation()
@@ -133,8 +142,11 @@ export function CreateFriendMatchScreen() {
     return () => bindScope(null)
   }, [bindScope, placementKey])
 
+  const canCreate = isOpen
+    ? Boolean(writeClient?.createOpenWithFleet)
+    : Boolean(writeClient?.createWithFleet)
   const submission = useFleetSubmission({
-    enabled: wallet.canWrite && deploymentReady && Boolean(writeClient?.createWithFleet),
+    enabled: wallet.canWrite && deploymentReady && canCreate,
     cofheScope,
     placementScope,
     publicClient: wallet.publicClient,
@@ -157,9 +169,13 @@ export function CreateFriendMatchScreen() {
   }
 
   async function onCreate() {
-    const problem = validateInvitedAddress(address, session.address)
-    setValidationError(problem)
-    if (problem || !complete || !writeClient?.createWithFleet || !wallet.canWrite || busy) {
+    // Friend mode validates the invited address; open mode has no invitee.
+    if (!isOpen) {
+      const problem = validateInvitedAddress(address, session.address)
+      setValidationError(problem)
+      if (problem) return
+    }
+    if (!complete || !canCreate || !wallet.canWrite || busy) {
       return
     }
 
@@ -169,10 +185,11 @@ export function CreateFriendMatchScreen() {
     // A mobile wallet confirmation may background the browser; record the
     // route so the return path restores match creation (GAME-210).
     wallet.actions.prepareHandoff()
-    const invited = address.trim().toLowerCase() as HexAddress
-    const result = await tx.run((onState) =>
-      writeClient.createWithFleet!(invited, encrypted, onState),
-    )
+    const result = isOpen
+      ? await tx.run((onState) => writeClient!.createOpenWithFleet!(encrypted, onState))
+      : await tx.run((onState) =>
+          writeClient!.createWithFleet!(address.trim().toLowerCase() as HexAddress, encrypted, onState),
+        )
     if (result?.ok) {
       // GAME-607: clear the plaintext fleet once the fleet is on-chain.
       clearFleet()
@@ -181,10 +198,13 @@ export function CreateFriendMatchScreen() {
   }
 
   return (
-    <div className="overlay home match-placement-route" data-testid="create-match-screen">
+    <div
+      className="overlay home match-placement-route"
+      data-testid={isOpen ? 'create-open-match-screen' : 'create-match-screen'}
+    >
       <div className="title-lockup">
-        <span className="title-kicker">{createMatchCopy.kicker}</span>
-        <h1>{createMatchCopy.title}</h1>
+        <span className="title-kicker">{copy.kicker}</span>
+        <h1>{copy.title}</h1>
       </div>
 
       <WalletSessionBar
@@ -254,49 +274,64 @@ export function CreateFriendMatchScreen() {
 
       {session.isConnected && session.isCorrectChain && deploymentReady && (
         <div className="home-actions" data-testid="create-match-form">
-          <label className="field-label" htmlFor="invited-address">
-            {createMatchCopy.addressLabel}
-          </label>
-          <input
-            id="invited-address"
-            className="text-field"
-            data-testid="invited-address-input"
-            type="text"
-            inputMode="text"
-            autoComplete="off"
-            autoCapitalize="off"
-            spellCheck={false}
-            placeholder={createMatchCopy.addressPlaceholder}
-            value={address}
-            disabled={busy}
-            onChange={(e) => {
-              setAddress(e.target.value)
-              if (validationError) setValidationError(null)
-            }}
-          />
-          {validationError && (
-            <p className="error-note" role="alert" data-testid="address-validation-error">
-              {validationError}
-            </p>
-          )}
-          {pasteNote && (
-            <p className="footnote" data-testid="paste-note">
-              {pasteNote}
-            </p>
-          )}
-          <p className="footnote">{createMatchCopy.helper}</p>
+          {!isOpen && (
+            <>
+              <label className="field-label" htmlFor="invited-address">
+                {createMatchCopy.addressLabel}
+              </label>
+              <input
+                id="invited-address"
+                className="text-field"
+                data-testid="invited-address-input"
+                type="text"
+                inputMode="text"
+                autoComplete="off"
+                autoCapitalize="off"
+                spellCheck={false}
+                placeholder={createMatchCopy.addressPlaceholder}
+                value={address}
+                disabled={busy}
+                onChange={(e) => {
+                  setAddress(e.target.value)
+                  if (validationError) setValidationError(null)
+                }}
+              />
+              {validationError && (
+                <p className="error-note" role="alert" data-testid="address-validation-error">
+                  {validationError}
+                </p>
+              )}
+              {pasteNote && (
+                <p className="footnote" data-testid="paste-note">
+                  {pasteNote}
+                </p>
+              )}
+              <p className="footnote">{createMatchCopy.helper}</p>
 
-          <div className="button-row">
-            <button className="btn" data-testid="paste-address" disabled={busy} onClick={onPaste}>
-              {createMatchCopy.paste}
-            </button>
-          </div>
+              <div className="button-row">
+                <button
+                  className="btn"
+                  data-testid="paste-address"
+                  disabled={busy}
+                  onClick={onPaste}
+                >
+                  {createMatchCopy.paste}
+                </button>
+              </div>
+            </>
+          )}
+
+          {isOpen && (
+            <p className="footnote" data-testid="open-match-helper">
+              {copy.helper}
+            </p>
+          )}
 
           <div className="placement-heading">
             <div>
-              <span className="status-label">{createMatchCopy.placementTitle}</span>
+              <span className="status-label">{copy.placementTitle}</span>
               <p className="status-sub">
-                {placedCount}/10 placed · {createMatchCopy.placementHelper}
+                {placedCount}/10 placed · {copy.placementHelper}
               </p>
             </div>
           </div>
@@ -326,23 +361,24 @@ export function CreateFriendMatchScreen() {
           )}
           {!complete && (
             <p className="footnote" data-testid="placement-incomplete">
-              {createMatchCopy.placementIncomplete}
+              {copy.placementIncomplete}
             </p>
           )}
 
           <button
             className="btn primary wide"
+            data-ic="plus"
             data-testid="create-match"
             disabled={
               busy ||
               !complete ||
               !wallet.canWrite ||
               submission.cofhe.status !== 'ready' ||
-              !writeClient?.createWithFleet
+              !canCreate
             }
             onClick={onCreate}
           >
-            {busy ? createMatchCopy.submittingFleet : createMatchCopy.createAndSubmit}
+            {busy ? copy.submittingFleet : copy.createAndSubmit}
           </button>
 
           <TxStatusLine state={tx.state} onRetry={tx.reset} />
@@ -350,10 +386,25 @@ export function CreateFriendMatchScreen() {
       )}
 
       <div className="home-actions">
-        <Link className="btn ghost" data-testid="create-back" to="/practice">
+        <Link
+          className="btn ghost"
+          data-ic="back"
+          data-testid="create-back"
+          to={isOpen ? '/lobby' : '/practice'}
+        >
           {matchStateCopy.backToMenu}
         </Link>
       </div>
     </div>
   )
+}
+
+/** Friend match creation route (`/match/new`): invite a specific wallet. */
+export function CreateFriendMatchScreen() {
+  return <CreateMatchScreen mode="friend" />
+}
+
+/** Open match creation route (`/match/open`): host a game for any player. */
+export function CreateOpenMatchScreen() {
+  return <CreateMatchScreen mode="open" />
 }

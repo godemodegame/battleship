@@ -25,9 +25,19 @@ const CreateFriendMatchScreen = lazy(async () => {
   return { default: module.CreateFriendMatchScreen }
 })
 
+const CreateOpenMatchScreen = lazy(async () => {
+  const module = await import('../../onchain/match/CreateFriendMatchScreen')
+  return { default: module.CreateOpenMatchScreen }
+})
+
 const MatchListScreen = lazy(async () => {
   const module = await import('../../onchain/match/MatchListScreen')
   return { default: module.MatchListScreen }
+})
+
+const OpenMatchLobbyScreen = lazy(async () => {
+  const module = await import('../../onchain/match/OpenMatchLobbyScreen')
+  return { default: module.OpenMatchLobbyScreen }
 })
 
 function RouteFallback() {
@@ -49,6 +59,8 @@ export const appRoutes = (
     <Route index element={<EntryScreen />} />
     <Route path="practice" element={suspended(<PracticeApp />)} />
     <Route path="match/new" element={suspended(<CreateFriendMatchScreen />)} />
+    <Route path="match/open" element={suspended(<CreateOpenMatchScreen />)} />
+    <Route path="lobby" element={suspended(<OpenMatchLobbyScreen />)} />
     <Route path="matches" element={suspended(<MatchListScreen />)} />
     <Route path="match/:deploymentId/:matchId" element={suspended(<MatchRouteShell />)} />
     <Route path="*" element={<NotFoundScreen />} />

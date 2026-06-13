@@ -143,6 +143,44 @@ export const createMatchCopy = {
   submittingFleet: 'Sending Fleet',
 } as const
 
+/** Open-match creation: host a game any random player can join (GAME random-mm). */
+export const openMatchCopy = {
+  kicker: 'Play a Random Opponent',
+  title: 'Host Open Game',
+  helper: 'Anyone can join this game. The first player to join becomes your opponent.',
+  placementTitle: 'Place Your Fleet',
+  placementHelper: 'Arrange your ships, then host the open game and send your fleet.',
+  placementIncomplete: 'Place all ten ships before hosting the game.',
+  createAndSubmit: 'Host Open Game & Send Fleet',
+  submittingFleet: 'Sending Fleet',
+} as const
+
+/** Open-match lobby ("Find a Game") + Quick Match (random matchmaking). */
+export const lobbyCopy = {
+  kicker: 'Random Matchmaking',
+  title: 'Find a Game',
+  menuEntry: 'Find a Game',
+  quickMatch: 'Quick Match',
+  quickMatchSearching: 'Finding a Game…',
+  hostNew: 'Host Open Game',
+  sectionJoinable: 'Open Games',
+  sectionMine: 'Your Open Game',
+  joinLabel: 'Join',
+  hostedBy: 'Hosted by',
+  waitingForYou: 'Waiting for a challenger',
+  empty: 'No open games right now. Host one and wait for a challenger.',
+  emptyCta: 'Host Open Game',
+  loading: 'Loading open games…',
+  loadError: 'Could not load open games.',
+  partialError: 'Some games failed to load.',
+  retry: 'Retry',
+  refresh: 'Refresh',
+  back: 'Back',
+  connectPrompt: 'Connect your wallet to find a game.',
+  // Quick Match navigates to the oldest joinable game, or hosts one if none.
+  quickMatchHosting: 'No open game found — hosting one for you.',
+} as const
+
 /** Wallet-scoped match list ("My Battles"). */
 export const matchListCopy = {
   kicker: 'On-chain Battles',
@@ -187,12 +225,18 @@ export const inviteCopy = {
   share: 'Share Invite',
   cancelMatch: 'Cancel Match',
   cancelling: 'Cancelling Match',
+  // Open-match host waiting for any challenger (random matchmaking).
+  openWaitingTitle: 'Waiting for a Challenger',
+  openWaitingBody: 'This is an open game. The match starts as soon as any player joins.',
 } as const
 
 /** Invited-wallet join flow (GAME-507, Flow 8). */
 export const joinCopy = {
   title: 'Join Match',
   invitedBody: 'You are invited to this match. Join to place your fleet.',
+  // Open match (random matchmaking): no invite, any player may join.
+  openTitle: 'Join Open Game',
+  openBody: 'This is an open game. Place your fleet to join and start the battle.',
   creatorLabel: 'Created by',
   join: 'Join Match',
   joining: 'Joining Match',

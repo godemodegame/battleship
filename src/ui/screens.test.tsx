@@ -117,12 +117,12 @@ describe('HomeScreen', () => {
     expect(hard.getAttribute('aria-checked')).toBe('true')
     expect(useStore.getState().difficulty).toBe('hard')
 
-    // Phase 5: Play Against Friend is live (routes to /match/new); Open Match
-    // stays disabled until post-MVP matchmaking exists.
+    // Play Against Friend (→ /match/new) and Find a Game (→ /lobby random
+    // matchmaking) are both live; neither is disabled.
     expect((screen.getByRole('button', { name: 'Play Against Friend' }) as HTMLButtonElement).disabled)
       .toBe(false)
-    expect((screen.getByRole('button', { name: 'Open Match' }) as HTMLButtonElement).disabled)
-      .toBe(true)
+    expect((screen.getByRole('button', { name: 'Find a Game' }) as HTMLButtonElement).disabled)
+      .toBe(false)
 
     await user.click(screen.getByRole('button', { name: 'How It Works' }))
     expect(screen.getByRole('heading', { name: 'How It Works' })).toBeTruthy()

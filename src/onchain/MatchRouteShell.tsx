@@ -100,6 +100,10 @@ function makeDemoMatch(deploymentId: string, matchId: string): MatchView {
     { key: 'valid',       patch: { status: 'ValidatingPlacement', opponent: DEMO_OPPONENT } },
     { key: 'ready',       patch: { status: 'ReadyToStart', opponent: DEMO_OPPONENT } },
     { key: 'wait-opp',    patch: { status: 'WaitingForOpponent', opponent: DEMO_OPPONENT } },
+    // Open match (random matchmaking): no invited opponent; any non-creator
+    // wallet resolves to the join phase. 'open' is checked before 'join' so
+    // demo-open-join keeps the Open patch while still selecting a stranger wallet.
+    { key: 'open',        patch: { status: 'WaitingForOpponent', matchType: 'Open', invitedOpponent: null } },
     { key: 'join',        patch: { status: 'WaitingForOpponent' } },
     { key: 'cancel',      patch: { status: 'Cancelled', opponent: DEMO_OPPONENT } },
     { key: 'forfeit',     patch: { status: 'Forfeited', opponent: DEMO_OPPONENT } },
