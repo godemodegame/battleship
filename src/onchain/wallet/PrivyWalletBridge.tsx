@@ -56,6 +56,17 @@ function activeWalletOf(wallets: ConnectedWallet[]): ConnectedWallet | null {
  * Inner bridge — rendered inside `PrivyProvider` so it may use Privy hooks.
  * Derives the session, builds viem clients, and wires connection actions.
  */
+/** Record the current on-chain match route so the user can be returned to it
+ * after a mobile wallet-app handoff (GAME-210). Best-effort; never throws. */
+function recordMatchHandoffIntent() {
+  try {
+    if (typeof window !== 'undefined') {
+      const p = window.location.pathname + window.location.search
+      if (p.startsWith('/match/')) saveHandoffIntent(p)
+    }
+  } catch {}
+}
+
 function WalletSessionBridge({ children }: { children: ReactNode }) {
   const { ready, authenticated, login, logout, connectWallet } = usePrivy()
   const { wallets } = useWallets()
@@ -252,12 +263,7 @@ function WalletSessionBridge({ children }: { children: ReactNode }) {
     setConnecting(true)
     // Before we may hand off on mobile, record the current on-chain route so we
     // can return the user to it after the wallet app (GAME-210).
-    try {
-      if (typeof window !== 'undefined') {
-        const p = window.location.pathname + window.location.search
-        if (p.startsWith('/match/')) saveHandoffIntent(p)
-      }
-    } catch {}
+    recordMatchHandoffIntent()
     // Privy owns wallet discovery + connection. `login` opens the connect UI;
     // with wallet-only login methods this is the wallet selection modal.
     try {
@@ -289,12 +295,7 @@ function WalletSessionBridge({ children }: { children: ReactNode }) {
   }, [wallet])
 
   const prepareHandoff = useCallback(() => {
-    try {
-      if (typeof window !== 'undefined') {
-        const p = window.location.pathname + window.location.search
-        if (p.startsWith('/match/')) saveHandoffIntent(p)
-      }
-    } catch {}
+    recordMatchHandoffIntent()
   }, [])
 
   const clearHandoffRestore = useCallback(() => {

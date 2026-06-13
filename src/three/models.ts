@@ -10,7 +10,6 @@ import type { ShipClassId } from '../game/types'
  */
 
 export const CELL = 1.04
-export const BOARD_SPAN = 10 * CELL
 
 const MODEL = (name: string) => `/models/${name}.fbx`
 const TEXTURE = (name: string) => `/textures/${name}-texture.jpg`
@@ -53,7 +52,7 @@ export function useStyledFBX(name: string): THREE.Group {
  * centered at the origin in XZ, base resting on y=0, longest XZ side equal
  * to `targetLength`.
  */
-export function normalize(model: THREE.Object3D, targetLength: number, maxHeight?: number): THREE.Group {
+function normalize(model: THREE.Object3D, targetLength: number, maxHeight?: number): THREE.Group {
   const inner = new THREE.Group()
   inner.add(model)
   const box = new THREE.Box3().setFromObject(model)

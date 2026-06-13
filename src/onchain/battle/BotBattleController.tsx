@@ -30,9 +30,8 @@ import { botBattleCopy } from '../../copy/en'
 import { resetPracticeState, useStore } from '../../practice/practiceStore'
 import type { BattleshipReadClient, BattleshipWriteClient } from '../client/battleshipClient'
 import type { ChainMatchView } from '../client/mapping'
-import { pendingTxScope } from '../client/pendingTxStore'
+import { useMatchScopes } from './useMatchScopes'
 import { useTrackedWrite, type TrackedWrite } from '../client/useTrackedWrite'
-import type { CofheScope } from '../fhenix/types'
 import { useCofheMatchClient, type CofheClientState } from '../fhenix/useCofheMatchClient'
 import type { WalletContextValue } from '../wallet/WalletSessionContext'
 import type { BotFleets } from '../match/botFleetStash'
@@ -168,32 +167,12 @@ export function BotBattleController({
   const viewer = wallet.session.address
   const chainId = wallet.session.chainId
 
-  const txScope = (kind: string) =>
-    viewer
-      ? pendingTxScope({
-          deploymentId: match.deploymentId,
-          matchId: match.matchIdBig,
-          address: viewer,
-          kind,
-        })
-      : null
+  const { txScope, cofheScope } = useMatchScopes(match, viewer, chainId)
   const attackWrite = useTrackedWrite(txScope('attack'))
   const botMoveWrite = useTrackedWrite(txScope('botMove'))
   const resolveWrite = useTrackedWrite(txScope('resolve'))
   const forfeitWrite = useTrackedWrite(txScope('forfeit'))
 
-  const cofheScope = useMemo<CofheScope | null>(
-    () =>
-      viewer && chainId
-        ? {
-            address: viewer,
-            chainId,
-            deploymentId: match.deploymentId,
-            matchId: match.matchIdBig,
-          }
-        : null,
-    [viewer, chainId, match.deploymentId, match.matchIdBig],
-  )
   const cofhe = useCofheMatchClient({
     enabled: wallet.canWrite && Boolean(writeClient?.finalizeAttackWithProof),
     scope: cofheScope,

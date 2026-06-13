@@ -8,7 +8,7 @@
 
 import { useEffect, useState } from 'react'
 
-export function isOnline(): boolean {
+function isOnline(): boolean {
   return typeof navigator === 'undefined' || navigator.onLine !== false
 }
 

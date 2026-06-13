@@ -19,7 +19,7 @@ import type {
 import { DISCONNECTED_SESSION, type WalletSession } from './session'
 import type { WriteBlockReason } from './writeGuard'
 
-export interface WalletActions {
+interface WalletActions {
   /** Open Privy's connect UI (the only connection surface). */
   connect: () => void
   /** Disconnect the active wallet / Privy session. */

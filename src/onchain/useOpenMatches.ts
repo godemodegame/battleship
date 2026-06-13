@@ -25,6 +25,7 @@ import { decodeReadError } from './client/decodeError'
 import type { BattleshipReadClient } from './client/battleshipClient'
 import { isJoinExpired, type ChainMatchView } from './client/mapping'
 import type { HexAddress } from './phaseResolver'
+import { useRefetchOnFocus } from './useRefetchOnFocus'
 
 /** Mirrors the contract's MAX_PAGE_LIMIT for getOpenMatches pagination. */
 const ID_PAGE_LIMIT = 50
@@ -198,21 +199,7 @@ export function useOpenMatches(params: UseOpenMatchesParams): OpenMatchListQuery
     void load(true)
   }, [load, accountEpoch, chainId])
 
-  // GAME-510: refetch when the tab regains focus/visibility or comes back online.
-  useEffect(() => {
-    if (!enumerable) return
-    const onVisible = () => {
-      if (document.visibilityState === 'visible') refetch()
-    }
-    window.addEventListener('focus', refetch)
-    window.addEventListener('online', refetch)
-    document.addEventListener('visibilitychange', onVisible)
-    return () => {
-      window.removeEventListener('focus', refetch)
-      window.removeEventListener('online', refetch)
-      document.removeEventListener('visibilitychange', onVisible)
-    }
-  }, [enumerable, refetch])
+  useRefetchOnFocus(refetch, enumerable)
 
   return {
     status,

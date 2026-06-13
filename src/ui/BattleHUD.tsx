@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useStore } from '../practice/practiceStore'
 import { botBattleCopy } from '../copy/en'
 import { cellLabel } from '../game/constants'
-import type { BoardState, Side } from '../game/types'
+import type { BoardState } from '../game/types'
 import { MuteButton } from './common'
 import { haptics } from '../lib/haptics'
 import { COMIC_SFX_URL } from '../lib/comicSfx'
@@ -143,8 +143,4 @@ export function BattleHUD() {
       )}
     </div>
   )
-}
-
-export function sideName(side: Side) {
-  return side === 'player' ? 'You' : 'Bot'
 }

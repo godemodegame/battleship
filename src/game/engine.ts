@@ -48,7 +48,7 @@ export function createMatch(
   }
 }
 
-export const otherSide = (side: Side): Side => (side === 'player' ? 'bot' : 'player')
+const otherSide = (side: Side): Side => (side === 'player' ? 'bot' : 'player')
 
 /** Adjacent cells that are empty or belong to a different ship (classic no-touch halo). */
 function haloCellsAroundShip(board: BoardState, shipIndex: number): number[] {
@@ -102,9 +102,9 @@ function applyShot(board: BoardState, cell: number): { board: BoardState; result
   }
 }
 
-export const allSunk = (board: BoardState) => board.ships.every((s) => s.sunk)
+const allSunk = (board: BoardState) => board.ships.every((s) => s.sunk)
 
-export const isAttacked = (board: BoardState, cell: number) => board.shots[cell] !== 0
+const isAttacked = (board: BoardState, cell: number) => board.shots[cell] !== 0
 
 /**
  * Resolve an attack by `by` against the opposing board. Returns a new match

@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { FLEET, cellLabel } from '../game/constants'
+import { FLEET } from '../game/constants'
 import { autoPlaceFleet, canPlace, isFleetComplete, rotated } from '../game/board'
 import { applyAttack, createMatch, sunkHalo } from '../game/engine'
 import { chooseBotTarget } from '../game/bot'
@@ -622,5 +622,3 @@ export function matchSummary(match: MatchState, forfeited: boolean) {
     botShipsLeft: shipsLeft('bot'),
   }
 }
-
-export { cellLabel }

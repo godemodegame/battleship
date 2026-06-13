@@ -11,7 +11,6 @@
 
 import { render } from '@testing-library/react'
 import { MemoryRouter, Routes } from 'react-router-dom'
-import type { ReactElement } from 'react'
 import { vi } from 'vitest'
 import { appRoutes } from '../app/routes/appRoutes'
 import type {
@@ -698,32 +697,6 @@ export function renderApp({
           <MemoryRouter initialEntries={[route]}>
             <Routes>{appRoutes}</Routes>
           </MemoryRouter>
-        </BattleshipClientsOverrideContext.Provider>
-      </CofheClientFactoryContext.Provider>
-    </WalletSessionContext.Provider>,
-  )
-}
-
-/** Mount an arbitrary element with the same providers (for single screens). */
-export function renderWithProviders(
-  ui: ReactElement,
-  {
-    wallet,
-    clients = null,
-    route = '/',
-    cofheFactory = makeFakeCofheFactory(),
-  }: {
-    wallet: WalletContextValue
-    clients?: BattleshipClients | null
-    route?: string
-    cofheFactory?: CofheClientFactory
-  },
-) {
-  return render(
-    <WalletSessionContext.Provider value={wallet}>
-      <CofheClientFactoryContext.Provider value={cofheFactory}>
-        <BattleshipClientsOverrideContext.Provider value={clients ? () => clients : null}>
-          <MemoryRouter initialEntries={[route]}>{ui}</MemoryRouter>
         </BattleshipClientsOverrideContext.Provider>
       </CofheClientFactoryContext.Provider>
     </WalletSessionContext.Provider>,

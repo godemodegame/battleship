@@ -25,9 +25,8 @@ import type { MatchPhase } from '../phaseResolver'
 import type { Address } from '../renderModel'
 import type { WalletContextValue } from '../wallet/WalletSessionContext'
 import { TxStatusLine } from '../match/TxStatusLine'
-import { pendingTxScope } from '../client/pendingTxStore'
+import { useMatchScopes } from './useMatchScopes'
 import { useTrackedWrite } from '../client/useTrackedWrite'
-import type { CofheScope } from '../fhenix/types'
 import { useCofheMatchClient } from '../fhenix/useCofheMatchClient'
 import { BattleGrid } from './BattleGrid'
 import { buildPublicBattleModel, TOTAL_SHIPS } from './publicBattleModel'
@@ -101,19 +100,12 @@ export function OnchainBattlePanel({
   onRefetch,
 }: OnchainBattlePanelProps) {
   const viewer = wallet.session.address
+  const chainId = wallet.session.chainId
   const [selectedCell, setSelectedCell] = useState<number | null>(null)
   const [confirmForfeit, setConfirmForfeit] = useState(false)
-  // Persist in-flight hashes per write kind so a suspended browser re-attaches
-  // to the receipt after resume (GAME-802).
-  const txScope = (kind: string) =>
-    viewer
-      ? pendingTxScope({
-          deploymentId: match.deploymentId,
-          matchId: match.matchIdBig,
-          address: viewer,
-          kind,
-        })
-      : null
+  // Per-match write-recovery scope (GAME-802) + the CoFHE decrypt-proof session
+  // scope, shared with the bot battle controller.
+  const { txScope, cofheScope } = useMatchScopes(match, viewer, chainId)
   const attackWrite = useTrackedWrite(txScope('attack'))
   const botMoveWrite = useTrackedWrite(txScope('botMove'))
   const resolveWrite = useTrackedWrite(txScope('resolve'))
@@ -130,19 +122,6 @@ export function OnchainBattlePanel({
 
   // The CoFHE session fetches the pending shot's decrypt proofs; it is only
   // needed while a shot is unresolved.
-  const chainId = wallet.session.chainId
-  const cofheScope = useMemo<CofheScope | null>(
-    () =>
-      viewer && chainId
-        ? {
-            address: viewer,
-            chainId,
-            deploymentId: match.deploymentId,
-            matchId: match.matchIdBig,
-          }
-        : null,
-    [viewer, chainId, match.deploymentId, match.matchIdBig],
-  )
   const cofhe = useCofheMatchClient({
     enabled:
       phase.kind === 'resolving' &&

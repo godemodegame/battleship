@@ -49,23 +49,12 @@ export interface UseFleetSubmissionResult {
   encrypting: boolean
   progress: CofheProgress
   error: ErrorCode | null
-  resetError: () => void
   /**
    * Encrypt the locally-completed fleet and return the ciphertext segments, or
    * `null` if the fleet is incomplete, the session is not ready, encryption
    * fails, or the scope drifted mid-encryption. On failure `error` is set.
    */
   encrypt: () => Promise<readonly EncryptedFleetSegment[] | null>
-  /**
-   * Encrypt an explicitly-provided complete fleet (e.g. the auto-placed bot
-   * fleet for a single-player bot match). Same CoFHE scope guard and error
-   * handling as `encrypt`, but the fleet is passed in rather than read from the
-   * placement store. Returns `null` on an incomplete fleet, an unready session,
-   * a failed encryption, or a mid-flight scope drift.
-   */
-  encryptFleet: (
-    placements: ReadonlyArray<Placement | null>,
-  ) => Promise<readonly EncryptedFleetSegment[] | null>
   /**
    * Encrypt the player's fleet AND a second (bot) fleet in a single CoFHE proof
    * round — the 40 inputs are packed and proven together, roughly halving the
@@ -144,34 +133,6 @@ export function useFleetSubmission(
     }
   }
 
-  async function encryptFleet(
-    placements: ReadonlyArray<Placement | null>,
-  ): Promise<readonly EncryptedFleetSegment[] | null> {
-    if (!cofhe.client || !expectedCofheKey) return null
-    setError(null)
-    setProgress('initializing')
-    setEncrypting(true)
-    const stopEncryptTimer = perf.start('encrypt-fleet')
-    try {
-      const encrypted = await cofhe.client.encryptFleet(
-        encodeFleetSegments(placements),
-        setProgress,
-      )
-      stopEncryptTimer()
-      // A mid-flight account / chain / match switch must never let a stale
-      // ciphertext reach the contract under a new scope.
-      if (cofhe.client.scopeKey !== expectedCofheKey) {
-        throw new Error('CoFHE scope changed during encryption')
-      }
-      return encrypted
-    } catch {
-      setError('encryption-failed')
-      return null
-    } finally {
-      setEncrypting(false)
-    }
-  }
-
   async function encryptBotPair(
     playerPlacements: ReadonlyArray<Placement | null>,
     botPlacements: ReadonlyArray<Placement | null>,
@@ -217,9 +178,7 @@ export function useFleetSubmission(
     encrypting,
     progress,
     error,
-    resetError: () => setError(null),
     encrypt,
-    encryptFleet,
     encryptBotPair,
   }
 }

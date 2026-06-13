@@ -265,8 +265,6 @@ export const joinCopy = {
   openTitle: 'Join Open Game',
   openBody: 'This is an open game. Place your fleet to join and start the battle.',
   creatorLabel: 'Created by',
-  join: 'Join Match',
-  joining: 'Joining Match',
   wrongWallet: 'This invite is for another wallet.',
   // Placement-first join (GAME-507): arrange the fleet, then join and submit the
   // encrypted fleet in one transaction.

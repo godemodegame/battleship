@@ -14,7 +14,7 @@
  */
 import type { CellShot, Orientation, ShipClassId } from '../game/types'
 
-export interface ShipOutline {
+interface ShipOutline {
   classId: ShipClassId
   length: number
   row: number

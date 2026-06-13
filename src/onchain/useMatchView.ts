@@ -16,6 +16,7 @@ import type { ErrorCode } from '../copy/errors'
 import type { BattleshipReadClient, MatchEventRef } from './client/battleshipClient'
 import { decodeReadError } from './client/decodeError'
 import type { ChainMatchView } from './client/mapping'
+import { useRefetchOnFocus } from './useRefetchOnFocus'
 
 export type MatchViewStatus =
   /** No read client or no parseable match id — nothing to query. */
@@ -140,21 +141,7 @@ export function useMatchView(params: UseMatchViewParams): MatchViewQuery {
     return unwatch
   }, [readClient, matchId, refetch])
 
-  // GAME-510: refetch when the tab regains focus/visibility or comes back online.
-  useEffect(() => {
-    if (!readClient || matchId === null) return
-    const onVisible = () => {
-      if (document.visibilityState === 'visible') refetch()
-    }
-    window.addEventListener('focus', refetch)
-    window.addEventListener('online', refetch)
-    document.addEventListener('visibilitychange', onVisible)
-    return () => {
-      window.removeEventListener('focus', refetch)
-      window.removeEventListener('online', refetch)
-      document.removeEventListener('visibilitychange', onVisible)
-    }
-  }, [readClient, matchId, refetch])
+  useRefetchOnFocus(refetch, readClient !== null && matchId !== null)
 
   return { status, match, error, refetch }
 }

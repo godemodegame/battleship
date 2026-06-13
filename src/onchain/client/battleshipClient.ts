@@ -18,7 +18,7 @@ import type { ErrorCode } from '../../copy/errors'
 import { battleshipGameAbi } from '../abi/battleshipGame'
 import type { DecryptProof, EncryptedFleetSegment } from '../fhenix/types'
 import type { HexAddress } from '../phaseResolver'
-import { decodeReadError, decodeTxError } from './decodeError'
+import { decodeReadError } from './decodeError'
 import {
   toChainMatchView,
   toChainMoveView,
@@ -511,126 +511,104 @@ export function createBattleshipWriteClient(
     return { ok: true, receipt: outcome.receipt }
   }
 
+  /** Shared epilogue for the createX writes: surface the new match id from the
+   * confirmed receipt, or degrade to a recoverable error. */
+  function finishCreate(
+    result: Awaited<ReturnType<typeof performWrite>>,
+  ): CreateMatchResult {
+    if (!result.ok) return result
+    const matchId = extractCreatedMatchId(result.receipt.logs, contractAddress)
+    if (matchId === null) {
+      // Confirmed receipt without a MatchCreated log should be impossible;
+      // degrade to a recoverable error rather than navigating nowhere.
+      return { ok: false, error: 'unknown' }
+    }
+    return { ok: true, hash: result.receipt.transactionHash, matchId }
+  }
+
+  /** Shared epilogue for the non-create writes: return the confirmed hash or
+   * pass the failure through unchanged. */
+  function finishWrite(
+    result: Awaited<ReturnType<typeof performWrite>>,
+  ): WriteResult {
+    return result.ok ? { ok: true, hash: result.receipt.transactionHash } : result
+  }
+
   return {
     async createMatch(invitedOpponent, onState) {
-      const result = await performWrite('createMatch', [invitedOpponent], onState)
-      if (!result.ok) return result
-      const matchId = extractCreatedMatchId(result.receipt.logs, contractAddress)
-      if (matchId === null) {
-        // Confirmed receipt without a MatchCreated log should be impossible;
-        // degrade to a recoverable error rather than navigating nowhere.
-        return { ok: false, error: 'unknown' }
-      }
-      return { ok: true, hash: result.receipt.transactionHash, matchId }
+      return finishCreate(await performWrite('createMatch', [invitedOpponent], onState))
     },
 
     async createWithFleet(invitedOpponent, segments, onState) {
-      const result = await performWrite(
-        'createWithFleet',
-        [invitedOpponent, segments],
-        onState,
+      return finishCreate(
+        await performWrite('createWithFleet', [invitedOpponent, segments], onState),
       )
-      if (!result.ok) return result
-      const matchId = extractCreatedMatchId(result.receipt.logs, contractAddress)
-      if (matchId === null) {
-        return { ok: false, error: 'unknown' }
-      }
-      return { ok: true, hash: result.receipt.transactionHash, matchId }
     },
 
     async createOpenMatch(onState) {
-      const result = await performWrite('createOpenMatch', [], onState)
-      if (!result.ok) return result
-      const matchId = extractCreatedMatchId(result.receipt.logs, contractAddress)
-      if (matchId === null) {
-        return { ok: false, error: 'unknown' }
-      }
-      return { ok: true, hash: result.receipt.transactionHash, matchId }
+      return finishCreate(await performWrite('createOpenMatch', [], onState))
     },
 
     async createOpenWithFleet(segments, onState) {
-      const result = await performWrite('createOpenWithFleet', [segments], onState)
-      if (!result.ok) return result
-      const matchId = extractCreatedMatchId(result.receipt.logs, contractAddress)
-      if (matchId === null) {
-        return { ok: false, error: 'unknown' }
-      }
-      return { ok: true, hash: result.receipt.transactionHash, matchId }
+      return finishCreate(await performWrite('createOpenWithFleet', [segments], onState))
     },
 
     async createBotMatch(playerSegments, botSegments, onState) {
-      const result = await performWrite(
-        'createBotMatch',
-        [playerSegments, botSegments],
-        onState,
+      return finishCreate(
+        await performWrite('createBotMatch', [playerSegments, botSegments], onState),
       )
-      if (!result.ok) return result
-      const matchId = extractCreatedMatchId(result.receipt.logs, contractAddress)
-      if (matchId === null) {
-        return { ok: false, error: 'unknown' }
-      }
-      return { ok: true, hash: result.receipt.transactionHash, matchId }
     },
 
     async joinMatch(matchId, onState) {
-      const result = await performWrite('joinMatch', [matchId], onState)
-      return result.ok ? { ok: true, hash: result.receipt.transactionHash } : result
+      return finishWrite(await performWrite('joinMatch', [matchId], onState))
     },
 
     async joinWithFleet(matchId, segments, onState) {
-      const result = await performWrite('joinWithFleet', [matchId, segments], onState)
-      return result.ok ? { ok: true, hash: result.receipt.transactionHash } : result
+      return finishWrite(await performWrite('joinWithFleet', [matchId, segments], onState))
     },
 
     async cancelMatch(matchId, onState) {
-      const result = await performWrite('cancelMatch', [matchId], onState)
-      return result.ok ? { ok: true, hash: result.receipt.transactionHash } : result
+      return finishWrite(await performWrite('cancelMatch', [matchId], onState))
     },
 
     async forfeit(matchId, onState) {
-      const result = await performWrite('forfeit', [matchId], onState)
-      return result.ok ? { ok: true, hash: result.receipt.transactionHash } : result
+      return finishWrite(await performWrite('forfeit', [matchId], onState))
     },
 
     async submitFleet(matchId, segments, onState) {
-      const result = await performWrite('submitFleet', [matchId, segments], onState)
-      return result.ok ? { ok: true, hash: result.receipt.transactionHash } : result
+      return finishWrite(await performWrite('submitFleet', [matchId, segments], onState))
     },
 
     async finalizeFleetValidationWithProof(matchId, player, proof, onState) {
-      const result = await performWrite(
-        'finalizeFleetValidationWithProof',
-        [matchId, player, proof.value, proof.signature],
-        onState,
+      return finishWrite(
+        await performWrite(
+          'finalizeFleetValidationWithProof',
+          [matchId, player, proof.value, proof.signature],
+          onState,
+        ),
       )
-      return result.ok ? { ok: true, hash: result.receipt.transactionHash } : result
     },
 
     async attack(matchId, cellIndex, onState) {
-      const result = await performWrite('attack', [matchId, cellIndex], onState)
-      return result.ok ? { ok: true, hash: result.receipt.transactionHash } : result
+      return finishWrite(await performWrite('attack', [matchId, cellIndex], onState))
     },
 
     async executeBotMove(matchId, onState) {
-      const result = await performWrite('executeBotMove', [matchId], onState)
-      return result.ok ? { ok: true, hash: result.receipt.transactionHash } : result
+      return finishWrite(await performWrite('executeBotMove', [matchId], onState))
     },
 
     async finalizeAttackWithProof(matchId, moveId, result, sunkShip, onState) {
-      const outcome = await performWrite(
-        'finalizeAttackWithProof',
-        [matchId, moveId, result.value, result.signature, sunkShip.value, sunkShip.signature],
-        onState,
+      return finishWrite(
+        await performWrite(
+          'finalizeAttackWithProof',
+          [matchId, moveId, result.value, result.signature, sunkShip.value, sunkShip.signature],
+          onState,
+        ),
       )
-      return outcome.ok ? { ok: true, hash: outcome.receipt.transactionHash } : outcome
     },
 
     async claimTimeoutWin(matchId, onState) {
-      const result = await performWrite('claimTimeoutWin', [matchId], onState)
-      return result.ok ? { ok: true, hash: result.receipt.transactionHash } : result
+      return finishWrite(await performWrite('claimTimeoutWin', [matchId], onState))
     },
   }
 }
-
-/** Re-export for consumers that only import the client module. */
-export { decodeTxError }

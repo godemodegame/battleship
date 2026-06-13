@@ -10,7 +10,6 @@ export const COMIC_SFX_URL = {
   kaboom: '/textures/comic-sfx/comic-sfx-kaboom.webp',
 } as const
 
-export type ComicSfxName = keyof typeof COMIC_SFX_URL
 export type ComicFlightSfx = 'pew' | 'thoom' | 'fwoosh' | 'zip'
 export type ComicResultSfx = 'krak' | 'blam' | 'boom' | 'splash' | 'kaboom'
 
