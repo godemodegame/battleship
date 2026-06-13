@@ -1,6 +1,17 @@
 import { matchSummary, useStore } from '../practice/practiceStore'
 
-export function GameOverScreen() {
+export interface GameOverScreenProps {
+  /**
+   * Override the "Play Again" action. Practice mode keeps the default (start a
+   * fresh local placement); the on-chain bot route routes to a new contract
+   * match instead, so the same 3D overlay serves both modes.
+   */
+  onPlayAgain?: () => void
+  /** Override the "Main Menu" action (default returns to the practice home). */
+  onMainMenu?: () => void
+}
+
+export function GameOverScreen({ onPlayAgain, onMainMenu }: GameOverScreenProps = {}) {
   const match = useStore((s) => s.match)
   const forfeited = useStore((s) => s.forfeited)
   const rematch = useStore((s) => s.rematch)
@@ -9,6 +20,8 @@ export function GameOverScreen() {
 
   const s = matchSummary(match, forfeited)
   const won = s.winner === 'player'
+  const playAgain = onPlayAgain ?? rematch
+  const mainMenu = onMainMenu ?? toHome
 
   return (
     <div className="overlay gameover">
@@ -44,10 +57,10 @@ export function GameOverScreen() {
           </div>
         </div>
 
-        <button className="btn primary wide" data-ic="rotate" onClick={rematch}>
+        <button className="btn primary wide" data-ic="rotate" onClick={playAgain}>
           Play Again
         </button>
-        <button className="btn ghost wide" data-ic="back" onClick={toHome}>
+        <button className="btn ghost wide" data-ic="back" onClick={mainMenu}>
           Main Menu
         </button>
       </div>

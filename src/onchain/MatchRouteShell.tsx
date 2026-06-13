@@ -558,47 +558,56 @@ export function MatchRouteShell() {
             </>
           )}
 
-          {/* On-chain battle and resolving states (GAME-701..708, 710, 712).
+          {/* On-chain battle, resolving, AND terminal states (GAME-701..712).
               A bot match created in this session renders the full practice 3D
-              engine (BotBattleController) using the locally-retained fleets; any
-              other case — friend/open, or a refresh that dropped the stash —
-              keeps the authoritative DOM battle panel. */}
-          {(phase.kind === 'battle' || phase.kind === 'resolving') &&
+              engine (BotBattleController) from the locally-retained fleets — and
+              that engine owns the terminal screen too (the 3D victory/defeat
+              overlay), so the flat DOM summary is never the bot-mode result.
+              Any other case — friend/open, or a refresh that dropped the stash
+              (no plaintext fleets to rebuild the 3D boards) — uses the
+              authoritative public-data DOM panels. */}
+          {(phase.kind === 'battle' ||
+            phase.kind === 'resolving' ||
+            phase.kind === 'finished' ||
+            phase.kind === 'forfeited') &&
             (() => {
               const botFleets =
                 match.matchType === 'Bot'
                   ? peekBotFleets(match.deploymentId, match.matchId)
                   : null
-              return botFleets ? (
+              if (botFleets) {
+                return (
+                  <Suspense fallback={<BattleLoading />}>
+                    <BotBattleController
+                      fleets={botFleets}
+                      match={match}
+                      writeClient={writeClient}
+                      readClient={readClient}
+                      wallet={wallet}
+                      onRefetch={query.refetch}
+                    />
+                  </Suspense>
+                )
+              }
+              if (phase.kind === 'battle' || phase.kind === 'resolving') {
+                return (
+                  <Suspense fallback={<BattleLoading />}>
+                    <OnchainBattlePanel
+                      phase={phase}
+                      match={match}
+                      writeClient={writeClient}
+                      wallet={wallet}
+                      onRefetch={query.refetch}
+                    />
+                  </Suspense>
+                )
+              }
+              return (
                 <Suspense fallback={<BattleLoading />}>
-                  <BotBattleController
-                    fleets={botFleets}
-                    match={match}
-                    writeClient={writeClient}
-                    readClient={readClient}
-                    wallet={wallet}
-                    onRefetch={query.refetch}
-                  />
-                </Suspense>
-              ) : (
-                <Suspense fallback={<BattleLoading />}>
-                  <OnchainBattlePanel
-                    phase={phase}
-                    match={match}
-                    writeClient={writeClient}
-                    wallet={wallet}
-                    onRefetch={query.refetch}
-                  />
+                  <MatchSummaryPanel match={match} wallet={wallet} />
                 </Suspense>
               )
             })()}
-
-          {/* Contract-derived terminal summary (GAME-709/710/711). */}
-          {(phase.kind === 'finished' || phase.kind === 'forfeited') && (
-            <Suspense fallback={<BattleLoading />}>
-              <MatchSummaryPanel match={match} wallet={wallet} />
-            </Suspense>
-          )}
 
           {phase.kind === 'cancelled' && (
             <p className="status-sub" data-testid="match-cancelled">

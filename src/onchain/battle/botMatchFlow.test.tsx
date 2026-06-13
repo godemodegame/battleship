@@ -138,4 +138,58 @@ describe('bot match frontend flow', () => {
     expect(await screen.findByTestId('onchain-battle-panel')).toBeTruthy()
     expect(screen.queryByTestId('bot-battle-3d')).toBeNull()
   })
+
+  it('owns the terminal screen in 3D — the flat DOM summary never shows for bot mode', async () => {
+    const contract = makeFakeContract()
+    await contract.writeClientFor(CREATOR).createBotMatch!([], [], () => {})
+    // The match ended on-chain before the local 3D sequence did (an on-chain
+    // forfeit or a turn timeout swept by the contract): bot wins, player loses.
+    const nowTs = Math.floor(Date.now() / 1000)
+    contract.match = {
+      ...contract.match!,
+      status: 'Forfeited',
+      winner: BOT_OPPONENT,
+      currentTurn: null,
+      finishedAt: nowTs,
+    }
+    stashBotFleets(DEPLOYMENT_ID, '1', { player: autoPlaceFleet(), bot: autoPlaceFleet() })
+
+    renderApp({
+      route: ROUTE,
+      wallet: connectedWalletValue(CREATOR),
+      clients: contract.clientsFor(CREATOR),
+    })
+
+    // The 3D engine stays mounted and renders its own victory/defeat overlay;
+    // the flat DOM MatchSummaryPanel is never the bot-mode terminal screen.
+    expect(await screen.findByTestId('bot-battle-3d')).toBeTruthy()
+    expect(await screen.findByRole('heading', { name: 'Defeat' })).toBeTruthy()
+    expect(screen.queryByTestId('match-summary-panel')).toBeNull()
+    // The overlay buttons drive the on-chain rematch / exit (not practice flow).
+    expect(screen.getByRole('button', { name: 'Play Again' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Main Menu' })).toBeTruthy()
+  })
+
+  it('still shows the DOM summary for a finished friend match (no 3D engine)', async () => {
+    const contract = makeFakeContract()
+    contract.startBattle({ currentTurn: CREATOR })
+    // A friend match has no client-held opponent fleet, so the terminal screen
+    // stays the authoritative public-data summary.
+    contract.match = {
+      ...contract.match!,
+      status: 'Finished',
+      winner: CREATOR,
+      currentTurn: null,
+      finishedAt: Math.floor(Date.now() / 1000),
+    }
+
+    renderApp({
+      route: ROUTE,
+      wallet: connectedWalletValue(CREATOR),
+      clients: contract.clientsFor(CREATOR),
+    })
+
+    expect(await screen.findByTestId('match-summary-panel')).toBeTruthy()
+    expect(screen.queryByTestId('bot-battle-3d')).toBeNull()
+  })
 })

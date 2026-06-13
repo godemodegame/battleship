@@ -20,8 +20,10 @@
  */
 
 import { useEffect, useMemo, useRef } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { GameCanvas } from '../../three/Scene'
 import { BattleHUD } from '../../ui/BattleHUD'
+import { GameOverScreen } from '../../ui/GameOverScreen'
 import { LoadingOverlay, StatusOverlay } from '../../ui/common'
 import { createMatch } from '../../game/engine'
 import { botBattleCopy } from '../../copy/en'
@@ -161,6 +163,7 @@ export function BotBattleController({
 }: BotBattleControllerProps) {
   const screen = useStore((s) => s.screen)
   const setBattleDriver = useStore((s) => s.setBattleDriver)
+  const navigate = useNavigate()
 
   const viewer = wallet.session.address
   const chainId = wallet.session.chainId
@@ -276,13 +279,42 @@ export function BotBattleController({
     }
   }, [cofhe.status, writeClient, readClient, driver, setBattleDriver])
 
+  // Land the 3D victory/defeat overlay whenever the contract reports a terminal
+  // result the local sequence hasn't reached on its own: an on-chain forfeit, a
+  // turn timeout swept by the contract, or a direct navigation to an already
+  // finished match. Normal play sets `gameover` locally first (with the real
+  // sunk-ship board), so the `winner` guard leaves that authoritative state
+  // untouched — this only fills the gap, and it ensures the flat DOM summary is
+  // never the bot-mode terminal screen.
+  const terminal = match.status === 'Finished' || match.status === 'Forfeited'
+  useEffect(() => {
+    if (!terminal) return
+    const local = useStore.getState().match
+    if (!local || local.winner) return
+    const won = Boolean(viewer && match.winner && match.winner === viewer)
+    useStore.setState({
+      match: { ...local, winner: won ? 'player' : 'bot' },
+      forfeited: match.status === 'Forfeited',
+      screen: 'gameover',
+      busy: false,
+      confirming: false,
+      driverError: false,
+    })
+  }, [terminal, match.status, match.winner, viewer])
+
   const warming = cofhe.status !== 'ready'
 
   return (
     <div className="app" data-testid="bot-battle-3d">
       <GameCanvas />
       {screen === 'battle' && <BattleHUD />}
-      {warming && (
+      {screen === 'gameover' && (
+        <GameOverScreen
+          onPlayAgain={() => navigate('/match/bot')}
+          onMainMenu={() => navigate('/practice')}
+        />
+      )}
+      {warming && screen !== 'gameover' && (
         <StatusOverlay
           title={botBattleCopy.warmingTitle}
           sub={cofhe.status === 'error' ? botBattleCopy.syncFailed : botBattleCopy.warmingSub}
