@@ -19,6 +19,12 @@ describe('buildPrivyConfig', () => {
     expect(config.embeddedWallets?.ethereum?.createOnLogin).toBe('users-without-wallets')
   })
 
+  it('runs embedded-wallet sends headlessly (no confirmation modal)', () => {
+    // showWalletUIs:false is required for sponsored, auto-chained writes — Privy
+    // otherwise opens a per-tx confirmation dialog that stalls the send.
+    expect(buildPrivyConfig().embeddedWallets?.showWalletUIs).toBe(false)
+  })
+
   it('hides non-EVM wallet families', () => {
     expect(buildPrivyConfig().appearance?.walletChainType).toBe('ethereum-only')
   })

@@ -20,6 +20,12 @@
       "port": 5190
     },
     {
+      "name": "battleship-fixed",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev", "--", "--port", "5173", "--strictPort"],
+      "port": 5173
+    },
+    {
       "name": "vfx-app",
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "dev", "--prefix", "vfx-app", "--", "--port", "5180", "--strictPort"],

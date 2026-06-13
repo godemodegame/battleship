@@ -74,6 +74,11 @@ export function getArbitrumSepoliaRpcUrl(): string {
  *   Privy embedded EVM wallet for users who sign in without an external wallet
  *   (the precondition for sponsored, gasless writes). Users who linked an
  *   external wallet are left untouched and keep paying their own gas.
+ * - `embeddedWallets.showWalletUIs: false` — embedded-wallet sends/signs run
+ *   headlessly with NO per-transaction confirmation modal. This is required for
+ *   the sponsored, auto-chained write flow: otherwise Privy opens a confirmation
+ *   dialog for every write (which in this app renders empty and hangs the send,
+ *   never broadcasting the tx). External wallets keep their own prompts.
  * - `walletChainType: 'ethereum-only'` — hide non-EVM wallet families.
  * - `defaultChain` / `supportedChains` limited to Arbitrum Sepolia. (Note:
  *   `defaultChain` improves the prompt but is not a security boundary — the
@@ -84,6 +89,9 @@ export function buildPrivyConfig(): PrivyClientConfig {
     loginMethods: ENABLED_LOGIN_METHODS,
     embeddedWallets: {
       ethereum: { createOnLogin: 'users-without-wallets' },
+      // Headless sends/signs for the embedded wallet — no confirmation modal,
+      // so sponsored writes broadcast programmatically (GAME-201).
+      showWalletUIs: false,
     },
     appearance: {
       walletChainType: 'ethereum-only',
