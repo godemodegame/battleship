@@ -155,11 +155,13 @@ as unsafe because unrelated Vercel accounts can create matching domains.
 Before a release:
 
 1. Add the target HTTPS origin in the Privy dashboard.
-2. Confirm wallet-only login is enabled.
-3. Confirm embedded wallet creation and non-wallet login methods remain off.
-4. Confirm Arbitrum Sepolia is the only supported application chain.
-5. Test login, chain switching, disconnect, and mobile-wallet return from the
-   deployed origin.
+2. Confirm wallet login plus the intended social/email methods are enabled
+   (each social provider has working dashboard credentials).
+3. Confirm embedded wallets are enabled (`createOnLogin: 'users-without-wallets'`).
+4. Confirm gas sponsorship is set to "App pays" for Arbitrum Sepolia (`421614`).
+5. Confirm Arbitrum Sepolia is the only supported application chain.
+6. Test wallet login, social/email login, an embedded-wallet gasless write,
+   chain switching, sign-out, and mobile-wallet return from the deployed origin.
 
 The Privy app id is public client configuration. Origin restrictions and
 dashboard settings still need production review.

@@ -1,18 +1,50 @@
 /**
- * Privy app configuration (GAME-201 / GAME-203).
+ * Privy app configuration (GAME-201 / GAME-203 / GAME-210).
  *
- * Centralizes the single Privy connection surface for the MVP: wallet-only
- * login, external EVM wallets, embedded-wallet creation disabled, and Arbitrum
- * Sepolia as the only supported/default chain. The app id is supplied through
- * `VITE_PRIVY_APP_ID`; when it is absent the app degrades gracefully (practice
- * stays playable, on-chain routes show a recoverable config message) instead of
- * crashing the whole bundle.
+ * Centralizes the single Privy connection surface: wallet **and** social/email
+ * login, with an embedded EVM wallet minted for any user who signs in without
+ * an external wallet, and Arbitrum Sepolia as the only supported/default chain.
+ * The app id is supplied through `VITE_PRIVY_APP_ID`; when it is absent the app
+ * degrades gracefully (practice stays playable, on-chain routes show a
+ * recoverable config message) instead of crashing the whole bundle.
+ *
+ * Login methods listed here only render if they are also enabled in the Privy
+ * dashboard (the array is a *display subset* of dashboard-enabled methods), and
+ * each OAuth provider needs its own dashboard credentials. The embedded wallet
+ * created for social/email users is what makes sponsored (gasless) writes
+ * possible — see `PrivyWalletBridge` (`useSendTransaction({ sponsor: true })`).
  *
  * Spec: `docs/network-and-wallet-requirements.md` (Privy Configuration).
  */
 
 import type { PrivyClientConfig } from '@privy-io/react-auth'
 import { arbitrumSepolia } from './network'
+
+/**
+ * Every login method we surface in Privy's modal. This is the full set the SDK
+ * accepts (minus cross-app `privy:${appId}` providers); each entry must also be
+ * toggled on in the Privy dashboard to actually appear. `wallet` keeps external
+ * EVM wallets available alongside the social/email methods.
+ */
+export const ENABLED_LOGIN_METHODS: NonNullable<PrivyClientConfig['loginMethods']> = [
+  'wallet',
+  'email',
+  'sms',
+  'google',
+  'apple',
+  'twitter',
+  'discord',
+  'github',
+  'linkedin',
+  'farcaster',
+  'telegram',
+  'passkey',
+  'tiktok',
+  'twitch',
+  'line',
+  'spotify',
+  'instagram',
+]
 
 /** Read the Privy app id from the build environment, or null when unset. */
 export function getPrivyAppId(): string | null {
@@ -35,10 +67,13 @@ export function getArbitrumSepoliaRpcUrl(): string {
 }
 
 /**
- * The Privy client configuration for the first on-chain milestone.
+ * The Privy client configuration.
  *
- * - `loginMethods: ['wallet']` — wallet-only; non-wallet methods disabled.
- * - `embeddedWallets.createOnLogin: 'off'` — never mint a Privy embedded wallet.
+ * - `loginMethods: ENABLED_LOGIN_METHODS` — external wallets plus social/email.
+ * - `embeddedWallets.ethereum.createOnLogin: 'users-without-wallets'` — mint a
+ *   Privy embedded EVM wallet for users who sign in without an external wallet
+ *   (the precondition for sponsored, gasless writes). Users who linked an
+ *   external wallet are left untouched and keep paying their own gas.
  * - `walletChainType: 'ethereum-only'` — hide non-EVM wallet families.
  * - `defaultChain` / `supportedChains` limited to Arbitrum Sepolia. (Note:
  *   `defaultChain` improves the prompt but is not a security boundary — the
@@ -46,9 +81,9 @@ export function getArbitrumSepoliaRpcUrl(): string {
  */
 export function buildPrivyConfig(): PrivyClientConfig {
   return {
-    loginMethods: ['wallet'],
+    loginMethods: ENABLED_LOGIN_METHODS,
     embeddedWallets: {
-      ethereum: { createOnLogin: 'off' },
+      ethereum: { createOnLogin: 'users-without-wallets' },
     },
     appearance: {
       walletChainType: 'ethereum-only',

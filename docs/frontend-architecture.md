@@ -105,8 +105,9 @@ Current MVP stack:
 - TypeScript;
 - React Three Fiber;
 - Three.js;
-- Privy React SDK for wallet-only login, connection, and session state;
-- viem clients assembled from Privy's active external wallet;
+- Privy React SDK for wallet + social/email login, embedded wallets, sponsored
+  gas (EIP-7702), connection, and session state;
+- viem clients assembled from Privy's active wallet (external or embedded);
 - `cofhejs` `0.3.1` behind a dedicated web worker;
 - Zustand;
 - React Router;

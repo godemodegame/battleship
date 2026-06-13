@@ -58,6 +58,11 @@ function activeAccount(): HexAddress | null {
   return null
 }
 
+/** `?e2eGas=sponsored` models an embedded-wallet (gasless) session. */
+function isSponsoredGas(): boolean {
+  return new URLSearchParams(window.location.search).get('e2eGas') === 'sponsored'
+}
+
 function readStoredMatch(): StoredMatch | null {
   const raw = window.localStorage.getItem(STORAGE_KEY)
   if (!raw) return null
@@ -337,6 +342,7 @@ const e2eCofheFactory: CofheClientFactory = (config) => ({
 
 function walletValue(account: HexAddress | null): WalletContextValue {
   if (!account) return DISCONNECTED_CONTEXT
+  const gasSponsored = isSponsoredGas()
   return {
     ...DISCONNECTED_CONTEXT,
     session: {
@@ -350,8 +356,11 @@ function walletValue(account: HexAddress | null): WalletContextValue {
     walletClient: STUB_WALLET_CLIENT,
     writeBlockedReason: null,
     canWrite: true,
-    balance: 10n ** 18n,
-    balanceStatus: 'ok',
+    // Sponsored (embedded) sessions never report a balance — the funding UX is
+    // gated off. Paid sessions keep the funded stub balance.
+    gasSponsored,
+    balance: gasSponsored ? null : 10n ** 18n,
+    balanceStatus: gasSponsored ? 'unknown' : 'ok',
   }
 }
 

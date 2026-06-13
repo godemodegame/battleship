@@ -223,10 +223,12 @@ export function CreateFriendMatchScreen() {
         </p>
       )}
 
-      {/* GAME-804: non-blocking warning when the balance may not last a match. */}
-      {session.isConnected && session.isCorrectChain && wallet.balanceStatus === 'low' && (
-        <LowBalanceWarning balanceWei={wallet.balance} />
-      )}
+      {/* GAME-804: non-blocking warning when the balance may not last a match.
+          Skipped under sponsored gas — embedded-wallet writes are gasless. */}
+      {!wallet.gasSponsored &&
+        session.isConnected &&
+        session.isCorrectChain &&
+        wallet.balanceStatus === 'low' && <LowBalanceWarning balanceWei={wallet.balance} />}
 
       {session.isConnected && wallet.lastError === 'unsupported-wallet' && (
         <p className="error-note" role="alert" data-testid="unsupported-wallet">
@@ -234,7 +236,8 @@ export function CreateFriendMatchScreen() {
         </p>
       )}
 
-      {session.isConnected &&
+      {!wallet.gasSponsored &&
+        session.isConnected &&
         session.isCorrectChain &&
         wallet.balanceStatus === 'zero' && (
           <LowBalanceNotice
