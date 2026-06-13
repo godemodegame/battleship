@@ -58,7 +58,16 @@ test('renders a non-blank WebGL battlefield', async ({ page }) => {
 
 test('completes placement, attack, forfeit, and rematch flows', async ({ page }) => {
   await openReady(page)
-  await page.getByRole('button', { name: 'Practice vs Bot' }).click()
+  // "Practice vs Bot" now launches the on-chain bot match (wallet-gated). The
+  // local engine still ships and is exercised here through its store — the same
+  // entry the sunk-halo test below uses.
+  await page.evaluate(() => {
+    ;(
+      window as unknown as { __store: { getState: () => { startPlacement: () => void } } }
+    ).__store
+      .getState()
+      .startPlacement()
+  })
   await expect(page.getByText('Deploy Fleet')).toBeVisible()
 
   const canvas = page.locator('canvas')
