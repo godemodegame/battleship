@@ -130,6 +130,18 @@ export interface BattleshipWriteClient {
     segments: readonly EncryptedFleetSegment[],
     onState: (state: TxState) => void,
   ): Promise<CreateMatchResult>
+  /**
+   * Create a single-player practice match against the on-chain hard bot in one
+   * transaction. The caller submits BOTH encrypted fleets: their own (validated
+   * asynchronously) and the bot's (client auto-placed, trusted). The player
+   * moves first. The bot fleet is client-supplied because the CoFHE stack has
+   * no usable on-chain randomness; see docs/computer-opponent-design.md.
+   */
+  createBotMatch?(
+    playerSegments: readonly EncryptedFleetSegment[],
+    botSegments: readonly EncryptedFleetSegment[],
+    onState: (state: TxState) => void,
+  ): Promise<CreateMatchResult>
   joinMatch(matchId: bigint, onState: (state: TxState) => void): Promise<WriteResult>
   /**
    * Placement-first join: join a match and submit the encrypted fleet in one
@@ -163,6 +175,12 @@ export interface BattleshipWriteClient {
     cellIndex: number,
     onState: (state: TxState) => void,
   ): Promise<WriteResult>
+  /**
+   * Advance the bot's turn in a Bot match. Permissionless: the contract chooses
+   * the target cell (the caller cannot). Followed by `finalizeAttackWithProof`
+   * to resolve the bot's shot, exactly like a human attack.
+   */
+  executeBotMove?(matchId: bigint, onState: (state: TxState) => void): Promise<WriteResult>
   /**
    * Publish both decrypt proofs (shot result, sunk-ship id) and finalize the
    * pending shot. Permissionless, like fleet-validation finalization.
@@ -439,6 +457,7 @@ export function createBattleshipWriteClient(
       | 'createWithFleet'
       | 'createOpenMatch'
       | 'createOpenWithFleet'
+      | 'createBotMatch'
       | 'joinMatch'
       | 'joinWithFleet'
       | 'cancelMatch'
@@ -446,6 +465,7 @@ export function createBattleshipWriteClient(
       | 'submitFleet'
       | 'finalizeFleetValidationWithProof'
       | 'attack'
+      | 'executeBotMove'
       | 'finalizeAttackWithProof'
       | 'claimTimeoutWin',
     args: readonly unknown[],
@@ -538,6 +558,20 @@ export function createBattleshipWriteClient(
       return { ok: true, hash: result.receipt.transactionHash, matchId }
     },
 
+    async createBotMatch(playerSegments, botSegments, onState) {
+      const result = await performWrite(
+        'createBotMatch',
+        [playerSegments, botSegments],
+        onState,
+      )
+      if (!result.ok) return result
+      const matchId = extractCreatedMatchId(result.receipt.logs, contractAddress)
+      if (matchId === null) {
+        return { ok: false, error: 'unknown' }
+      }
+      return { ok: true, hash: result.receipt.transactionHash, matchId }
+    },
+
     async joinMatch(matchId, onState) {
       const result = await performWrite('joinMatch', [matchId], onState)
       return result.ok ? { ok: true, hash: result.receipt.transactionHash } : result
@@ -574,6 +608,11 @@ export function createBattleshipWriteClient(
 
     async attack(matchId, cellIndex, onState) {
       const result = await performWrite('attack', [matchId, cellIndex], onState)
+      return result.ok ? { ok: true, hash: result.receipt.transactionHash } : result
+    },
+
+    async executeBotMove(matchId, onState) {
+      const result = await performWrite('executeBotMove', [matchId], onState)
       return result.ok ? { ok: true, hash: result.receipt.transactionHash } : result
     },
 

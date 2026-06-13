@@ -193,7 +193,7 @@ export function MatchListScreen() {
               <p className="footnote" data-testid="match-list-empty">
                 {matchListCopy.empty}
               </p>
-              <Link className="btn primary" to="/match/new">
+              <Link className="btn primary" data-ic="plus" to="/match/new">
                 {matchListCopy.emptyCta}
               </Link>
             </>
@@ -235,7 +235,7 @@ export function MatchListScreen() {
       )}
 
       <div className="home-actions">
-        <Link className="btn ghost" data-testid="match-list-back" to="/practice">
+        <Link className="btn ghost" data-ic="back" data-testid="match-list-back" to="/practice">
           {matchListCopy.back}
         </Link>
       </div>

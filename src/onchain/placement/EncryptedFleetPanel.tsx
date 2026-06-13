@@ -215,6 +215,7 @@ export function EncryptedFleetPanel({
         <p className="status-sub">{encryptedPlacementCopy.validatingBody}</p>
         <button
           className="btn primary wide"
+          data-ic="check"
           data-testid="finalize-validation"
           disabled={
             busy ||
@@ -311,6 +312,7 @@ export function EncryptedFleetPanel({
 
       <button
         className="btn primary wide"
+        data-ic="check"
         data-testid="submit-encrypted-fleet"
         disabled={
           !complete ||

@@ -155,6 +155,19 @@ export const openMatchCopy = {
   submittingFleet: 'Sending Fleet',
 } as const
 
+/** On-chain bot (single-player practice) match creation. */
+export const botMatchCopy = {
+  kicker: 'Practice vs Bot',
+  title: 'Play the Bot',
+  helper:
+    'A fully on-chain practice match against the hard computer opponent. Both fleets are encrypted on-chain and every shot is resolved by the contract.',
+  placementTitle: 'Place Your Fleet',
+  placementHelper: "Arrange your ships, then start the match — the bot's fleet is placed for you.",
+  placementIncomplete: 'Place all ten ships before starting the match.',
+  createAndSubmit: 'Start Bot Match',
+  submittingFleet: 'Starting Match',
+} as const
+
 /** Open-match lobby ("Find a Game") + Quick Match (random matchmaking). */
 export const lobbyCopy = {
   kicker: 'Random Matchmaking',
@@ -293,6 +306,8 @@ export const battleCopy = {
   fireAt: (cell: string) => `Fire at ${cell}`,
   selectTarget: 'Select a target cell',
   opponentTurn: 'Waiting for the opponent to fire.',
+  botTurnTitle: "Opponent's turn",
+  advanceBotTurn: 'Advance Opponent Turn',
   firing: 'Sending Attack',
   resolvingTitle: 'Resolving Shot',
   resolvingBody:

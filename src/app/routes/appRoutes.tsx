@@ -30,6 +30,11 @@ const CreateOpenMatchScreen = lazy(async () => {
   return { default: module.CreateOpenMatchScreen }
 })
 
+const CreateBotMatchScreen = lazy(async () => {
+  const module = await import('../../onchain/match/CreateFriendMatchScreen')
+  return { default: module.CreateBotMatchScreen }
+})
+
 const MatchListScreen = lazy(async () => {
   const module = await import('../../onchain/match/MatchListScreen')
   return { default: module.MatchListScreen }
@@ -60,6 +65,7 @@ export const appRoutes = (
     <Route path="practice" element={suspended(<PracticeApp />)} />
     <Route path="match/new" element={suspended(<CreateFriendMatchScreen />)} />
     <Route path="match/open" element={suspended(<CreateOpenMatchScreen />)} />
+    <Route path="match/bot" element={suspended(<CreateBotMatchScreen />)} />
     <Route path="lobby" element={suspended(<OpenMatchLobbyScreen />)} />
     <Route path="matches" element={suspended(<MatchListScreen />)} />
     <Route path="match/:deploymentId/:matchId" element={suspended(<MatchRouteShell />)} />

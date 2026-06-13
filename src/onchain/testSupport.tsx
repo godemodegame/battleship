@@ -52,6 +52,8 @@ import {
 export const CREATOR = '0xaaaa000000000000000000000000000000000001' as HexAddress
 export const INVITED = '0xbbbb000000000000000000000000000000000002' as HexAddress
 export const STRANGER = '0xcccc000000000000000000000000000000000003' as HexAddress
+/** Virtual bot opponent sentinel — mirrors BattleshipGame.BOT_OPPONENT. */
+export const BOT_OPPONENT = '0x0000000000000000000000000000000000000b07' as HexAddress
 export const CONTRACT_ADDRESS = '0xdddd000000000000000000000000000000000004' as HexAddress
 export const TX_HASH = '0xeeee000000000000000000000000000000000000000000000000000000000005' as const
 
@@ -386,6 +388,48 @@ export function makeFakeContract(): FakeContract {
           return { ok: true, hash: TX_HASH, matchId: 1n }
         },
 
+        async createBotMatch(_playerSegments, _botSegments, onState) {
+          walk(onState)
+          // The bot fleet is valid on creation and the player moves first, so
+          // the match lands InProgress directly (the validation phase is shared
+          // with PvP and covered elsewhere).
+          const nowTs = Math.floor(Date.now() / 1000)
+          fake.match = {
+            deploymentId: DEPLOYMENT_ID,
+            matchId: '1',
+            matchIdBig: 1n,
+            status: 'InProgress',
+            matchType: 'Bot',
+            creator: account,
+            opponent: BOT_OPPONENT,
+            invitedOpponent: null,
+            currentTurn: account,
+            winner: null,
+            createdAt: nowTs - 5,
+            joinedAt: nowTs - 5,
+            startedAt: nowTs,
+            finishedAt: 0,
+            lastActionAt: nowTs,
+            moveCount: 0,
+            pendingMoveId: 0,
+            deadlines: {
+              joinDeadline: 0,
+              placementDeadline: 0,
+              turnDeadline: nowTs + DAY,
+              resolvingDeadline: 0,
+            },
+          }
+          fake.players = {
+            creator: emptyPlayerView(account, 'Valid'),
+            opponent: emptyPlayerView(BOT_OPPONENT, 'Valid'),
+          }
+          fake.moves = []
+          fake.pendingShot = null
+          indexMatchFor(account, 1n)
+          fake.emit('MatchCreated')
+          return { ok: true, hash: TX_HASH, matchId: 1n }
+        },
+
         async joinMatch(matchId, onState) {
           walk(onState)
           if (fake.match && fake.match.matchIdBig === matchId) {
@@ -477,6 +521,60 @@ export function makeFakeContract(): FakeContract {
             moveId,
             attacker: account,
             defender,
+            cellIndex,
+            resultCtHash: BigInt(moveId * 2 + 1),
+            sunkShipCtHash: BigInt(moveId * 2 + 2),
+            submittedAt: nowTs,
+          }
+          fake.match = {
+            ...m,
+            status: 'ResolvingShot',
+            moveCount: moveId,
+            pendingMoveId: moveId,
+          }
+          fake.emit('ShotSubmitted')
+          return { ok: true, hash: TX_HASH }
+        },
+
+        async executeBotMove(matchId, onState) {
+          walk(onState)
+          const m = fake.match
+          if (!m || m.matchIdBig !== matchId || m.status !== 'InProgress') {
+            return { ok: false, error: 'invalid-status' }
+          }
+          if (m.matchType !== 'Bot') return { ok: false, error: 'invalid-status' }
+          if (m.currentTurn !== BOT_OPPONENT) return { ok: false, error: 'not-your-turn' }
+
+          // The bot attacks the human (creator); the contract picks the target,
+          // here just the first untried cell on the player's board.
+          const defenderSlot = fake.players!.creator
+          let cellIndex = 0
+          while (
+            cellIndex < 100 &&
+            defenderSlot.publicBoard.attackedMask & (1n << BigInt(cellIndex))
+          ) {
+            cellIndex++
+          }
+          defenderSlot.publicBoard.attackedMask |= 1n << BigInt(cellIndex)
+
+          const nowTs = Math.floor(Date.now() / 1000)
+          const moveId = m.moveCount + 1
+          fake.moves.push({
+            moveId,
+            attacker: BOT_OPPONENT,
+            defender: m.creator!,
+            cellIndex,
+            result: 'None',
+            sunkShipId: 0,
+            submittedAt: nowTs,
+            resolvedAt: 0,
+            finalized: false,
+          })
+          fake.pendingShot = {
+            exists: true,
+            moveId,
+            attacker: BOT_OPPONENT,
+            defender: m.creator!,
             cellIndex,
             resultCtHash: BigInt(moveId * 2 + 1),
             sunkShipCtHash: BigInt(moveId * 2 + 2),

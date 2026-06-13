@@ -59,18 +59,19 @@ export function PlacementScreen() {
         </div>
 
         <div className="button-row">
-          <button className="btn small" onClick={rotateSelected} disabled={selectedSlot === null}>
+          <button className="btn small" data-ic="rotate" onClick={rotateSelected} disabled={selectedSlot === null}>
             Rotate · {orientation === 'h' ? 'Horizontal' : 'Vertical'}
           </button>
-          <button className="btn small" onClick={autoPlace}>
+          <button className="btn small" data-ic="shuffle" onClick={autoPlace}>
             Auto Place
           </button>
-          <button className="btn small" onClick={clearPlacement} disabled={placedCount === 0}>
+          <button className="btn small" data-ic="trash" onClick={clearPlacement} disabled={placedCount === 0}>
             Clear
           </button>
         </div>
         <button
           className="btn primary wide"
+          data-ic="check"
           onClick={() => {
             haptics.prime()
             confirmFleet()

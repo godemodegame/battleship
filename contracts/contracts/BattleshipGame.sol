@@ -38,6 +38,17 @@ contract BattleshipGame {
     uint8 public constant TOTAL_SHIP_CELLS = 20;
     uint8 public constant NO_CELL = type(uint8).max;
 
+    /// @dev The 100 valid cells occupy the low bits of every 128-bit board mask.
+    uint128 internal constant BOARD_MASK = (uint128(1) << 100) - 1;
+
+    /// @notice Virtual opponent address for Bot (single-player practice)
+    ///         matches. The bot has no externally owned wallet: it occupies the
+    ///         opponent slot under this fixed sentinel so the whole two-player
+    ///         encrypted machinery (public boards, fleet storage, shot
+    ///         resolution, finalization) is reused unchanged. No real account
+    ///         controls it, and bot matches never accept a join.
+    address public constant BOT_OPPONENT = address(0xB07);
+
     /// @dev Frozen fleet layout (docs/cofhe-feasibility-results.md): the 20
     ///      encrypted segments of submitFleet are grouped by ship in this
     ///      fixed public order, so ship identity is the array position and
@@ -294,6 +305,19 @@ contract BattleshipGame {
 
     event MatchJoined(uint256 indexed matchId, address indexed opponent);
 
+    /// @dev Emitted when a single-player practice match against the on-chain
+    ///      bot is created. The bot occupies the opponent slot under
+    ///      BOT_OPPONENT.
+    event BotMatchCreated(uint256 indexed matchId, address indexed player);
+
+    /// @dev Emitted when any caller advances the bot's turn. The caller only
+    ///      triggers execution; the contract chooses the target cell.
+    event BotMoveTriggered(
+        uint256 indexed matchId,
+        uint32 indexed moveId,
+        address indexed caller
+    );
+
     event MatchCancelled(uint256 indexed matchId);
 
     event MatchForfeited(
@@ -386,6 +410,9 @@ contract BattleshipGame {
     error InvalidMoveId();
     error MoveNotFound();
     error InvalidShotResult();
+    error NotBotMatch();
+    error BotMatchCannotBeJoined();
+    error BotHasNoTarget();
 
     // ---------------------------------------------------------------------
     // Storage
@@ -417,6 +444,13 @@ contract BattleshipGame {
     mapping(uint256 matchId => PendingShot) private pendingShots;
     /// @dev Move ids start at 1 and equal Match.moveCount at creation time.
     mapping(uint256 matchId => mapping(uint32 moveId => Move)) private moves;
+
+    /// @dev Per-defender bitmap of sunk ship ids (bit s set == ship index s is
+    ///      sunk). Maintained on every finalized Sunk/Win shot and read by the
+    ///      on-chain hard bot to size its placement heatmap (remaining ship
+    ///      lengths). Kept off the public views to avoid read-ABI churn.
+    mapping(uint256 matchId => mapping(address defender => uint16 bitmap))
+        internal sunkShipsBitmap;
 
     // ---------------------------------------------------------------------
     // Match creation
@@ -460,6 +494,81 @@ contract BattleshipGame {
         matchId = _createMatchBase(MatchType.Open, address(0));
         Match storage m = matches[matchId];
         _storeAndValidateFleet(matchId, m, msg.sender, segments);
+    }
+
+    /// @notice Create a single-player practice match against the on-chain hard
+    ///         bot in one transaction. The caller submits BOTH encrypted
+    ///         fleets: their own (validated asynchronously, exactly as PvP) and
+    ///         the bot's (client auto-placed, trusted, stored without
+    ///         validation). The bot fills the opponent slot under BOT_OPPONENT
+    ///         and the human moves first once their own fleet validates.
+    ///
+    ///         The bot fleet is client-supplied because the current CoFHE stack
+    ///         has no usable on-chain randomness, so a value hidden from all
+    ///         parties cannot be generated on-chain (see
+    ///         docs/computer-opponent-design.md). This is a stakeless practice
+    ///         mode: a determined player could inspect their own bot's layout,
+    ///         which only weakens their practice opponent. Every shot is still
+    ///         resolved by the contract under FHE; nothing is decrypted
+    ///         client-side, and the bot's target is always chosen on-chain.
+    function createBotMatch(
+        InEuint8[20] calldata playerFleet,
+        InEuint8[20] calldata botFleet
+    ) external returns (uint256 matchId) {
+        matchId = _createMatchBase(MatchType.Bot, address(0));
+        Match storage m = matches[matchId];
+
+        // Seat the virtual bot in the opponent slot.
+        uint64 nowTs = uint64(block.timestamp);
+        m.opponent = BOT_OPPONENT;
+        m.joinedAt = nowTs;
+        m.opponentState.player = BOT_OPPONENT;
+        m.opponentState.joined = true;
+
+        // Player fleet: stored and validated asynchronously, as in PvP.
+        _storeAndValidateFleet(matchId, m, msg.sender, playerFleet);
+        // Bot fleet: trusted client placement, stored and marked valid now.
+        _storeBotFleet(m, matchId, botFleet);
+
+        m.status = MatchStatus.ValidatingPlacement;
+
+        emit MatchJoined(matchId, BOT_OPPONENT);
+        emit BotMatchCreated(matchId, msg.sender);
+    }
+
+    /// @dev Store the bot's client-supplied encrypted fleet under BOT_OPPONENT
+    ///      and mark it valid immediately. No encrypted placement validation
+    ///      runs: the bot fleet is trusted client auto-placement and an invalid
+    ///      layout would only handicap the bot. Mirrors the storage half of
+    ///      _storeAndValidateFleet.
+    function _storeBotFleet(
+        Match storage m,
+        uint256 matchId,
+        InEuint8[20] calldata botFleet
+    ) private {
+        EncryptedFleet storage fleet = fleets[matchId][BOT_OPPONENT];
+        for (uint256 i = 0; i < TOTAL_SHIP_CELLS; i++) {
+            euint8 segment = FHE.asEuint8(botFleet[i]);
+            FHE.allowThis(segment);
+            fleet.segments[i] = segment;
+        }
+        for (uint256 s = 0; s < MAX_SHIPS; s++) {
+            euint8 health = FHE.asEuint8(uint8(SHIP_LENGTHS[s]));
+            FHE.allowThis(health);
+            fleet.shipHealth[s] = health;
+        }
+        fleet.initialized = true;
+
+        uint64 nowTs = uint64(block.timestamp);
+        PlayerState storage bot = m.opponentState;
+        bot.fleetSubmitted = true;
+        bot.fleetValid = true;
+        bot.placementStatus = PlacementStatus.Valid;
+        bot.fleetSubmittedAt = nowTs;
+        bot.fleetValidatedAt = nowTs;
+
+        emit FleetSubmitted(matchId, BOT_OPPONENT);
+        emit FleetValidated(matchId, BOT_OPPONENT, true);
     }
 
     /// @dev Shared match-creation core. Friend matches require a strict invited
@@ -526,6 +635,7 @@ contract BattleshipGame {
     ///      stay strictly invite-gated; Open matches accept any non-creator
     ///      before the join deadline (the creator is still blocked above).
     function _joinMatchBase(uint256 matchId, Match storage m) private {
+        if (m.matchType == MatchType.Bot) revert BotMatchCannotBeJoined();
         if (msg.sender == m.creator) revert CreatorCannotJoinOwnMatch();
         if (m.status != MatchStatus.WaitingForOpponent) {
             if (m.opponent != address(0)) revert OpponentAlreadyJoined();
@@ -723,6 +833,39 @@ contract BattleshipGame {
         if (pendingShots[matchId].exists) revert PendingShotExists();
 
         address defender = msg.sender == m.creator ? m.opponent : m.creator;
+        moveId = _submitShot(m, matchId, msg.sender, defender, cellIndex);
+    }
+
+    /// @notice Advance the bot's turn in a Bot match. PERMISSIONLESS by design
+    ///         (docs/computer-opponent-design.md): any caller may trigger the
+    ///         bot move, but the caller does NOT choose the target — the
+    ///         contract derives it from the player's public board with the same
+    ///         hard heatmap as the local practice bot. The bot's shot is then
+    ///         resolved through the identical encrypted pipeline and finalized
+    ///         with finalizeAttack / finalizeAttackWithProof.
+    function executeBotMove(uint256 matchId) external returns (uint32 moveId) {
+        Match storage m = _getMatch(matchId);
+        if (m.matchType != MatchType.Bot) revert NotBotMatch();
+        if (m.status != MatchStatus.InProgress) revert InvalidMatchStatus();
+        if (m.currentTurn != BOT_OPPONENT) revert NotYourTurn();
+        if (pendingShots[matchId].exists) revert PendingShotExists();
+
+        uint8 cellIndex = _chooseBotTargetForMatch(m, matchId);
+        moveId = _submitShot(m, matchId, BOT_OPPONENT, m.creator, cellIndex);
+        emit BotMoveTriggered(matchId, moveId, msg.sender);
+    }
+
+    /// @dev Shared shot submission for both human attacks and bot moves. Marks
+    ///      the public cell attacked, records the pending Move, runs the
+    ///      encrypted resolution, and freezes the match in ResolvingShot until
+    ///      finalizeAttack. The caller has already validated turn/cell.
+    function _submitShot(
+        Match storage m,
+        uint256 matchId,
+        address attacker,
+        address defender,
+        uint8 cellIndex
+    ) private returns (uint32 moveId) {
         PlayerState storage defenderState = _playerStateOf(m, defender);
 
         uint128 cellBit = uint128(1) << cellIndex;
@@ -737,7 +880,7 @@ contract BattleshipGame {
         uint64 nowTs = uint64(block.timestamp);
         moves[matchId][moveId] = Move({
             moveId: moveId,
-            attacker: msg.sender,
+            attacker: attacker,
             defender: defender,
             cellIndex: cellIndex,
             result: ShotResult.None,
@@ -763,7 +906,7 @@ contract BattleshipGame {
         pendingShots[matchId] = PendingShot({
             exists: true,
             moveId: moveId,
-            attacker: msg.sender,
+            attacker: attacker,
             defender: defender,
             cellIndex: cellIndex,
             resultCtHash: resultCtHash,
@@ -776,7 +919,7 @@ contract BattleshipGame {
         m.lastActionAt = nowTs;
         m.timeoutState.resolvingDeadline = nowTs + RESOLVING_TIMEOUT;
 
-        emit ShotSubmitted(matchId, moveId, msg.sender, defender, cellIndex);
+        emit ShotSubmitted(matchId, moveId, attacker, defender, cellIndex);
         emit ShotResolutionRequested(matchId, moveId, resultCtHash, sunkShipCtHash);
     }
 
@@ -851,6 +994,11 @@ contract BattleshipGame {
                 // MVP sunk reveal rule (docs/contract-data-model.md): only
                 // the final attacked cell is marked sunk.
                 defenderState.publicBoard.sunkMask |= cellBit;
+                // Track which of the defender's ships are sunk so the on-chain
+                // bot can size its heatmap to the surviving lengths.
+                if (sunkShipId >= 1 && sunkShipId <= MAX_SHIPS) {
+                    sunkShipsBitmap[m.id][pending.defender] |= uint16(uint256(1) << (sunkShipId - 1));
+                }
             }
         }
 
@@ -979,6 +1127,9 @@ contract BattleshipGame {
 
         if (msg.sender != m.creator && msg.sender != m.opponent) revert NotMatchPlayer();
         if (_isTerminal(m.status)) revert MatchAlreadyFinished();
+        // Bot matches are paced entirely by the human (the bot only moves when
+        // someone calls executeBotMove), so deadline-based wins do not apply.
+        if (m.matchType == MatchType.Bot) revert NoTimeoutAvailable();
 
         TimeoutReason reason;
         if (
@@ -1212,18 +1363,21 @@ contract BattleshipGame {
         revert NotMatchPlayerAddress();
     }
 
-    /// @dev Both fleets valid: the invited opponent moves first.
+    /// @dev Both fleets valid: PvP gives the first turn to the invited
+    ///      opponent; a Bot match gives it to the human (creator) so the player
+    ///      always opens.
     function _startMatch(Match storage m) private {
         uint64 nowTs = uint64(block.timestamp);
         m.status = MatchStatus.InProgress;
         m.startedAt = nowTs;
         m.lastActionAt = nowTs;
-        m.currentTurn = m.opponent;
+        address first = m.matchType == MatchType.Bot ? m.creator : m.opponent;
+        m.currentTurn = first;
         m.timeoutState.turnDeadline = nowTs + TURN_TIMEOUT;
         m.timeoutState.placementDeadline = 0;
 
-        emit MatchStarted(m.id, m.opponent);
-        emit TurnChanged(m.id, m.opponent);
+        emit MatchStarted(m.id, first);
+        emit TurnChanged(m.id, first);
     }
 
     /// @dev Encrypted placement validation (GAME-406), ~130 FHE operations:
@@ -1366,6 +1520,243 @@ contract BattleshipGame {
             scratch.anyHit = FHE.or(scratch.anyHit, shipHit);
             scratch.anySunk = FHE.or(scratch.anySunk, sunkNow);
             scratch.allShipsDead = FHE.and(scratch.allShipsDead, shipDead);
+        }
+    }
+
+    // ---------------------------------------------------------------------
+    // On-chain bot target selection (hard heatmap, public board only)
+    // ---------------------------------------------------------------------
+
+    /// @dev Gather the human board's public masks and surviving ship set, then
+    ///      pick the bot's next target. Reads only public state. The seed only
+    ///      breaks ties between equally-likely cells, and the chosen target is
+    ///      public regardless (every attack coordinate is), so plaintext block
+    ///      randomness suffices and manipulation is meaningless in a solo
+    ///      practice match.
+    function _chooseBotTargetForMatch(
+        Match storage m,
+        uint256 matchId
+    ) private view returns (uint8) {
+        PublicBoard storage board = m.creatorState.publicBoard;
+        uint256 seed = uint256(
+            keccak256(
+                abi.encodePacked(
+                    blockhash(block.number - 1),
+                    block.prevrandao,
+                    matchId,
+                    m.moveCount
+                )
+            )
+        );
+        (uint8 target, bool found) = _chooseBotTarget(
+            board.attackedMask,
+            board.missMask,
+            board.hitMask,
+            board.sunkMask,
+            sunkShipsBitmap[matchId][m.creator],
+            seed
+        );
+        if (!found) revert BotHasNoTarget();
+        return target;
+    }
+
+    /// @dev Faithful port of the local hard bot (src/game/bot.ts): count every
+    ///      legal placement of each surviving ship length consistent with the
+    ///      public shot map, weight placements that explain open hits, and aim
+    ///      at the highest-scoring untried cell. Ships of equal length are
+    ///      collapsed into one weighted pass to bound gas.
+    function _chooseBotTarget(
+        uint128 attacked,
+        uint128 missMask,
+        uint128 hitMask,
+        uint128 sunkMask,
+        uint16 sunkShips,
+        uint256 seed
+    ) internal pure returns (uint8 target, bool found) {
+        uint128 untried = (~attacked) & BOARD_MASK;
+        // Only the finishing cell of a sunk ship is publicly marked sunk, but
+        // the whole hull is the contiguous run of hits through it. Expand to the
+        // full footprint so a sunk ship is fully haloed and its body no longer
+        // attracts follow-up — matching the local engine, which marks every
+        // sunk cell and halos the entire hull (engine.ts sunkHalo).
+        uint128 sunk = _expandSunk(sunkMask, hitMask);
+        uint128 halo = _halo(sunk);
+        // A placement cell is blocked by a miss, a sunk cell, or an untried cell
+        // adjacent to a sunk ship. Open hits are NOT blocked: they are what
+        // follow-up placements are built around.
+        uint128 blocked = missMask | sunk | (halo & untried);
+        uint128 openHit = hitMask & (~sunk);
+
+        // Surviving ship counts grouped by length (1..4).
+        uint256[5] memory countByLen;
+        for (uint256 s = 0; s < MAX_SHIPS; s++) {
+            if ((uint256(sunkShips) >> s) & 1 == 1) continue;
+            countByLen[uint8(SHIP_LENGTHS[s])]++;
+        }
+
+        HeatScratch memory hs = HeatScratch({blocked: blocked, openHit: openHit});
+        uint32[100] memory heat;
+        for (uint256 length = 1; length <= 4; length++) {
+            if (countByLen[length] == 0) continue;
+            _accumulate(heat, hs, length, uint32(countByLen[length]));
+        }
+
+        // Prefer untried cells away from sunk ships; fall back to any untried.
+        uint128 pool = untried & (~halo);
+        if (pool == 0) pool = untried;
+        if (pool == 0) return (0, false);
+
+        return (_argmax(heat, pool, seed), true);
+    }
+
+    /// @dev Memory-held board masks for the heatmap pass, so the per-placement
+    ///      helper stays inside the EVM stack limit.
+    struct HeatScratch {
+        uint128 blocked;
+        uint128 openHit;
+    }
+
+    /// @dev Accumulate weighted placement counts for one ship length over both
+    ///      axes. A placement is a (start, stride) pair: stride 1 is horizontal,
+    ///      stride BOARD_SIZE is vertical. `count` is how many surviving ships
+    ///      share this length.
+    function _accumulate(
+        uint32[100] memory heat,
+        HeatScratch memory hs,
+        uint256 length,
+        uint32 count
+    ) private pure {
+        // Horizontal: every row, columns that leave room for the full length.
+        for (uint256 row = 0; row < BOARD_SIZE; row++) {
+            uint256 base = row * BOARD_SIZE;
+            for (uint256 col = 0; col + length <= BOARD_SIZE; col++) {
+                _addPlacement(heat, hs, base + col, 1, length, count);
+            }
+        }
+        // A length-1 ship is axis-agnostic; the horizontal pass already covered
+        // every cell once.
+        if (length == 1) return;
+        // Vertical: every column, rows that leave room for the full length.
+        for (uint256 row = 0; row + length <= BOARD_SIZE; row++) {
+            uint256 base = row * BOARD_SIZE;
+            for (uint256 col = 0; col < BOARD_SIZE; col++) {
+                _addPlacement(heat, hs, base + col, BOARD_SIZE, length, count);
+            }
+        }
+    }
+
+    /// @dev Score one candidate placement (start + stride*i for i in [0,length)):
+    ///      skip it if any cell is blocked, otherwise add its weight to every
+    ///      non-open-hit cell. Placements covering open hits dominate so
+    ///      follow-up beats the hunt, exactly as the local bot.
+    function _addPlacement(
+        uint32[100] memory heat,
+        HeatScratch memory hs,
+        uint256 start,
+        uint256 stride,
+        uint256 length,
+        uint32 count
+    ) private pure {
+        uint256 blockedBits = uint256(hs.blocked);
+        uint256 openHitBits = uint256(hs.openHit);
+
+        uint256 hits = 0;
+        for (uint256 i = 0; i < length; i++) {
+            uint256 cell = start + stride * i;
+            if ((blockedBits >> cell) & 1 == 1) return;
+            if ((openHitBits >> cell) & 1 == 1) hits++;
+        }
+
+        uint32 weight = (hits > 0 ? uint32(50 * hits) : 1) * count;
+        for (uint256 i = 0; i < length; i++) {
+            uint256 cell = start + stride * i;
+            if ((openHitBits >> cell) & 1 == 1) continue;
+            heat[cell] += weight;
+        }
+    }
+
+    /// @dev Highest-heat cell within `pool`, ties broken with a reservoir pick.
+    function _argmax(
+        uint32[100] memory heat,
+        uint128 pool,
+        uint256 seed
+    ) private pure returns (uint8 chosen) {
+        uint256 poolBits = uint256(pool);
+        int256 best = -1;
+        uint256 ties = 0;
+        for (uint256 cell = 0; cell < CELL_COUNT; cell++) {
+            if ((poolBits >> cell) & 1 == 0) continue;
+            int256 value = int256(uint256(heat[cell]));
+            if (value > best) {
+                best = value;
+                ties = 1;
+                chosen = uint8(cell);
+            } else if (value == best) {
+                ties++;
+                if (seed % ties == 0) chosen = uint8(cell);
+            }
+        }
+    }
+
+    /// @dev Expand each publicly-sunk finishing cell to its full hull: the
+    ///      contiguous run of hit cells through it along each axis. Lets the
+    ///      heatmap halo the whole ship and drop its body from the open-hit set,
+    ///      reproducing the local engine's full sunk reveal from public masks.
+    ///      (For typical no-touch boards the run is exactly one ship; collinear
+    ///      touching ships are a rare self-imposed edge that only mildly misleads
+    ///      the bot, never a correctness issue.)
+    function _expandSunk(
+        uint128 sunkMask,
+        uint128 hitMask
+    ) internal pure returns (uint128 expanded) {
+        expanded = sunkMask;
+        uint256 sunkBits = uint256(sunkMask);
+        uint256 hitBits = uint256(hitMask);
+        for (uint256 cell = 0; cell < CELL_COUNT; cell++) {
+            if ((sunkBits >> cell) & 1 == 0) continue;
+            uint256 row = cell / BOARD_SIZE;
+            uint256 col = cell % BOARD_SIZE;
+            // Walk the contiguous hit run left, right, up, and down.
+            for (uint256 c = col; c > 0; ) {
+                c--;
+                uint256 nc = row * BOARD_SIZE + c;
+                if ((hitBits >> nc) & 1 == 0) break;
+                expanded |= uint128(uint256(1) << nc);
+            }
+            for (uint256 c = col + 1; c < BOARD_SIZE; c++) {
+                uint256 nc = row * BOARD_SIZE + c;
+                if ((hitBits >> nc) & 1 == 0) break;
+                expanded |= uint128(uint256(1) << nc);
+            }
+            for (uint256 r = row; r > 0; ) {
+                r--;
+                uint256 nc = r * BOARD_SIZE + col;
+                if ((hitBits >> nc) & 1 == 0) break;
+                expanded |= uint128(uint256(1) << nc);
+            }
+            for (uint256 r = row + 1; r < BOARD_SIZE; r++) {
+                uint256 nc = r * BOARD_SIZE + col;
+                if ((hitBits >> nc) & 1 == 0) break;
+                expanded |= uint128(uint256(1) << nc);
+            }
+        }
+    }
+
+    /// @dev 8-neighbour halo around every revealed sunk cell.
+    function _halo(uint128 sunkMask) private pure returns (uint128 halo) {
+        uint256 bits = uint256(sunkMask);
+        for (uint256 cell = 0; cell < CELL_COUNT; cell++) {
+            if ((bits >> cell) & 1 == 0) continue;
+            uint256 row = cell / BOARD_SIZE;
+            uint256 col = cell % BOARD_SIZE;
+            for (uint256 d = 0; d < 9; d++) {
+                if (d == 4) continue; // the cell itself
+                int256 nRow = int256(row) + (int256(d / 3) - 1);
+                int256 nCol = int256(col) + (int256(d % 3) - 1);
+                if (nRow < 0 || nRow >= int256(uint256(BOARD_SIZE))) continue;
+                if (nCol < 0 || nCol >= int256(uint256(BOARD_SIZE))) continue;
+                halo |= uint128(uint256(1) << (uint256(nRow) * BOARD_SIZE + uint256(nCol)));
+            }
         }
     }
 

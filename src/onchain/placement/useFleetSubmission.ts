@@ -26,6 +26,7 @@ import {
   type EncryptedFleetSegment,
 } from '../fhenix/types'
 import { useCofheMatchClient, type CofheClientState } from '../fhenix/useCofheMatchClient'
+import type { Placement } from '../../game/types'
 import { encodeFleetSegments } from './fleetEncoding'
 import {
   completedFleet,
@@ -55,6 +56,16 @@ export interface UseFleetSubmissionResult {
    * fails, or the scope drifted mid-encryption. On failure `error` is set.
    */
   encrypt: () => Promise<readonly EncryptedFleetSegment[] | null>
+  /**
+   * Encrypt an explicitly-provided complete fleet (e.g. the auto-placed bot
+   * fleet for a single-player bot match). Same CoFHE scope guard and error
+   * handling as `encrypt`, but the fleet is passed in rather than read from the
+   * placement store. Returns `null` on an incomplete fleet, an unready session,
+   * a failed encryption, or a mid-flight scope drift.
+   */
+  encryptFleet: (
+    placements: ReadonlyArray<Placement | null>,
+  ) => Promise<readonly EncryptedFleetSegment[] | null>
 }
 
 export function useFleetSubmission(
@@ -107,6 +118,34 @@ export function useFleetSubmission(
     }
   }
 
+  async function encryptFleet(
+    placements: ReadonlyArray<Placement | null>,
+  ): Promise<readonly EncryptedFleetSegment[] | null> {
+    if (!cofhe.client || !expectedCofheKey) return null
+    setError(null)
+    setProgress('initializing')
+    setEncrypting(true)
+    const stopEncryptTimer = perf.start('encrypt-fleet')
+    try {
+      const encrypted = await cofhe.client.encryptFleet(
+        encodeFleetSegments(placements),
+        setProgress,
+      )
+      stopEncryptTimer()
+      // A mid-flight account / chain / match switch must never let a stale
+      // ciphertext reach the contract under a new scope.
+      if (cofhe.client.scopeKey !== expectedCofheKey) {
+        throw new Error('CoFHE scope changed during encryption')
+      }
+      return encrypted
+    } catch {
+      setError('encryption-failed')
+      return null
+    } finally {
+      setEncrypting(false)
+    }
+  }
+
   return {
     cofhe,
     encrypting,
@@ -114,5 +153,6 @@ export function useFleetSubmission(
     error,
     resetError: () => setError(null),
     encrypt,
+    encryptFleet,
   }
 }

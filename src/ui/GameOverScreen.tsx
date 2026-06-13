@@ -44,10 +44,10 @@ export function GameOverScreen() {
           </div>
         </div>
 
-        <button className="btn primary wide" onClick={rematch}>
+        <button className="btn primary wide" data-ic="rotate" onClick={rematch}>
           Play Again
         </button>
-        <button className="btn ghost wide" onClick={toHome}>
+        <button className="btn ghost wide" data-ic="back" onClick={toHome}>
           Main Menu
         </button>
       </div>

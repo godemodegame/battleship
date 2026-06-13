@@ -108,17 +108,15 @@ afterEach(() => {
 })
 
 describe('HomeScreen', () => {
-  it('updates difficulty, opens help, and starts practice placement', async () => {
+  it('opens help and routes the live match modes (bot is now on-chain)', async () => {
     const user = userEvent.setup()
     render(<App />)
 
-    const hard = await screen.findByRole('radio', { name: 'Hard' })
-    await user.click(hard)
-    expect(hard.getAttribute('aria-checked')).toBe('true')
-    expect(useStore.getState().difficulty).toBe('hard')
-
-    // Play Against Friend (→ /match/new) and Find a Game (→ /lobby random
-    // matchmaking) are both live; neither is disabled.
+    // The offline difficulty selector is gone — the bot match is fully on-chain
+    // and always hard. Play Against Friend (→ /match/new), Find a Game
+    // (→ /lobby), and Practice vs Bot (→ /match/bot) are all live.
+    await screen.findByRole('button', { name: 'Practice vs Bot' })
+    expect(screen.queryByRole('radio', { name: 'Hard' })).toBeNull()
     expect((screen.getByRole('button', { name: 'Play Against Friend' }) as HTMLButtonElement).disabled)
       .toBe(false)
     expect((screen.getByRole('button', { name: 'Find a Game' }) as HTMLButtonElement).disabled)
@@ -129,9 +127,11 @@ describe('HomeScreen', () => {
     await user.click(screen.getByRole('button', { name: 'Done' }))
     expect(screen.queryByRole('heading', { name: 'How It Works' })).toBeNull()
 
+    // Practice vs Bot now navigates to the on-chain bot create route rather than
+    // starting a local game, so the practice store stays on the home screen.
     await user.click(screen.getByRole('button', { name: 'Practice vs Bot' }))
-    expect(screen.getByText('Deploy Fleet')).toBeTruthy()
-    expect(useStore.getState().screen).toBe('placement')
+    expect(window.location.pathname).toBe('/match/bot')
+    expect(useStore.getState().screen).toBe('home')
   })
 })
 

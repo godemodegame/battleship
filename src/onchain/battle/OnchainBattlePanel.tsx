@@ -115,6 +115,7 @@ export function OnchainBattlePanel({
         })
       : null
   const attackWrite = useTrackedWrite(txScope('attack'))
+  const botMoveWrite = useTrackedWrite(txScope('botMove'))
   const resolveWrite = useTrackedWrite(txScope('resolve'))
   const forfeitWrite = useTrackedWrite(txScope('forfeit'))
   const timeoutWrite = useTrackedWrite(txScope('timeout'))
@@ -164,9 +165,14 @@ export function OnchainBattlePanel({
 
   const resolving = phase.kind === 'resolving'
   const isMyTurn = phase.kind === 'battle' && phase.isMyTurn
+  // In a Bot match the "opponent turn" is the bot's: any caller advances it via
+  // executeBotMove (the contract picks the target). The player drives it here.
+  const isBotMatch = match.matchType === 'Bot'
+  const botTurn = phase.kind === 'battle' && !isMyTurn && isBotMatch
   const busy =
     fetchingProof ||
     attackWrite.busy ||
+    botMoveWrite.busy ||
     resolveWrite.busy ||
     forfeitWrite.busy ||
     timeoutWrite.busy
@@ -177,11 +183,14 @@ export function OnchainBattlePanel({
     wallet.canWrite &&
     Boolean(writeClient?.attack)
 
-  // GAME-710: the player not on turn may claim once the deadline passes.
+  // GAME-710: the player not on turn may claim once the deadline passes. Bot
+  // matches are paced by the player and the contract rejects timeout claims, so
+  // never offer it there.
   const nowSeconds = Math.floor(Date.now() / 1000)
   const timeoutClaimable =
     phase.kind === 'battle' &&
     !isMyTurn &&
+    !isBotMatch &&
     match.deadlines.turnDeadline > 0 &&
     nowSeconds > match.deadlines.turnDeadline &&
     Boolean(writeClient?.claimTimeoutWin)
@@ -248,6 +257,21 @@ export function OnchainBattlePanel({
     if (result?.ok) onRefetch()
   }
 
+  /**
+   * Advance the bot's turn. Permissionless on-chain: the contract chooses the
+   * target. The bot's shot then resolves through the same ResolvingShot flow
+   * as a human attack (finalizeShot below).
+   */
+  async function advanceBot() {
+    if (!writeClient?.executeBotMove || !wallet.canWrite || busy) return
+    haptics.prime()
+    wallet.actions.prepareHandoff()
+    const result = await botMoveWrite.run((onState) =>
+      writeClient.executeBotMove!(match.matchIdBig, onState),
+    )
+    if (result?.ok) onRefetch()
+  }
+
   async function forfeit() {
     setConfirmForfeit(false)
     if (!writeClient || !wallet.canWrite) return
@@ -308,6 +332,7 @@ export function OnchainBattlePanel({
           </p>
           <button
             className="btn primary wide"
+            data-ic="check"
             data-testid="finalize-shot"
             disabled={
               busy ||
@@ -343,7 +368,23 @@ export function OnchainBattlePanel({
         </div>
       )}
 
-      {!resolving && (
+      {!resolving && botTurn && (
+        <div className="home-actions" data-testid="bot-turn">
+          <span className="status-label">{battleCopy.botTurnTitle}</span>
+          <button
+            className="btn primary wide"
+            data-ic="play"
+            data-testid="advance-bot-turn"
+            disabled={busy || !wallet.canWrite || !writeClient?.executeBotMove}
+            onClick={() => void advanceBot()}
+          >
+            {battleCopy.advanceBotTurn}
+          </button>
+          <TxStatusLine state={botMoveWrite.state} onRetry={botMoveWrite.reset} />
+        </div>
+      )}
+
+      {!resolving && !botTurn && (
         <>
           <button
             className="btn fire wide"

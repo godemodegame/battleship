@@ -11,9 +11,19 @@
 export const BATTLESHIP_GAME_CONTRACT_NAME = 'BattleshipGame'
 
 /** sha256 of the compact ABI JSON; must match `abiSha256` in the active deployment record. */
-export const BATTLESHIP_GAME_ABI_SHA256 = 'sha256:98b573b4feb823718eec5cc1888b9d9b1e03952c13eff8dbeb3a1cc45cc7af19'
+export const BATTLESHIP_GAME_ABI_SHA256 = 'sha256:1f3f3c8d28f17a32cf584bb3486ba8d8b9cb5acb3354cf54a95ae01d68dd1b98'
 
 export const battleshipGameAbi = [
+  {
+    "inputs": [],
+    "name": "BotHasNoTarget",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "BotMatchCannotBeJoined",
+    "type": "error"
+  },
   {
     "inputs": [],
     "name": "CannotCancelStartedMatch",
@@ -122,6 +132,11 @@ export const battleshipGameAbi = [
   },
   {
     "inputs": [],
+    "name": "NotBotMatch",
+    "type": "error"
+  },
+  {
+    "inputs": [],
     "name": "NotInvitedOpponent",
     "type": "error"
   },
@@ -180,6 +195,50 @@ export const battleshipGameAbi = [
     "inputs": [],
     "name": "SelfInviteNotAllowed",
     "type": "error"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "matchId",
+        "type": "uint256"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "player",
+        "type": "address"
+      }
+    ],
+    "name": "BotMatchCreated",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "matchId",
+        "type": "uint256"
+      },
+      {
+        "indexed": true,
+        "internalType": "uint32",
+        "name": "moveId",
+        "type": "uint32"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "caller",
+        "type": "address"
+      }
+    ],
+    "name": "BotMoveTriggered",
+    "type": "event"
   },
   {
     "anonymous": false,
@@ -534,6 +593,19 @@ export const battleshipGameAbi = [
   },
   {
     "inputs": [],
+    "name": "BOT_OPPONENT",
+    "outputs": [
+      {
+        "internalType": "address",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
     "name": "CELL_COUNT",
     "outputs": [
       {
@@ -702,6 +774,74 @@ export const battleshipGameAbi = [
   {
     "inputs": [
       {
+        "components": [
+          {
+            "internalType": "uint256",
+            "name": "ctHash",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint8",
+            "name": "securityZone",
+            "type": "uint8"
+          },
+          {
+            "internalType": "uint8",
+            "name": "utype",
+            "type": "uint8"
+          },
+          {
+            "internalType": "bytes",
+            "name": "signature",
+            "type": "bytes"
+          }
+        ],
+        "internalType": "struct InEuint8[20]",
+        "name": "playerFleet",
+        "type": "tuple[20]"
+      },
+      {
+        "components": [
+          {
+            "internalType": "uint256",
+            "name": "ctHash",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint8",
+            "name": "securityZone",
+            "type": "uint8"
+          },
+          {
+            "internalType": "uint8",
+            "name": "utype",
+            "type": "uint8"
+          },
+          {
+            "internalType": "bytes",
+            "name": "signature",
+            "type": "bytes"
+          }
+        ],
+        "internalType": "struct InEuint8[20]",
+        "name": "botFleet",
+        "type": "tuple[20]"
+      }
+    ],
+    "name": "createBotMatch",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "matchId",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
         "internalType": "address",
         "name": "invitedOpponent",
         "type": "address"
@@ -813,6 +953,25 @@ export const battleshipGameAbi = [
         "internalType": "uint256",
         "name": "matchId",
         "type": "uint256"
+      }
+    ],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "matchId",
+        "type": "uint256"
+      }
+    ],
+    "name": "executeBotMove",
+    "outputs": [
+      {
+        "internalType": "uint32",
+        "name": "moveId",
+        "type": "uint32"
       }
     ],
     "stateMutability": "nonpayable",

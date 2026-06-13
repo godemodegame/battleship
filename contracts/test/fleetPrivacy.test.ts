@@ -30,12 +30,14 @@ const ALLOWED_FUNCTIONS = [
   'TURN_TIMEOUT',
   'RESOLVING_TIMEOUT',
   'MAX_PAGE_LIMIT',
+  'BOT_OPPONENT',
   'getShipLengths',
   // lifecycle writes
   'createMatch',
   'createWithFleet',
   'createOpenMatch',
   'createOpenWithFleet',
+  'createBotMatch',
   'joinMatch',
   'joinWithFleet',
   'cancelMatch',
@@ -45,6 +47,7 @@ const ALLOWED_FUNCTIONS = [
   'finalizeFleetValidation',
   'finalizeFleetValidationWithProof',
   'attack',
+  'executeBotMove',
   'finalizeAttack',
   'finalizeAttackWithProof',
   // reads
@@ -64,6 +67,8 @@ const ALLOWED_FUNCTIONS = [
 const ALLOWED_EVENTS = [
   'MatchCreated',
   'MatchJoined',
+  'BotMatchCreated',
+  'BotMoveTriggered',
   'MatchCancelled',
   'MatchForfeited',
   'TimeoutWinClaimed',

@@ -16,13 +16,14 @@ import { Link, useLocation, useNavigate } from 'react-router-dom'
 import {
   createMatchCopy,
   openMatchCopy,
+  botMatchCopy,
   deploymentCopy,
   encryptedPlacementCopy,
   matchStateCopy,
   walletCopy,
 } from '../../copy/en'
 import { errorMessage } from '../../copy/errors'
-import { isFleetComplete } from '../../game/board'
+import { autoPlaceFleet, isFleetComplete } from '../../game/board'
 import { useBattleshipClients } from '../client/useBattleshipClients'
 import { pendingTxScope } from '../client/pendingTxStore'
 import { isTxBusy } from '../client/txTracker'
@@ -71,9 +72,11 @@ export function validateInvitedAddress(
  *   - `open`   → host a game any random player can join, then `createOpenWithFleet`.
  * Open mode drops the invited-address input entirely (random matchmaking).
  */
-function CreateMatchScreen({ mode }: { mode: 'friend' | 'open' }) {
+function CreateMatchScreen({ mode }: { mode: 'friend' | 'open' | 'bot' }) {
   const isOpen = mode === 'open'
-  const copy = isOpen ? openMatchCopy : createMatchCopy
+  const isBot = mode === 'bot'
+  const isFriend = mode === 'friend'
+  const copy = isBot ? botMatchCopy : isOpen ? openMatchCopy : createMatchCopy
   const wallet = useWalletSession()
   const navigate = useNavigate()
   const location = useLocation()
@@ -142,9 +145,11 @@ function CreateMatchScreen({ mode }: { mode: 'friend' | 'open' }) {
     return () => bindScope(null)
   }, [bindScope, placementKey])
 
-  const canCreate = isOpen
-    ? Boolean(writeClient?.createOpenWithFleet)
-    : Boolean(writeClient?.createWithFleet)
+  const canCreate = isBot
+    ? Boolean(writeClient?.createBotMatch)
+    : isOpen
+      ? Boolean(writeClient?.createOpenWithFleet)
+      : Boolean(writeClient?.createWithFleet)
   const submission = useFleetSubmission({
     enabled: wallet.canWrite && deploymentReady && canCreate,
     cofheScope,
@@ -169,8 +174,8 @@ function CreateMatchScreen({ mode }: { mode: 'friend' | 'open' }) {
   }
 
   async function onCreate() {
-    // Friend mode validates the invited address; open mode has no invitee.
-    if (!isOpen) {
+    // Only friend mode validates an invited address; open and bot have none.
+    if (isFriend) {
       const problem = validateInvitedAddress(address, session.address)
       setValidationError(problem)
       if (problem) return
@@ -185,11 +190,28 @@ function CreateMatchScreen({ mode }: { mode: 'friend' | 'open' }) {
     // A mobile wallet confirmation may background the browser; record the
     // route so the return path restores match creation (GAME-210).
     wallet.actions.prepareHandoff()
-    const result = isOpen
-      ? await tx.run((onState) => writeClient!.createOpenWithFleet!(encrypted, onState))
-      : await tx.run((onState) =>
-          writeClient!.createWithFleet!(address.trim().toLowerCase() as HexAddress, encrypted, onState),
-        )
+    let result
+    if (isBot) {
+      // The bot's fleet is auto-placed and encrypted client-side, then stored
+      // under the bot sentinel on-chain (no usable on-chain randomness; see
+      // docs/computer-opponent-design.md). Both fleets are encrypted by — and
+      // bound to — this wallet, which submits them in one createBotMatch tx.
+      const botSegments = await submission.encryptFleet(autoPlaceFleet())
+      if (!botSegments) return
+      result = await tx.run((onState) =>
+        writeClient!.createBotMatch!(encrypted, botSegments, onState),
+      )
+    } else if (isOpen) {
+      result = await tx.run((onState) => writeClient!.createOpenWithFleet!(encrypted, onState))
+    } else {
+      result = await tx.run((onState) =>
+        writeClient!.createWithFleet!(
+          address.trim().toLowerCase() as HexAddress,
+          encrypted,
+          onState,
+        ),
+      )
+    }
     if (result?.ok) {
       // GAME-607: clear the plaintext fleet once the fleet is on-chain.
       clearFleet()
@@ -200,7 +222,13 @@ function CreateMatchScreen({ mode }: { mode: 'friend' | 'open' }) {
   return (
     <div
       className="overlay home match-placement-route"
-      data-testid={isOpen ? 'create-open-match-screen' : 'create-match-screen'}
+      data-testid={
+        isBot
+          ? 'create-bot-match-screen'
+          : isOpen
+            ? 'create-open-match-screen'
+            : 'create-match-screen'
+      }
     >
       <div className="title-lockup">
         <span className="title-kicker">{copy.kicker}</span>
@@ -274,7 +302,7 @@ function CreateMatchScreen({ mode }: { mode: 'friend' | 'open' }) {
 
       {session.isConnected && session.isCorrectChain && deploymentReady && (
         <div className="home-actions" data-testid="create-match-form">
-          {!isOpen && (
+          {isFriend && (
             <>
               <label className="field-label" htmlFor="invited-address">
                 {createMatchCopy.addressLabel}
@@ -321,8 +349,8 @@ function CreateMatchScreen({ mode }: { mode: 'friend' | 'open' }) {
             </>
           )}
 
-          {isOpen && (
-            <p className="footnote" data-testid="open-match-helper">
+          {!isFriend && (
+            <p className="footnote" data-testid={isBot ? 'bot-match-helper' : 'open-match-helper'}>
               {copy.helper}
             </p>
           )}
@@ -407,4 +435,9 @@ export function CreateFriendMatchScreen() {
 /** Open match creation route (`/match/open`): host a game for any player. */
 export function CreateOpenMatchScreen() {
   return <CreateMatchScreen mode="open" />
+}
+
+/** Bot match creation route (`/match/bot`): practice against the on-chain bot. */
+export function CreateBotMatchScreen() {
+  return <CreateMatchScreen mode="bot" />
 }
