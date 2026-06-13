@@ -73,6 +73,19 @@ interface AppState {
   busy: boolean
   /** True while a shot/turn is settling on-chain (bot-match route only). */
   confirming: boolean
+  /**
+   * Set when an on-chain mirror write stalled mid-turn and left the battle
+   * waiting on the chain (bot-match route only). The HUD swaps the Fire button
+   * for a Retry that calls `resumeBattle()`; until then input is gated so the
+   * local board can't drift further ahead of the contract.
+   */
+  driverError: boolean
+  /**
+   * The player's shot cell that still needs to land on-chain after a stall, or
+   * null when only the bot's turn needs resuming. `resumeBattle()` re-sends this
+   * shot (idempotently) before draining the bot's turn.
+   */
+  recoveryCell: number | null
   /** On-chain mirror for the bot match; null in practice mode. */
   battleDriver: BattleDriver | null
   effects: EffectSpec[]
@@ -93,6 +106,8 @@ interface AppState {
   confirmFleet: () => void
   selectCell: (cell: number | null) => void
   fire: () => Promise<void>
+  /** Resume a bot match that stalled on an on-chain write (driverError). */
+  resumeBattle: () => Promise<void>
   forfeit: () => void
   removeEffect: (id: number) => void
   rematch: () => void
@@ -129,6 +144,8 @@ export function resetPracticeState() {
     selectedCell: null,
     busy: false,
     confirming: false,
+    driverError: false,
+    recoveryCell: null,
     battleDriver: null,
     effects: [],
     projectiles: [],
@@ -210,6 +227,52 @@ export const useStore = create<AppState>((set, get) => {
     return match.winner ? 'won' : move.result
   }
 
+  /**
+   * Drives the bot's turn until control passes back to the player. Shared by the
+   * normal `fire()` sequence and the `resumeBattle()` recovery path. On the
+   * driver (on-chain) path the contract picks each cell; locally the heuristic
+   * does. Returns 'stalled' when an on-chain bot move fails so the caller can
+   * surface a recoverable error instead of leaving the turn wedged on the bot.
+   */
+  async function runBotTurn(
+    sessionId: number,
+  ): Promise<'passed' | 'won' | 'aborted' | 'stalled'> {
+    while (get().match?.turn === 'bot') {
+      const battleDriver = get().battleDriver
+      let target: number
+      if (battleDriver) {
+        // Authoritative: the contract picks the bot's cell. Run it on-chain,
+        // read the chosen cell back, then animate that exact shot locally so
+        // the boards stay in lockstep with the chain.
+        battleDriver.onConfirming?.(true)
+        set({ confirming: true })
+        let botCell: number | null
+        try {
+          botCell = await battleDriver.resolveBotShot()
+        } catch (err) {
+          battleDriver.onError?.(err instanceof Error ? err.message : String(err))
+          botCell = null
+        } finally {
+          battleDriver.onConfirming?.(false)
+          set({ confirming: false })
+        }
+        if (botCell === null) return 'stalled'
+        if (interrupted(sessionId)) return 'aborted'
+        target = botCell
+      } else {
+        target = chooseBotTarget(get().match!.boards.player, get().difficulty, randomSource)
+      }
+      const botResult = await resolveShot('bot', target, sessionId)
+      if (botResult === 'aborted' || interrupted(sessionId)) return 'aborted'
+      if (botResult === 'won') return 'won'
+      if (botResult === 'miss') break
+
+      await delay(350 + randomSource() * 350)
+      if (interrupted(sessionId)) return 'aborted'
+    }
+    return 'passed'
+  }
+
   return {
     screen: 'home',
     difficulty: 'normal',
@@ -224,6 +287,8 @@ export const useStore = create<AppState>((set, get) => {
     selectedCell: null,
     busy: false,
     confirming: false,
+    driverError: false,
+    recoveryCell: null,
     battleDriver: null,
     effects: [],
     projectiles: [],
@@ -248,6 +313,9 @@ export const useStore = create<AppState>((set, get) => {
         selectedCell: null,
         forfeited: false,
         busy: false,
+        confirming: false,
+        driverError: false,
+        recoveryCell: null,
         focus: 'player',
       })
     },
@@ -311,13 +379,16 @@ export const useStore = create<AppState>((set, get) => {
         focus: 'enemy',
         selectedCell: null,
         busy: false,
+        confirming: false,
+        driverError: false,
+        recoveryCell: null,
         toast: null,
       })
     },
 
     selectCell: (cell) => {
-      const { match, busy } = get()
-      if (!match || match.winner || busy || match.turn !== 'player') return
+      const { match, busy, driverError } = get()
+      if (!match || match.winner || busy || driverError || match.turn !== 'player') return
       if (
         cell !== null &&
         (match.boards.bot.shots[cell] !== 0 || sunkHalo(match.boards.bot).has(cell))
@@ -331,8 +402,10 @@ export const useStore = create<AppState>((set, get) => {
 
     fire: async () => {
       const sessionId = practiceSessionId
-      const { match, busy, selectedCell, difficulty, battleDriver } = get()
-      if (!match || match.winner || busy || match.turn !== 'player') return
+      const { match, busy, selectedCell, battleDriver, driverError } = get()
+      // While a stall is pending, the Retry button (resumeBattle) is the only
+      // way forward; a fresh shot would push the local board further from chain.
+      if (!match || match.winner || busy || driverError || match.turn !== 'player') return
       if (selectedCell === null || match.boards.bot.shots[selectedCell] !== 0) return
       const cell = selectedCell
       set({ busy: true, selectedCell: null })
@@ -366,7 +439,9 @@ export const useStore = create<AppState>((set, get) => {
         battleDriver?.onConfirming?.(false)
         set({ confirming: false })
         if (!ok) {
-          set({ toast: driverErrorToast() })
+          // The shot never landed on-chain; remember the cell so Retry re-sends
+          // it (idempotently) before the bot replies.
+          set({ toast: driverErrorToast(), driverError: true, recoveryCell: cell })
           releaseBusy(sessionId)
           return
         }
@@ -393,51 +468,92 @@ export const useStore = create<AppState>((set, get) => {
         return
       }
 
-      while (get().match?.turn === 'bot') {
-        let target: number
-        if (battleDriver) {
-          // Authoritative: the contract picks the bot's cell. Run it on-chain,
-          // read the chosen cell back, then animate that exact shot locally so
-          // the boards stay in lockstep with the chain.
-          battleDriver.onConfirming?.(true)
-          set({ confirming: true })
-          let botCell: number | null
-          try {
-            botCell = await battleDriver.resolveBotShot()
-          } catch (err) {
-            battleDriver.onError?.(err instanceof Error ? err.message : String(err))
-            botCell = null
-          } finally {
-            battleDriver.onConfirming?.(false)
-            set({ confirming: false })
-          }
-          if (botCell === null) {
-            set({ toast: driverErrorToast() })
-            releaseBusy(sessionId)
-            return
-          }
-          if (interrupted(sessionId)) {
-            releaseBusy(sessionId)
-            return
-          }
-          target = botCell
-        } else {
-          target = chooseBotTarget(get().match!.boards.player, difficulty, randomSource)
+      const outcome = await runBotTurn(sessionId)
+      if (outcome === 'aborted') {
+        releaseBusy(sessionId)
+        return
+      }
+      if (outcome === 'won') {
+        sfx.lose()
+        set({ screen: 'gameover', busy: false })
+        return
+      }
+      if (outcome === 'stalled') {
+        // The player's shot already settled on-chain; only the bot's turn needs
+        // resuming, so no recovery cell.
+        set({ toast: driverErrorToast(), driverError: true, recoveryCell: null })
+        releaseBusy(sessionId)
+        return
+      }
+
+      set({ focus: 'enemy' })
+      await delay(SWING_MS / 2)
+      if (interrupted(sessionId)) {
+        releaseBusy(sessionId)
+        return
+      }
+      set({ busy: false })
+    },
+
+    resumeBattle: async () => {
+      const sessionId = practiceSessionId
+      const { match, busy, battleDriver, driverError } = get()
+      if (!battleDriver || !driverError || busy || !match || match.winner) return
+      set({ busy: true, driverError: false, toast: null })
+
+      // 1) Re-send the player's shot if it never reached the chain. The driver
+      // guards on the contract's pending-shot state, so a re-send is safe whether
+      // the original attack reverted, was never broadcast, or only the finalize
+      // failed.
+      const recoveryCell = get().recoveryCell
+      if (recoveryCell !== null) {
+        battleDriver.onConfirming?.(true)
+        set({ confirming: true })
+        let ok: boolean
+        try {
+          await battleDriver.submitPlayerShot(recoveryCell)
+          ok = true
+        } catch (err) {
+          battleDriver.onError?.(err instanceof Error ? err.message : String(err))
+          ok = false
+        } finally {
+          battleDriver.onConfirming?.(false)
+          set({ confirming: false })
         }
-        const botResult = await resolveShot('bot', target, sessionId)
-        if (botResult === 'aborted' || interrupted(sessionId)) {
+        if (!ok) {
+          set({ toast: driverErrorToast(), driverError: true })
           releaseBusy(sessionId)
           return
         }
-        if (botResult === 'won') {
+        set({ recoveryCell: null })
+        if (interrupted(sessionId)) {
+          releaseBusy(sessionId)
+          return
+        }
+        // A winning player shot that only now confirmed on-chain.
+        if (get().match?.winner === 'player') {
+          sfx.win()
+          set({ screen: 'gameover', busy: false })
+          return
+        }
+      }
+
+      // 2) Drain the bot's turn. A no-op when the player's shot was a hit (turn
+      // stays with the player); otherwise it replies until it misses.
+      if (get().match?.turn === 'bot') {
+        set({ focus: 'player' })
+        const outcome = await runBotTurn(sessionId)
+        if (outcome === 'aborted') {
+          releaseBusy(sessionId)
+          return
+        }
+        if (outcome === 'won') {
           sfx.lose()
           set({ screen: 'gameover', busy: false })
           return
         }
-        if (botResult === 'miss') break
-
-        await delay(350 + randomSource() * 350)
-        if (interrupted(sessionId)) {
+        if (outcome === 'stalled') {
+          set({ toast: driverErrorToast(), driverError: true, recoveryCell: null })
           releaseBusy(sessionId)
           return
         }

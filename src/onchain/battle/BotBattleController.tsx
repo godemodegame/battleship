@@ -49,6 +49,31 @@ interface DriverApi {
   onRefetch: () => void
 }
 
+/**
+ * Backoff (ms) between automatic retries of an on-chain turn. A transient RPC
+ * blip, a dropped receipt, or a momentary nonce gap on the embedded wallet is
+ * far more common than a real revert; one or two quiet retries clear those
+ * before the player ever sees the stall + Retry button. Both `runPlayerShot`
+ * and `runBotShot` are idempotent (they reconcile against the contract's
+ * pending-shot state first), so re-running them never double-fires.
+ */
+const RETRY_BACKOFF_MS = [700, 1800]
+
+async function withRetry<T>(fn: () => Promise<T>): Promise<T> {
+  let lastError: unknown
+  for (let attempt = 0; attempt <= RETRY_BACKOFF_MS.length; attempt++) {
+    try {
+      return await fn()
+    } catch (err) {
+      lastError = err
+      const backoff = RETRY_BACKOFF_MS[attempt]
+      if (backoff === undefined) break
+      await new Promise((resolve) => setTimeout(resolve, backoff))
+    }
+  }
+  throw lastError
+}
+
 /** Fetch the pending shot's decrypt proofs and publish them (finalize). */
 async function finalizePending(api: DriverApi): Promise<void> {
   if (!api.readClient?.getPendingShot || !api.writeClient?.finalizeAttackWithProof) {
@@ -202,8 +227,8 @@ export function BotBattleController({
 
   const driver = useMemo(
     () => ({
-      submitPlayerShot: (cell: number) => runPlayerShot(apiRef.current, cell),
-      resolveBotShot: () => runBotShot(apiRef.current),
+      submitPlayerShot: (cell: number) => withRetry(() => runPlayerShot(apiRef.current, cell)),
+      resolveBotShot: () => withRetry(() => runBotShot(apiRef.current)),
       forfeit: async () => {
         const api = apiRef.current
         if (!api.writeClient) return
@@ -225,6 +250,8 @@ export function BotBattleController({
       selectedCell: null,
       busy: true,
       confirming: false,
+      driverError: false,
+      recoveryCell: null,
       battleDriver: null,
       effects: [],
       projectiles: [],

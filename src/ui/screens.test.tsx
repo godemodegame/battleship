@@ -193,6 +193,31 @@ describe('BattleHUD', () => {
     expect(screen.getByRole('heading', { name: 'Defeat' })).toBeTruthy()
     expect(screen.getByText('Match forfeited')).toBeTruthy()
   })
+
+  it('swaps the Fire button for a working Retry when an on-chain turn stalls', async () => {
+    const user = userEvent.setup()
+    startBattle()
+    render(<App />)
+    const resumeBattle = vi.fn()
+    const match = useStore.getState().match!
+    // Reproduce the stall: it's the bot's turn on-chain but the driver failed,
+    // so the old build left a dead "Your Turn" button. Now Retry resumes it.
+    act(() =>
+      useStore.setState({
+        match: { ...match, turn: 'bot' },
+        busy: false,
+        driverError: true,
+        resumeBattle,
+      }),
+    )
+
+    expect(screen.queryByRole('button', { name: 'Select a target cell' })).toBeNull()
+    const retry = screen.getByTestId('resume-battle')
+    expect(retry.hasAttribute('disabled')).toBe(false)
+
+    await user.click(retry)
+    expect(resumeBattle).toHaveBeenCalledTimes(1)
+  })
 })
 
 describe('GameOverScreen', () => {

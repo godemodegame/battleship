@@ -28,21 +28,25 @@ export function BattleHUD() {
   const match = useStore((s) => s.match)
   const busy = useStore((s) => s.busy)
   const confirming = useStore((s) => s.confirming)
+  const driverError = useStore((s) => s.driverError)
   const selectedCell = useStore((s) => s.selectedCell)
   const fire = useStore((s) => s.fire)
+  const resumeBattle = useStore((s) => s.resumeBattle)
   const forfeit = useStore((s) => s.forfeit)
   const toast = useStore((s) => s.toast)
   const [confirmForfeit, setConfirmForfeit] = useState(false)
   if (!match) return null
 
-  const yourTurn = match.turn === 'player' && !busy && !match.winner
+  const yourTurn = match.turn === 'player' && !busy && !match.winner && !driverError
   const status: { text: string; tone: string } = match.winner
     ? { text: 'Match Over', tone: 'amber' }
-    : busy
-      ? match.turn === 'player'
-        ? { text: 'Resolving Shot', tone: 'amber' }
-        : { text: 'Opponent Turn', tone: 'red' }
-      : { text: 'Your Turn', tone: 'cyan' }
+    : driverError
+      ? { text: botBattleCopy.stalledStatus, tone: 'red' }
+      : busy
+        ? match.turn === 'player'
+          ? { text: 'Resolving Shot', tone: 'amber' }
+          : { text: 'Opponent Turn', tone: 'red' }
+        : { text: 'Your Turn', tone: 'cyan' }
 
   const canFire = yourTurn && selectedCell !== null
 
@@ -85,18 +89,34 @@ export function BattleHUD() {
       )}
 
       <div className="bottom-stack battle">
-        <button
-          className="btn fire wide"
-          onClick={() => {
-            // Prime audio context early from the actual click handler for reliable
-            // iOS Safari haptic unlock before the async fire() + later result haptics.
-            haptics.prime()
-            void fire()
-          }}
-          disabled={!canFire}
-        >
-          {canFire ? `Fire at ${cellLabel(selectedCell)}` : yourTurn ? 'Select a target cell' : status.text}
-        </button>
+        {driverError ? (
+          // The on-chain mirror stalled mid-turn: Fire is a no-op here (it's the
+          // bot's turn, or the shot hasn't landed), so offer a real retry that
+          // re-sends the pending shot and resumes the bot's reply.
+          <button
+            className="btn fire wide"
+            data-testid="resume-battle"
+            onClick={() => {
+              haptics.prime()
+              void resumeBattle()
+            }}
+          >
+            {botBattleCopy.retry}
+          </button>
+        ) : (
+          <button
+            className="btn fire wide"
+            onClick={() => {
+              // Prime audio context early from the actual click handler for reliable
+              // iOS Safari haptic unlock before the async fire() + later result haptics.
+              haptics.prime()
+              void fire()
+            }}
+            disabled={!canFire}
+          >
+            {canFire ? `Fire at ${cellLabel(selectedCell)}` : yourTurn ? 'Select a target cell' : status.text}
+          </button>
+        )}
       </div>
 
       {confirmForfeit && (

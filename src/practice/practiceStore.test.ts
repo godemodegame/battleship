@@ -369,7 +369,102 @@ describe('on-chain battle driver', () => {
     expect(state.busy).toBe(false)
     expect(state.confirming).toBe(false)
     expect(state.toast?.tone).toBe('red')
+    expect(state.driverError).toBe(true)
     expect(resolveBotShot).not.toHaveBeenCalled()
+  })
+
+  it('recovers a stalled bot move via resumeBattle without re-sending the player shot', async () => {
+    startBattle(10)
+    const submitPlayerShot = vi.fn().mockResolvedValue(undefined)
+    const resolveBotShot = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('rpc down')) // bot move stalls
+      .mockResolvedValueOnce(0) // resume: bot hits
+      .mockResolvedValueOnce(10) // resume: bot misses, turn passes back
+    useStore.setState({ battleDriver: { submitPlayerShot, resolveBotShot } })
+
+    const firing = useStore.getState().fire()
+    await vi.runAllTimersAsync()
+    await firing
+
+    // Stalled: the bot's turn is wedged, but the state is recoverable — not a
+    // dead end. The player's shot already landed, so there's no recovery cell.
+    let state = useStore.getState()
+    expect(state.driverError).toBe(true)
+    expect(state.busy).toBe(false)
+    expect(state.recoveryCell).toBeNull()
+    expect(state.toast?.tone).toBe('red')
+    expect(state.match?.turn).toBe('bot')
+    expect(state.match?.moves.map((m) => [m.by, m.result])).toEqual([['player', 'miss']])
+
+    const resuming = useStore.getState().resumeBattle()
+    await vi.runAllTimersAsync()
+    await resuming
+
+    state = useStore.getState()
+    expect(state.driverError).toBe(false)
+    expect(state.busy).toBe(false)
+    expect(state.match?.turn).toBe('player')
+    expect(state.match?.moves.map((m) => [m.by, m.result])).toEqual([
+      ['player', 'miss'],
+      ['bot', 'hit'],
+      ['bot', 'miss'],
+    ])
+    // The player's shot was never re-sent — only the bot turn was resumed.
+    expect(submitPlayerShot).toHaveBeenCalledTimes(1)
+    expect(resolveBotShot).toHaveBeenCalledTimes(3)
+  })
+
+  it('re-sends a stalled player shot, then resumes the bot turn, via resumeBattle', async () => {
+    startBattle(10)
+    const submitPlayerShot = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('rpc down')) // the shot never lands
+      .mockResolvedValueOnce(undefined) // resume re-sends it
+    const resolveBotShot = vi.fn().mockResolvedValueOnce(0).mockResolvedValueOnce(10)
+    useStore.setState({ battleDriver: { submitPlayerShot, resolveBotShot } })
+
+    const firing = useStore.getState().fire()
+    await vi.runAllTimersAsync()
+    await firing
+
+    // Player missed locally (turn → bot) but the shot never reached the chain,
+    // so the cell is remembered and the bot driver has not run yet.
+    let state = useStore.getState()
+    expect(state.driverError).toBe(true)
+    expect(state.recoveryCell).toBe(10)
+    expect(state.match?.turn).toBe('bot')
+    expect(resolveBotShot).not.toHaveBeenCalled()
+
+    const resuming = useStore.getState().resumeBattle()
+    await vi.runAllTimersAsync()
+    await resuming
+
+    state = useStore.getState()
+    expect(submitPlayerShot).toHaveBeenCalledTimes(2)
+    expect(submitPlayerShot).toHaveBeenLastCalledWith(10)
+    expect(state.driverError).toBe(false)
+    expect(state.recoveryCell).toBeNull()
+    expect(state.busy).toBe(false)
+    expect(state.match?.turn).toBe('player')
+    expect(state.match?.moves.map((m) => [m.by, m.result])).toEqual([
+      ['player', 'miss'],
+      ['bot', 'hit'],
+      ['bot', 'miss'],
+    ])
+  })
+
+  it('ignores resumeBattle unless a stall is pending', async () => {
+    startBattle(10)
+    const submitPlayerShot = vi.fn()
+    const resolveBotShot = vi.fn()
+    useStore.setState({ battleDriver: { submitPlayerShot, resolveBotShot } })
+
+    await useStore.getState().resumeBattle()
+
+    expect(submitPlayerShot).not.toHaveBeenCalled()
+    expect(resolveBotShot).not.toHaveBeenCalled()
+    expect(useStore.getState().busy).toBe(false)
   })
 })
 

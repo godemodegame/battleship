@@ -15,7 +15,7 @@
  * ciphertext is handed straight back to the caller; neither is retained here.
  */
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { perf } from '../../lib/perf'
 import type { ErrorCode } from '../../copy/errors'
 import type { PublicClientLike, WalletClientLike } from '../client/battleshipClient'
@@ -97,6 +97,16 @@ export function useFleetSubmission(
   const [encrypting, setEncrypting] = useState(false)
   const [progress, setProgress] = useState<CofheProgress>('initializing')
   const [error, setError] = useState<ErrorCode | null>(null)
+
+  // Pre-warm the encrypt pipeline as soon as the session is ready, while the
+  // player is still placing ships. This moves the one-time TFHE-engine load +
+  // key fetch off the critical path so "Start" → battle is noticeably shorter
+  // (the heavy steps are already cached when the real fleet encrypt runs).
+  const cofheClient = cofhe.client
+  const cofheReady = cofhe.status === 'ready'
+  useEffect(() => {
+    if (cofheReady && cofheClient?.warm) void cofheClient.warm()
+  }, [cofheReady, cofheClient])
 
   const expectedCofheKey = cofheScope ? cofheScopeKey(cofheScope) : null
   const placementKey = placementScope ? placementScopeKey(placementScope) : null

@@ -85,6 +85,7 @@ class SdkCofheMatchClient implements CofheMatchClient {
 
   private client: CofheClient | null = null
   private disposed = false
+  private warming: Promise<void> | null = null
 
   constructor(private readonly config: CofheClientConfig) {
     this.scopeKey = cofheScopeKey(config.scope)
@@ -93,6 +94,27 @@ class SdkCofheMatchClient implements CofheMatchClient {
   private connected(): CofheClient {
     if (this.disposed || !this.client) throw new Error('CoFHE client disposed')
     return this.client
+  }
+
+  /**
+   * Pre-warm the encrypt pipeline by running one throwaway encryption. This
+   * forces the (idempotent, session-cached) `InitTfhe` WASM load and `FetchKeys`
+   * network fetch ahead of time, so the real fleet encrypt skips both. Runs at
+   * most once; never throws — the catch keeps a warm-up failure off the UI, and
+   * the next real encrypt simply pays the full cost. No wallet signature or
+   * on-chain transaction is involved.
+   */
+  warm(): Promise<void> {
+    if (this.warming) return this.warming
+    this.warming = (async () => {
+      try {
+        const client = this.connected()
+        await client.encryptInputs([Encryptable.uint8(0n)]).execute()
+      } catch {
+        // Best-effort: swallow so warm-up is invisible to the placement UI.
+      }
+    })()
+    return this.warming
   }
 
   async initialize() {
@@ -123,6 +145,10 @@ class SdkCofheMatchClient implements CofheMatchClient {
     onProgress?: (progress: CofheProgress) => void,
   ): Promise<readonly EncryptedFleetSegment[]> {
     const client = this.connected()
+    // Let an in-flight warm-up finish first: two concurrent encrypts share one
+    // worker and would serialize (or contend) anyway, and by now it is usually
+    // already done — leaving the real encrypt to skip InitTfhe + FetchKeys.
+    if (this.warming) await this.warming
     await assertActiveScope(this.config)
     return client
       .encryptInputs(segments.map((segment) => Encryptable.uint8(BigInt(segment))))

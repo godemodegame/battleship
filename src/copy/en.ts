@@ -177,7 +177,9 @@ export const botBattleCopy = {
   warmingTitle: 'Securing the battlefield',
   warmingSub: 'Preparing the encryption session…',
   confirming: 'Confirming on-chain…',
-  syncFailed: 'On-chain sync failed — tap Fire to retry.',
+  syncFailed: 'On-chain sync failed — tap Retry.',
+  stalledStatus: 'Sync Stalled',
+  retry: 'Retry',
 } as const
 
 /** Open-match lobby ("Find a Game") + Quick Match (random matchmaking). */
