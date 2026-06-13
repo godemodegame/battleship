@@ -6,9 +6,11 @@ import {InEuint8} from "@fhenixprotocol/cofhe-contracts/ICofhe.sol";
 
 /// @title BattleshipGame
 /// @notice Encrypted Battleship MVP on Arbitrum Sepolia: strict invited
-///         friend matches, encrypted fleet submission and validation,
-///         encrypted shot resolution, cancellation, forfeit, timeout claims,
-///         and public reads.
+///         friend matches AND permissionless open matches (random
+///         matchmaking via a public, paginated open-match lobby index),
+///         encrypted fleet submission and validation, encrypted shot
+///         resolution, cancellation, forfeit, timeout claims, and public
+///         reads.
 ///
 ///         Phase 4 scope (GAME-401..412): fleets are stored as 20 encrypted
 ///         ship-segment cell indexes (see docs/cofhe-feasibility-results.md
@@ -398,6 +400,16 @@ contract BattleshipGame {
     mapping(uint256 matchId => Match) internal matches;
     mapping(address player => uint256[] matchIds) internal playerMatchIds;
 
+    /// @dev Enumerable set of open matches still waiting for any opponent.
+    ///      Open matches have no invited opponent, so they cannot be found
+    ///      through playerMatchIds by a stranger; this index backs the public
+    ///      getOpenMatches lobby view. Entries are swap-popped the moment a
+    ///      match leaves WaitingForOpponent (joined or cancelled), so the array
+    ///      only ever holds currently-joinable open matches.
+    uint256[] internal openMatchIds;
+    /// @dev matchId => (1-based position in openMatchIds); 0 means "not indexed".
+    mapping(uint256 matchId => uint256 indexPlusOne) internal openMatchIndex;
+
     /// @dev Encrypted fleets, keyed per player. Never exposed by reads.
     mapping(uint256 matchId => mapping(address player => EncryptedFleet)) private fleets;
     mapping(uint256 matchId => mapping(address player => PendingPlacementValidation))
@@ -412,7 +424,7 @@ contract BattleshipGame {
 
     /// @notice Create a strict friend match that only `invitedOpponent` can join.
     function createMatch(address invitedOpponent) external returns (uint256 matchId) {
-        matchId = _createMatchBase(invitedOpponent);
+        matchId = _createMatchBase(MatchType.Friend, invitedOpponent);
     }
 
     /// @notice Create a friend match and submit the creator's encrypted fleet
@@ -424,17 +436,43 @@ contract BattleshipGame {
         address invitedOpponent,
         InEuint8[20] calldata segments
     ) external returns (uint256 matchId) {
-        matchId = _createMatchBase(invitedOpponent);
+        matchId = _createMatchBase(MatchType.Friend, invitedOpponent);
         Match storage m = matches[matchId];
         // Status intentionally stays WaitingForOpponent: joinMatch/joinWithFleet
         // still require it, and finalizeFleetValidation accepts it.
         _storeAndValidateFleet(matchId, m, msg.sender, segments);
     }
 
-    /// @dev Shared match-creation core for createMatch and createWithFleet.
-    function _createMatchBase(address invitedOpponent) private returns (uint256 matchId) {
-        if (invitedOpponent == address(0)) revert InvalidInvitedOpponent();
-        if (invitedOpponent == msg.sender) revert SelfInviteNotAllowed();
+    /// @notice Create an open match that ANY other player may join. There is no
+    ///         invited opponent (invitedOpponent stays address(0)); the match is
+    ///         pushed to the public open-match index so the lobby can find it.
+    function createOpenMatch() external returns (uint256 matchId) {
+        matchId = _createMatchBase(MatchType.Open, address(0));
+    }
+
+    /// @notice Create an open match and submit the creator's encrypted fleet in
+    ///         a single transaction (placement-first UX). Mirrors createWithFleet
+    ///         with no invited opponent: any stranger can join via joinWithFleet
+    ///         while the creator's fleet validates concurrently.
+    function createOpenWithFleet(
+        InEuint8[20] calldata segments
+    ) external returns (uint256 matchId) {
+        matchId = _createMatchBase(MatchType.Open, address(0));
+        Match storage m = matches[matchId];
+        _storeAndValidateFleet(matchId, m, msg.sender, segments);
+    }
+
+    /// @dev Shared match-creation core. Friend matches require a strict invited
+    ///      opponent (enforced again on join); Open matches keep invitedOpponent
+    ///      at address(0) and are added to the enumerable open-match index.
+    function _createMatchBase(
+        MatchType matchType,
+        address invitedOpponent
+    ) private returns (uint256 matchId) {
+        if (matchType == MatchType.Friend) {
+            if (invitedOpponent == address(0)) revert InvalidInvitedOpponent();
+            if (invitedOpponent == msg.sender) revert SelfInviteNotAllowed();
+        }
 
         matchId = nextMatchId;
         nextMatchId = matchId + 1;
@@ -442,7 +480,7 @@ contract BattleshipGame {
         uint64 nowTs = uint64(block.timestamp);
         Match storage m = matches[matchId];
         m.id = matchId;
-        m.matchType = MatchType.Friend;
+        m.matchType = matchType;
         m.status = MatchStatus.WaitingForOpponent;
         m.creator = msg.sender;
         m.invitedOpponent = invitedOpponent;
@@ -455,6 +493,10 @@ contract BattleshipGame {
         m.creatorState.placementStatus = PlacementStatus.NotSubmitted;
 
         playerMatchIds[msg.sender].push(matchId);
+
+        if (matchType == MatchType.Open) {
+            _addOpenMatch(matchId);
+        }
 
         emit MatchCreated(matchId, msg.sender, invitedOpponent);
     }
@@ -480,14 +522,18 @@ contract BattleshipGame {
         m.status = MatchStatus.ValidatingPlacement;
     }
 
-    /// @dev Shared join core for joinMatch and joinWithFleet.
+    /// @dev Shared join core for joinMatch and joinWithFleet. Friend matches
+    ///      stay strictly invite-gated; Open matches accept any non-creator
+    ///      before the join deadline (the creator is still blocked above).
     function _joinMatchBase(uint256 matchId, Match storage m) private {
         if (msg.sender == m.creator) revert CreatorCannotJoinOwnMatch();
         if (m.status != MatchStatus.WaitingForOpponent) {
             if (m.opponent != address(0)) revert OpponentAlreadyJoined();
             revert InvalidMatchStatus();
         }
-        if (msg.sender != m.invitedOpponent) revert NotInvitedOpponent();
+        if (m.matchType == MatchType.Friend && msg.sender != m.invitedOpponent) {
+            revert NotInvitedOpponent();
+        }
         if (block.timestamp > m.timeoutState.joinDeadline) revert JoinDeadlineExpired();
 
         uint64 nowTs = uint64(block.timestamp);
@@ -502,6 +548,11 @@ contract BattleshipGame {
         m.opponentState.placementStatus = PlacementStatus.NotSubmitted;
 
         playerMatchIds[msg.sender].push(matchId);
+
+        // The match has left WaitingForOpponent; drop it from the lobby index.
+        if (m.matchType == MatchType.Open) {
+            _removeOpenMatch(matchId);
+        }
 
         emit MatchJoined(matchId, msg.sender);
     }
@@ -888,6 +939,11 @@ contract BattleshipGame {
         m.lastActionAt = nowTs;
         m.currentTurn = address(0);
 
+        // No-op when the match was never (or is no longer) indexed as open.
+        if (m.matchType == MatchType.Open) {
+            _removeOpenMatch(matchId);
+        }
+
         emit MatchCancelled(matchId);
     }
 
@@ -1022,6 +1078,34 @@ contract BattleshipGame {
         return playerMatchIds[player].length;
     }
 
+    /// @notice Paginated ids of open matches currently waiting for any
+    ///         opponent, backing the matchmaking lobby. The index is maintained
+    ///         by swap-pop, so order is not guaranteed stable across joins;
+    ///         clients hydrate each id with getMatch and sort/filter (e.g. by
+    ///         createdAt or join deadline) as needed.
+    function getOpenMatches(
+        uint32 offset,
+        uint32 limit
+    ) external view returns (uint256[] memory matchIds) {
+        if (limit == 0 || limit > MAX_PAGE_LIMIT) revert InvalidPaginationLimit();
+
+        uint256 total = openMatchIds.length;
+        if (offset >= total) return new uint256[](0);
+
+        uint256 end = offset + limit;
+        if (end > total) end = total;
+
+        matchIds = new uint256[](end - offset);
+        for (uint256 i = offset; i < end; i++) {
+            matchIds[i - offset] = openMatchIds[i];
+        }
+    }
+
+    /// @notice Number of open matches currently waiting for an opponent.
+    function getOpenMatchCount() external view returns (uint256) {
+        return openMatchIds.length;
+    }
+
     /// @notice One public move. Move ids start at 1.
     function getMove(uint256 matchId, uint32 moveId) external view returns (MoveView memory) {
         Match storage m = _getMatch(matchId);
@@ -1088,6 +1172,31 @@ contract BattleshipGame {
     function _getMatch(uint256 matchId) private view returns (Match storage m) {
         m = matches[matchId];
         if (m.status == MatchStatus.None) revert MatchNotFound();
+    }
+
+    /// @dev Append a match to the open-match lobby index, recording its 1-based
+    ///      position so _removeOpenMatch can find it in O(1).
+    function _addOpenMatch(uint256 matchId) private {
+        openMatchIds.push(matchId);
+        openMatchIndex[matchId] = openMatchIds.length;
+    }
+
+    /// @dev Remove a match from the open-match index via swap-and-pop. No-op
+    ///      when the match is not currently indexed (a Friend match, or an open
+    ///      match already joined or cancelled), so callers may invoke it freely.
+    function _removeOpenMatch(uint256 matchId) private {
+        uint256 indexPlusOne = openMatchIndex[matchId];
+        if (indexPlusOne == 0) return;
+
+        uint256 i = indexPlusOne - 1;
+        uint256 lastIndex = openMatchIds.length - 1;
+        if (i != lastIndex) {
+            uint256 moved = openMatchIds[lastIndex];
+            openMatchIds[i] = moved;
+            openMatchIndex[moved] = i + 1;
+        }
+        openMatchIds.pop();
+        openMatchIndex[matchId] = 0;
     }
 
     /// @dev Player state by address; reverts for non-players. The error

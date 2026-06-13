@@ -34,6 +34,8 @@ const ALLOWED_FUNCTIONS = [
   // lifecycle writes
   'createMatch',
   'createWithFleet',
+  'createOpenMatch',
+  'createOpenWithFleet',
   'joinMatch',
   'joinWithFleet',
   'cancelMatch',
@@ -51,6 +53,8 @@ const ALLOWED_FUNCTIONS = [
   'getPlayers',
   'getPlayerMatches',
   'getPlayerMatchCount',
+  'getOpenMatches',
+  'getOpenMatchCount',
   'getMove',
   'getMoveHistory',
   'getPendingShot',

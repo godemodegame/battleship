@@ -159,6 +159,40 @@ export async function joinWithEncryptedFleet(
   return receipt!
 }
 
+/// Creates an OPEN match with the creator's encrypted fleet attached in one
+/// transaction (placement-first path, no invited opponent). Returns the receipt
+/// so callers can read the assigned match id from MatchCreated.
+export async function createOpenWithEncryptedFleet(
+  game: GameContract,
+  creator: HardhatEthersSigner,
+  fleet: readonly number[] = VALID_FLEET,
+): Promise<ContractTransactionReceipt> {
+  const input = await encryptFleetAs(creator, fleet)
+  const receipt = await (await game.connect(creator).createOpenWithFleet(input)).wait()
+  return receipt!
+}
+
+/// Drives the full open-match placement-first flow: createOpenWithFleet (no
+/// invitee), joinWithFleet by an arbitrary opponent, then finalizes both
+/// validations, leaving the match InProgress with the joiner on turn. Mirrors
+/// startAtomicMatch but for the open (random-matchmaking) entrypoints.
+export async function startOpenMatch(
+  game: GameContract,
+  creator: HardhatEthersSigner,
+  opponent: HardhatEthersSigner,
+  matchId: bigint = 1n,
+  creatorFleet: readonly number[] = VALID_FLEET,
+  opponentFleet: readonly number[] = VALID_FLEET_ALT,
+) {
+  await createOpenWithEncryptedFleet(game, creator, creatorFleet)
+  await joinWithEncryptedFleet(game, opponent, matchId, opponentFleet)
+
+  await makeValidationReady(game, matchId, creator)
+  await (await game.finalizeFleetValidation(matchId, creator.address)).wait()
+  await makeValidationReady(game, matchId, opponent)
+  await (await game.finalizeFleetValidation(matchId, opponent.address)).wait()
+}
+
 /// Drives the full placement-first flow: createWithFleet, joinWithFleet, then
 /// finalizes both validations, leaving the match InProgress with the invited
 /// opponent on turn. Mirrors startEncryptedMatch but for the atomic entrypoints.

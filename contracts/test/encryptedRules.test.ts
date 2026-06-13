@@ -16,6 +16,8 @@ import {
   createWithEncryptedFleet,
   joinWithEncryptedFleet,
   startAtomicMatch,
+  createOpenWithEncryptedFleet,
+  startOpenMatch,
   playShot,
   parseEvent,
   deployEncryptedMatchFixtureBase,
@@ -54,6 +56,8 @@ const ShotResult = {
   Sunk: 3n,
   Win: 4n,
 } as const
+
+const MatchType = { Friend: 0n, Open: 1n, Bot: 2n } as const
 
 const TimeoutReason = { PlacementTimeout: 1n } as const
 
@@ -330,6 +334,113 @@ describe('BattleshipGame encrypted rules (Phase 4)', () => {
       // Invited opponent moves first.
       const shot = await playShot(game, matchId, opponent, 0)
       expect(shot.result).to.be.greaterThan(0n)
+    })
+  })
+
+  describe('open match (createOpenWithFleet / joinWithFleet, random matchmaking)', () => {
+    async function deployGame() {
+      const [creator, opponent, outsider] = await ethers.getSigners()
+      const factory = await ethers.getContractFactory('BattleshipGame')
+      const game = await factory.deploy()
+      await game.waitForDeployment()
+      return { game, creator, opponent, outsider, matchId: 1n }
+    }
+
+    it('createOpenWithFleet creates an indexed open match and stores the fleet', async () => {
+      const { game, creator, matchId } = await loadFixture(deployGame)
+      const input = await encryptFleetAs(creator, VALID_FLEET)
+
+      const tx = await game.connect(creator).createOpenWithFleet(input)
+      await expect(tx)
+        .to.emit(game, 'MatchCreated')
+        .withArgs(matchId, creator.address, ethers.ZeroAddress)
+      await expect(tx).to.emit(game, 'FleetSubmitted').withArgs(matchId, creator.address)
+      await expect(tx).to.emit(game, 'FleetValidationRequested')
+
+      const match = await game.getMatch(matchId)
+      expect(match.status).to.equal(MatchStatus.WaitingForOpponent)
+      expect(match.matchType).to.equal(MatchType.Open)
+      expect(match.invitedOpponent).to.equal(ethers.ZeroAddress)
+      expect(await game.getOpenMatches(0, 50)).to.deep.equal([matchId])
+
+      const [creatorView] = await game.getPlayers(matchId)
+      expect(creatorView.placementStatus).to.equal(PlacementStatus.ResolvingValidation)
+      expect(creatorView.fleetSubmitted).to.equal(true)
+    })
+
+    it('lets an arbitrary stranger join an open match with their fleet', async () => {
+      const { game, creator, outsider, matchId } = await loadFixture(deployGame)
+      await createOpenWithEncryptedFleet(game, creator, VALID_FLEET)
+
+      const input = await encryptFleetAs(outsider, VALID_FLEET_ALT)
+      const tx = await game.connect(outsider).joinWithFleet(matchId, input)
+      await expect(tx).to.emit(game, 'MatchJoined').withArgs(matchId, outsider.address)
+
+      const match = await game.getMatch(matchId)
+      expect(match.status).to.equal(MatchStatus.ValidatingPlacement)
+      expect(match.opponent).to.equal(outsider.address)
+      // No longer listed in the lobby once joined.
+      expect(await game.getOpenMatches(0, 50)).to.deep.equal([])
+    })
+
+    it('runs the full open flow and starts the match with the joiner first', async () => {
+      const { game, creator, opponent, matchId } = await loadFixture(deployGame)
+      await createOpenWithEncryptedFleet(game, creator, VALID_FLEET)
+      await joinWithEncryptedFleet(game, opponent, matchId, VALID_FLEET_ALT)
+
+      await makeValidationReady(game, matchId, creator)
+      await (await game.finalizeFleetValidation(matchId, creator.address)).wait()
+      await makeValidationReady(game, matchId, opponent)
+      const startTx = game.finalizeFleetValidation(matchId, opponent.address)
+      await expect(startTx).to.emit(game, 'MatchStarted').withArgs(matchId, opponent.address)
+      await expect(startTx).to.emit(game, 'TurnChanged').withArgs(matchId, opponent.address)
+
+      const match = await game.getMatch(matchId)
+      expect(match.status).to.equal(MatchStatus.InProgress)
+      expect(match.currentTurn).to.equal(opponent.address)
+    })
+
+    it('plays a complete open-match battle through to a Win', async function () {
+      this.timeout(600_000)
+      const { game, creator, opponent, matchId } = await loadFixture(deployGame)
+      await startOpenMatch(game, creator, opponent, matchId)
+
+      // The joiner (first turn) sinks the creator's whole fleet; hits keep the
+      // turn. Expected results follow VALID_FLEET's public layout, identical to
+      // the friend full-match test — proving open battle reuses the same rules.
+      const expected: Array<[number, bigint, bigint]> = [
+        [0, ShotResult.Hit, 0n],
+        [1, ShotResult.Hit, 0n],
+        [2, ShotResult.Hit, 0n],
+        [3, ShotResult.Sunk, 1n],
+        [20, ShotResult.Hit, 0n],
+        [21, ShotResult.Hit, 0n],
+        [22, ShotResult.Sunk, 2n],
+        [40, ShotResult.Hit, 0n],
+        [41, ShotResult.Hit, 0n],
+        [42, ShotResult.Sunk, 3n],
+        [60, ShotResult.Hit, 0n],
+        [61, ShotResult.Sunk, 4n],
+        [80, ShotResult.Hit, 0n],
+        [81, ShotResult.Sunk, 5n],
+        [5, ShotResult.Hit, 0n],
+        [6, ShotResult.Sunk, 6n],
+        [25, ShotResult.Sunk, 7n],
+        [45, ShotResult.Sunk, 8n],
+        [65, ShotResult.Sunk, 9n],
+        [85, ShotResult.Win, 10n],
+      ]
+
+      for (const [cell, expectedResult, expectedSunkShip] of expected) {
+        const shot = await playShot(game, matchId, opponent, cell)
+        expect(shot.result, `cell ${cell}`).to.equal(expectedResult)
+        expect(shot.sunkShipId, `cell ${cell} sunk ship`).to.equal(expectedSunkShip)
+      }
+
+      const match = await game.getMatch(matchId)
+      expect(match.status).to.equal(MatchStatus.Finished)
+      expect(match.winner).to.equal(opponent.address)
+      expect(match.moveCount).to.equal(20n)
     })
   })
 

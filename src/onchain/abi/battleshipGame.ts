@@ -11,7 +11,7 @@
 export const BATTLESHIP_GAME_CONTRACT_NAME = 'BattleshipGame'
 
 /** sha256 of the compact ABI JSON; must match `abiSha256` in the active deployment record. */
-export const BATTLESHIP_GAME_ABI_SHA256 = 'sha256:2d96eb5c4adcf86344e8f0eb03464f774d55014d7eed307c0903496a26bf8669'
+export const BATTLESHIP_GAME_ABI_SHA256 = 'sha256:98b573b4feb823718eec5cc1888b9d9b1e03952c13eff8dbeb3a1cc45cc7af19'
 
 export const battleshipGameAbi = [
   {
@@ -719,6 +719,60 @@ export const battleshipGameAbi = [
     "type": "function"
   },
   {
+    "inputs": [],
+    "name": "createOpenMatch",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "matchId",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "components": [
+          {
+            "internalType": "uint256",
+            "name": "ctHash",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint8",
+            "name": "securityZone",
+            "type": "uint8"
+          },
+          {
+            "internalType": "uint8",
+            "name": "utype",
+            "type": "uint8"
+          },
+          {
+            "internalType": "bytes",
+            "name": "signature",
+            "type": "bytes"
+          }
+        ],
+        "internalType": "struct InEuint8[20]",
+        "name": "segments",
+        "type": "tuple[20]"
+      }
+    ],
+    "name": "createOpenWithFleet",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "matchId",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
     "inputs": [
       {
         "internalType": "address",
@@ -1144,6 +1198,43 @@ export const battleshipGameAbi = [
         "internalType": "struct BattleshipGame.MoveView[]",
         "name": "result",
         "type": "tuple[]"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "getOpenMatchCount",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint32",
+        "name": "offset",
+        "type": "uint32"
+      },
+      {
+        "internalType": "uint32",
+        "name": "limit",
+        "type": "uint32"
+      }
+    ],
+    "name": "getOpenMatches",
+    "outputs": [
+      {
+        "internalType": "uint256[]",
+        "name": "matchIds",
+        "type": "uint256[]"
       }
     ],
     "stateMutability": "view",
