@@ -363,12 +363,19 @@ export function BotBattleController({
   const inFlightWrite = [resolveWrite, botMoveWrite, attackWrite].find((w) => w.busy)
   const activeTxHash = inFlightWrite?.state.hash ?? null
 
-  // Mid-battle full-screen status: a reconnect in progress, or the opponent's
-  // move settling on-chain. The player's own shot keeps its projectile/impact
-  // animation (no overlay) so the reveal still lands dramatically.
+  // Mid-battle full-screen status so every on-chain wait between shots is
+  // legible: a reconnect in progress, the player's own shot landing, or the
+  // opponent's move settling. It covers only the on-chain wait (`confirming`),
+  // then clears the instant the result is known — so the hit/miss reveal still
+  // animates on the board. Each variant links the in-flight transaction.
   const reconnecting = driverError && !hasWinner
-  const opponentConfirming = confirming && turn === 'bot' && !hasWinner
-  const showChainOverlay = !warming && screen !== 'gameover' && (reconnecting || opponentConfirming)
+  const settling = confirming && !hasWinner
+  const showChainOverlay = !warming && screen !== 'gameover' && (reconnecting || settling)
+  const overlay = reconnecting
+    ? { title: botBattleCopy.reconnectingTitle, sub: botBattleCopy.reconnectingSub, tone: 'amber' as const, testId: 'bot-battle-reconnecting' }
+    : turn === 'bot'
+      ? { title: botBattleCopy.confirmingTitle, sub: botBattleCopy.confirmingBotSub, tone: 'cyan' as const, testId: 'bot-battle-confirming' }
+      : { title: botBattleCopy.resolvingTitle, sub: botBattleCopy.resolvingSub, tone: 'cyan' as const, testId: 'bot-battle-resolving' }
 
   return (
     <div className="app" data-testid="bot-battle-3d">
@@ -390,11 +397,11 @@ export function BotBattleController({
       {showChainOverlay && (
         <StatusOverlay
           dim
-          tone={reconnecting ? 'amber' : 'cyan'}
-          title={reconnecting ? botBattleCopy.reconnectingTitle : botBattleCopy.confirmingTitle}
-          sub={reconnecting ? botBattleCopy.reconnectingSub : botBattleCopy.confirmingBotSub}
+          tone={overlay.tone}
+          title={overlay.title}
+          sub={overlay.sub}
           txHash={activeTxHash}
-          testId={reconnecting ? 'bot-battle-reconnecting' : 'bot-battle-confirming'}
+          testId={overlay.testId}
         />
       )}
       <LoadingOverlay />

@@ -177,9 +177,11 @@ export const botBattleCopy = {
   warmingTitle: 'Securing the battlefield',
   warmingSub: 'Preparing the encryption session…',
   confirming: 'Confirming on-chain…',
-  // Full-screen overlay shown while the opponent's move settles on-chain.
+  // Full-screen overlays shown while a move settles on-chain (player + bot).
   confirmingTitle: 'Confirming on-chain',
   confirmingBotSub: 'The opponent fired — settling the result on-chain…',
+  resolvingTitle: 'Resolving shot',
+  resolvingSub: 'Your shot is landing on-chain…',
   // Automatic recovery after an on-chain stall (no manual tap required).
   reconnectingTitle: 'Reconnecting',
   reconnectingStatus: 'Reconnecting…',
