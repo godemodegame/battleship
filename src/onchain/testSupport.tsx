@@ -306,6 +306,10 @@ export function makeFakeContract(): FakeContract {
       async getMoveHistory() {
         return fake.moves.map((move) => ({ ...move }))
       },
+      async getMove(_matchId: bigint, moveId: number) {
+        const move = fake.moves.find((entry) => entry.moveId === moveId)
+        return move ? { ...move } : null
+      },
       async getPendingShot() {
         return fake.pendingShot ? { ...fake.pendingShot } : null
       },

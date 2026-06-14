@@ -75,6 +75,13 @@ export interface BattleshipReadClient {
   getPlayers?(matchId: bigint): Promise<MatchPlayersView>
   /** Complete public move history, oldest first (GAME-708). */
   getMoveHistory?(matchId: bigint, moveCount: number): Promise<ChainMoveView[]>
+  /**
+   * One resolved move by id, or `null` when it does not exist. Used by the
+   * on-chain bot battle to read a player shot's finalized result (the only
+   * authoritative source of hit/miss, since the bot fleet is no longer known
+   * client-side).
+   */
+  getMove?(matchId: bigint, moveId: number): Promise<ChainMoveView | null>
   /** The match's unresolved shot, or `null` when none is pending (GAME-705). */
   getPendingShot?(matchId: bigint): Promise<ChainPendingShotView | null>
   /**
@@ -378,6 +385,21 @@ export function createBattleshipReadClient(
         if (page.length < MOVE_PAGE_LIMIT) break
       }
       return moves
+    },
+
+    async getMove(matchId, moveId) {
+      try {
+        const raw = await publicClient.readContract({
+          address: contractAddress,
+          abi: battleshipGameAbi,
+          functionName: 'getMove',
+          args: [matchId, moveId],
+        })
+        return toChainMoveView(raw as RawMoveView)
+      } catch (err) {
+        if (decodeReadError(err) === 'match-not-found') return null
+        throw err
+      }
     },
 
     async getPendingShot(matchId) {

@@ -1,9 +1,10 @@
 import { create } from 'zustand'
 import { FLEET } from '../game/constants'
 import { autoPlaceFleet, canPlace, isFleetComplete, rotated } from '../game/board'
-import { applyAttack, createMatch, sunkHalo } from '../game/engine'
+import { applyAttack, applyResolvedShot, createMatch, sunkHalo } from '../game/engine'
+import type { ResolvedShot } from '../game/engine'
 import { chooseBotTarget } from '../game/bot'
-import type { Difficulty, MatchState, Orientation, Placement, Side } from '../game/types'
+import type { Difficulty, MatchState, Move, Orientation, Placement, Side } from '../game/types'
 import { sfx } from '../lib/sfx'
 import { botBattleCopy, resultCopy } from '../copy/en'
 import { comicResultFor, type ComicResultSfx } from '../lib/comicSfx'
@@ -43,9 +44,20 @@ export interface Toast {
  * default is `null`, so practice mode behaves exactly as before — every call
  * site is guarded.
  */
+/** The chain-decided result of a player's shot, fed back into the animation. */
+export interface PlayerShotOutcome {
+  result: 'miss' | 'hit' | 'sunk' | 'won'
+  /** FLEET slot of the ship this shot sank, or null when nothing sank. */
+  sunkShipSlot: number | null
+}
+
 export interface BattleDriver {
-  /** Submit the player's shot on-chain (attack) and finalize it. Throws on failure. */
-  submitPlayerShot: (cell: number) => Promise<void>
+  /**
+   * Submit the player's shot on-chain (attack + finalize) and resolve to the
+   * contract's decrypted outcome. Throws on failure. The animation waits on this
+   * outcome, so the player cannot know hit/miss before the transaction.
+   */
+  submitPlayerShot: (cell: number) => Promise<PlayerShotOutcome>
   /** Run the bot's move on-chain (executeBotMove); resolves to the contract-chosen cell. */
   resolveBotShot: () => Promise<number>
   /** Drive the on-chain forfeit; the route refetch lands the terminal summary. */
@@ -159,6 +171,35 @@ function driverErrorToast(): Toast {
   return { id: nextId++, text: botBattleCopy.syncFailed, tone: 'red' }
 }
 
+/**
+ * Start the on-chain player shot now — so its latency overlaps the projectile
+ * flight — and return a thunk that awaits the contract's decrypted outcome,
+ * mapping it to a `ResolvedShot` (or null on a recoverable stall). Shared by
+ * `fire()` and `resumeBattle()`.
+ */
+function driverOutcomeThunk(
+  driver: BattleDriver,
+  cell: number,
+): () => Promise<ResolvedShot | null> {
+  const pending = driver.submitPlayerShot(cell)
+  // If an interrupt means the thunk is never awaited, swallow the rejection so
+  // it never surfaces as an unhandled promise rejection.
+  pending.catch(() => {})
+  return async () => {
+    try {
+      const outcome = await pending
+      return {
+        result: outcome.result === 'won' ? 'sunk' : outcome.result,
+        shipSlot: outcome.sunkShipSlot,
+        winner: outcome.result === 'won',
+      }
+    } catch (err) {
+      driver.onError?.(err instanceof Error ? err.message : String(err))
+      return null
+    }
+  }
+}
+
 function shotToast(result: 'miss' | 'hit' | 'sunk', by: Side, label: string | undefined): Toast {
   const yours = by === 'player'
   const id = nextId++
@@ -198,12 +239,21 @@ export const useStore = create<AppState>((set, get) => {
     if (!sessionAborted(sessionId)) set({ busy: false })
   }
 
-  /** Plays one shot's full visual sequence and applies it to the match. */
+  /**
+   * Plays one shot's full visual sequence and applies it to the match. Without
+   * `resolve` the result is computed locally from fleet geometry (offline
+   * practice, and the bot's shots against the player's own known board). With
+   * `resolve` (the on-chain player shot) the projectile flies, then the sequence
+   * holds in a "resolving" beat until the contract's decrypted outcome lands and
+   * is stamped onto the hidden enemy board — so the player never learns hit/miss
+   * before the transaction. Returns 'stalled' when that on-chain resolve fails.
+   */
   async function resolveShot(
     by: Side,
     cell: number,
     sessionId: number,
-  ): Promise<'miss' | 'hit' | 'sunk' | 'won' | 'aborted'> {
+    resolve?: () => Promise<ResolvedShot | null>,
+  ): Promise<'miss' | 'hit' | 'sunk' | 'won' | 'aborted' | 'stalled'> {
     const projectile: ProjectileSpec = { id: nextId++, from: by, cell }
     set((s) => ({ projectiles: [...s.projectiles, projectile] }))
     sfx.fire()
@@ -211,12 +261,35 @@ export const useStore = create<AppState>((set, get) => {
     set((s) => ({ projectiles: s.projectiles.filter((p) => p.id !== projectile.id) }))
     if (interrupted(sessionId)) return 'aborted'
 
-    const { match, move } = applyAttack(get().match!, by, cell)
+    let resolvedMatch: MatchState
+    let move: Move
+    if (resolve) {
+      const driver = get().battleDriver
+      driver?.onConfirming?.(true)
+      set({ confirming: true })
+      let outcome: ResolvedShot | null
+      try {
+        outcome = await resolve()
+      } finally {
+        driver?.onConfirming?.(false)
+        set({ confirming: false })
+      }
+      if (outcome === null) return 'stalled'
+      if (interrupted(sessionId)) return 'aborted'
+      const applied = applyResolvedShot(get().match!, cell, outcome)
+      resolvedMatch = applied.match
+      move = applied.move
+    } else {
+      const applied = applyAttack(get().match!, by, cell)
+      resolvedMatch = applied.match
+      move = applied.move
+    }
+
     const defender: Side = by === 'player' ? 'bot' : 'player'
     const shipLabel =
       move.shipSlot === null ? undefined : FLEET[move.shipSlot].label.toLowerCase()
     set((s) => ({
-      match,
+      match: resolvedMatch,
       effects: [...s.effects, { id: nextId++, kind: move.result, board: defender, cell }],
       toast: shotToast(move.result, by, shipLabel),
     }))
@@ -224,7 +297,7 @@ export const useStore = create<AppState>((set, get) => {
 
     await delay(move.result === 'sunk' ? SUNK_MS : IMPACT_MS)
     if (interrupted(sessionId)) return 'aborted'
-    return match.winner ? 'won' : move.result
+    return resolvedMatch.winner ? 'won' : move.result
   }
 
   /**
@@ -410,45 +483,27 @@ export const useStore = create<AppState>((set, get) => {
       const cell = selectedCell
       set({ busy: true, selectedCell: null })
 
-      // On-chain mirror: kick off the player's attack+finalize in parallel with
-      // the local animation so the transaction latency overlaps the projectile
-      // flight. The local result already matches what the contract will finalize
-      // (both sides hold the same fleets), so the animation never waits on it.
-      const playerMirror = battleDriver
-        ? battleDriver.submitPlayerShot(cell).then(
-            () => true,
-            (err: unknown) => {
-              battleDriver.onError?.(err instanceof Error ? err.message : String(err))
-              return false
-            },
-          )
-        : null
-
-      const result = await resolveShot('player', cell, sessionId)
+      // On the driver (on-chain) path the player's result is authoritative on the
+      // chain: the shot's attack+finalize is kicked off now so its latency
+      // overlaps the projectile flight, and resolveShot then animates the
+      // decrypted outcome — the player can't know hit/miss before the tx. Offline
+      // practice has no driver and resolves locally from fleet geometry.
+      const result = await resolveShot(
+        'player',
+        cell,
+        sessionId,
+        battleDriver ? driverOutcomeThunk(battleDriver, cell) : undefined,
+      )
       if (result === 'aborted' || interrupted(sessionId)) {
         releaseBusy(sessionId)
         return
       }
-
-      // The contract serializes turns: wait for the player's shot to settle
-      // on-chain before advancing. The local boards already reflect the outcome.
-      if (playerMirror) {
-        battleDriver?.onConfirming?.(true)
-        set({ confirming: true })
-        const ok = await playerMirror
-        battleDriver?.onConfirming?.(false)
-        set({ confirming: false })
-        if (!ok) {
-          // The shot never landed on-chain; remember the cell so Retry re-sends
-          // it (idempotently) before the bot replies.
-          set({ toast: driverErrorToast(), driverError: true, recoveryCell: cell })
-          releaseBusy(sessionId)
-          return
-        }
-        if (interrupted(sessionId)) {
-          releaseBusy(sessionId)
-          return
-        }
+      if (result === 'stalled') {
+        // The shot never resolved on-chain; remember the cell so Retry re-sends
+        // it (idempotently) before the bot replies.
+        set({ toast: driverErrorToast(), driverError: true, recoveryCell: cell })
+        releaseBusy(sessionId)
+        return
       }
 
       if (result === 'won') {
@@ -501,37 +556,30 @@ export const useStore = create<AppState>((set, get) => {
       if (!battleDriver || !driverError || busy || !match || match.winner) return
       set({ busy: true, driverError: false, toast: null })
 
-      // 1) Re-send the player's shot if it never reached the chain. The driver
-      // guards on the contract's pending-shot state, so a re-send is safe whether
-      // the original attack reverted, was never broadcast, or only the finalize
-      // failed.
+      // 1) Re-send the player's shot if it never resolved on-chain, then animate
+      // the contract's decrypted outcome. The driver guards on the contract's
+      // pending-shot state, so a re-send is safe whether the original attack
+      // reverted, was never broadcast, or only the finalize failed.
       const recoveryCell = get().recoveryCell
       if (recoveryCell !== null) {
-        battleDriver.onConfirming?.(true)
-        set({ confirming: true })
-        let ok: boolean
-        try {
-          await battleDriver.submitPlayerShot(recoveryCell)
-          ok = true
-        } catch (err) {
-          battleDriver.onError?.(err instanceof Error ? err.message : String(err))
-          ok = false
-        } finally {
-          battleDriver.onConfirming?.(false)
-          set({ confirming: false })
+        const result = await resolveShot(
+          'player',
+          recoveryCell,
+          sessionId,
+          driverOutcomeThunk(battleDriver, recoveryCell),
+        )
+        if (result === 'aborted' || interrupted(sessionId)) {
+          releaseBusy(sessionId)
+          return
         }
-        if (!ok) {
+        if (result === 'stalled') {
           set({ toast: driverErrorToast(), driverError: true })
           releaseBusy(sessionId)
           return
         }
         set({ recoveryCell: null })
-        if (interrupted(sessionId)) {
-          releaseBusy(sessionId)
-          return
-        }
-        // A winning player shot that only now confirmed on-chain.
-        if (get().match?.winner === 'player') {
+        // A winning player shot that only now resolved on-chain.
+        if (result === 'won') {
           sfx.win()
           set({ screen: 'gameover', busy: false })
           return
@@ -609,7 +657,14 @@ export function matchSummary(match: MatchState, forfeited: boolean) {
     if (moves.length === 0) return 0
     return Math.round((moves.filter((m) => m.result !== 'miss').length / moves.length) * 100)
   }
-  const shipsLeft = (side: Side) => match.boards[side].ships.filter((s) => !s.sunk).length
+  const shipsLeft = (side: Side) => {
+    const board = match.boards[side]
+    if (board.ships.length > 0) return board.ships.filter((s) => !s.sunk).length
+    // Hidden enemy board (on-chain bot mode): no geometry, so count the ships
+    // the player sank from finalized shots instead.
+    const sunk = match.moves.filter((m) => m.by === 'player' && m.result === 'sunk').length
+    return Math.max(0, FLEET.length - sunk)
+  }
   return {
     winner: match.winner,
     forfeited,

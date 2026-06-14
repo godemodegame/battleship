@@ -1,18 +1,24 @@
 import { useState } from 'react'
 import { useStore } from '../practice/practiceStore'
 import { botBattleCopy } from '../copy/en'
-import { cellLabel } from '../game/constants'
-import type { BoardState } from '../game/types'
+import { cellLabel, FLEET } from '../game/constants'
+import type { MatchState } from '../game/types'
 import { MuteButton } from './common'
 import { haptics } from '../lib/haptics'
 import { COMIC_SFX_URL } from '../lib/comicSfx'
 
-function FleetStrip({ board, label, enemy }: { board: BoardState; label: string; enemy?: boolean }) {
+interface StripShip {
+  slot: number
+  length: number
+  sunk: boolean
+}
+
+function FleetStrip({ ships, label, enemy }: { ships: StripShip[]; label: string; enemy?: boolean }) {
   return (
     <div className={`fleet-strip ${enemy ? 'enemy' : ''}`}>
       <span className="strip-label">{label}</span>
       <div className="strip-ships">
-        {board.ships.map((ship) => (
+        {ships.map((ship) => (
           <span key={ship.slot} className={`strip-ship ${ship.sunk ? 'sunk' : ''}`}>
             {Array.from({ length: ship.length }, (_, i) => (
               <i key={i} />
@@ -22,6 +28,25 @@ function FleetStrip({ board, label, enemy }: { board: BoardState; label: string;
       </div>
     </div>
   )
+}
+
+/**
+ * Enemy fleet pips. With a known board (offline practice) use its ships; on the
+ * hidden-enemy board (on-chain bot mode there is no bot geometry) derive the
+ * strip from FLEET, marking a ship sunk once a finalized player shot reported it
+ * (the contract's sunkShipId maps 1:1 onto the FLEET slot).
+ */
+function enemyStripShips(match: MatchState): StripShip[] {
+  if (match.boards.bot.ships.length > 0) {
+    return match.boards.bot.ships.map((s) => ({ slot: s.slot, length: s.length, sunk: s.sunk }))
+  }
+  return FLEET.map((def) => ({
+    slot: def.slot,
+    length: def.length,
+    sunk: match.moves.some(
+      (m) => m.by === 'player' && m.result === 'sunk' && m.shipSlot === def.slot,
+    ),
+  }))
 }
 
 export function BattleHUD() {
@@ -66,8 +91,8 @@ export function BattleHUD() {
       </div>
 
       <div className="strips">
-        <FleetStrip board={match.boards.bot} label="Enemy fleet" enemy />
-        <FleetStrip board={match.boards.player} label="Your fleet" />
+        <FleetStrip ships={enemyStripShips(match)} label="Enemy fleet" enemy />
+        <FleetStrip ships={match.boards.player.ships} label="Your fleet" />
       </div>
 
       {toast && (

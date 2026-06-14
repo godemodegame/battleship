@@ -1,24 +1,22 @@
 /**
- * Transient bot-match fleet stash.
+ * Transient bot-match player-fleet stash.
  *
- * A bot match is the one mode where the client legitimately knows BOTH plaintext
- * fleets: the player arranged their own, and the client itself generated the
- * bot's via `autoPlaceFleet()` before encrypting it (see the bot branch of
- * `CreateFriendMatchScreen`). The on-chain bot battle reuses the practice 3D
- * engine, which needs those plaintext fleets to render the boards and animate
- * shots locally while every move is mirrored on-chain.
+ * The on-chain bot battle reuses the practice 3D engine, which needs the
+ * player's own plaintext placement to render their board and resolve the bot's
+ * incoming shots locally (the player legitimately knows their own fleet, exactly
+ * as in PvP). It deliberately does NOT hold the bot's fleet: the bot's placement
+ * stays encrypted on-chain and the player's shots against it are resolved from
+ * the contract's finalized result, so the player can never know a hit/miss
+ * before the transaction — the same secrecy a human opponent gets.
  *
- * This module carries the two fleets from the create screen to the battle route
- * across the in-app navigate. It mirrors `placementStore`'s privacy posture:
+ * This module carries the player fleet from the create screen to the battle
+ * route across the in-app navigate. It mirrors `placementStore`'s privacy
+ * posture:
  *  - in-memory only — never persisted to storage and never exposed as a browser
  *    global, so a refresh or a second device simply finds nothing and the route
  *    falls back to the public-data `OnchainBattlePanel`;
  *  - keyed by (deploymentId, matchId) so an unrelated match can never read it;
- *  - bot-only — it is never written for friend/open matches, where the opponent
- *    fleet is genuinely secret.
- *
- * Stakeless practice: a determined player could already inspect their own bot's
- * fleet (the client placed it), so holding it in memory leaks nothing new.
+ *  - bot-only — it is never written for friend/open matches.
  */
 
 import type { Placement } from '../../game/types'
@@ -26,8 +24,6 @@ import type { Placement } from '../../game/types'
 export interface BotFleets {
   /** The player's own placement (their defended board). */
   player: Placement[]
-  /** The client-generated bot fleet, also submitted encrypted on-chain. */
-  bot: Placement[]
 }
 
 function keyOf(deploymentId: string, matchId: string): string {
@@ -37,23 +33,22 @@ function keyOf(deploymentId: string, matchId: string): string {
 /** Per (deployment, match) plaintext fleets. In-memory for this tab only. */
 const stash = new Map<string, BotFleets>()
 
-/** Record both fleets for a freshly-created bot match, before navigating to it. */
+/** Record the player fleet for a freshly-created bot match, before navigating. */
 export function stashBotFleets(
   deploymentId: string,
   matchId: string,
   fleets: BotFleets,
 ): void {
   stash.set(keyOf(deploymentId, matchId), {
-    // Defensive copies: the caller clears its placement store right after.
+    // Defensive copy: the caller clears its placement store right after.
     player: fleets.player.slice(),
-    bot: fleets.bot.slice(),
   })
 }
 
 /**
- * Read the stashed fleets for a bot match, or `null` when none are held (refresh,
- * direct link, another device). Peeks without removing — a match spans many shots
- * and the controller may re-read across remounts within the session.
+ * Read the stashed player fleet for a bot match, or `null` when none is held
+ * (refresh, direct link, another device). Peeks without removing — a match spans
+ * many shots and the controller may re-read across remounts within the session.
  */
 export function peekBotFleets(
   deploymentId: string,

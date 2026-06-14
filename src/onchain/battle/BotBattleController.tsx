@@ -1,22 +1,25 @@
 /**
  * On-chain bot battle, rendered through the practice 3D engine.
  *
- * A bot match is the one mode where the client knows BOTH plaintext fleets (the
- * player placed theirs; the client generated the bot's — see botFleetStash). So
- * this controller seeds the practice store with a local `MatchState` built from
- * those fleets and mounts the exact practice scene + HUD (3D ships, projectile
- * arcs, hit/miss/sunk VFX, camera swings, sounds). The battle plays instantly
- * and locally, while an injected `BattleDriver` mirrors every move on-chain:
- *  - the player's shot → `attack` + auto `finalizeAttackWithProof`;
+ * The client holds ONLY the player's plaintext fleet (see botFleetStash); the
+ * bot's fleet stays encrypted on-chain, hidden from the player just like a human
+ * opponent's. So this controller seeds the practice store with a `MatchState`
+ * whose own board is known and whose enemy board has no geometry
+ * (`createMatchVsHiddenEnemy`), and mounts the practice scene + HUD (3D ships on
+ * the player's side, projectile arcs, hit/miss/sunk VFX, camera swings, sounds).
+ * An injected `BattleDriver` runs every move on-chain and feeds results back:
+ *  - the player's shot → `attack` + auto `finalizeAttackWithProof`, then the
+ *    contract's decrypted result is read back and animated. The player therefore
+ *    cannot know hit/miss before the transaction (the whole point of this mode);
  *  - the bot's shot → `executeBotMove` (the contract picks the cell, which we
- *    read back and animate) + auto-finalize.
+ *    read back and resolve LOCALLY against the player's own known board) +
+ *    auto-finalize.
  *
  * No manual "Finalize Shot" / "Advance Opponent Turn" buttons: the store's
- * `fire()` loop drives the whole sequence. The local result always matches what
- * the contract finalizes (both sides hold the same fleets), so the boards stay
- * in lockstep with the chain. On an unrecoverable on-chain error the player can
- * forfeit (on-chain) or reload (which drops the stash and falls back to the
- * authoritative DOM battle panel).
+ * `fire()` loop drives the whole sequence. The enemy board shows only the
+ * chain's hit/miss/sunk markers (no revealed bot hulls). On an unrecoverable
+ * on-chain error the player can forfeit (on-chain) or reload (which drops the
+ * stash and falls back to the authoritative DOM battle panel).
  */
 
 import { useEffect, useMemo, useRef } from 'react'
@@ -25,11 +28,15 @@ import { GameCanvas } from '../../three/Scene'
 import { BattleHUD } from '../../ui/BattleHUD'
 import { GameOverScreen } from '../../ui/GameOverScreen'
 import { LoadingOverlay, StatusOverlay } from '../../ui/common'
-import { createMatch } from '../../game/engine'
+import { createMatchVsHiddenEnemy } from '../../game/engine'
 import { botBattleCopy } from '../../copy/en'
-import { resetPracticeState, useStore } from '../../practice/practiceStore'
+import {
+  resetPracticeState,
+  useStore,
+  type PlayerShotOutcome,
+} from '../../practice/practiceStore'
 import type { BattleshipReadClient, BattleshipWriteClient } from '../client/battleshipClient'
-import type { ChainMatchView } from '../client/mapping'
+import type { ChainMatchView, ChainMoveView } from '../client/mapping'
 import { useMatchScopes } from './useMatchScopes'
 import { useTrackedWrite, type TrackedWrite } from '../client/useTrackedWrite'
 import { useCofheMatchClient, type CofheClientState } from '../fhenix/useCofheMatchClient'
@@ -105,21 +112,51 @@ async function finalizePending(api: DriverApi): Promise<void> {
   if (!res?.ok) throw new Error('Could not finalize the shot on-chain')
 }
 
-/** Player shot: attack (unless one is already pending) then finalize. */
-async function runPlayerShot(api: DriverApi, cell: number): Promise<void> {
-  if (!api.writeClient?.attack || !api.readClient?.getPendingShot) {
+/** Map a finalized on-chain move to the local animation outcome. */
+function chainMoveToOutcome(move: ChainMoveView): PlayerShotOutcome {
+  const sunkShipSlot = move.sunkShipId > 0 ? move.sunkShipId - 1 : null
+  switch (move.result) {
+    case 'Miss':
+      return { result: 'miss', sunkShipSlot: null }
+    case 'Hit':
+      return { result: 'hit', sunkShipSlot: null }
+    case 'Sunk':
+      return { result: 'sunk', sunkShipSlot }
+    case 'Win':
+      return { result: 'won', sunkShipSlot }
+    default:
+      throw new Error(`Unresolved shot result: ${move.result}`)
+  }
+}
+
+/**
+ * Player shot: attack (unless one is already pending), finalize, then read the
+ * contract's resolved result. That decrypted result — never a local fleet, which
+ * this client no longer holds — is what the UI animates, so the player cannot
+ * know hit/miss before the transaction, exactly like a human opponent in PvP.
+ */
+async function runPlayerShot(api: DriverApi, cell: number): Promise<PlayerShotOutcome> {
+  if (!api.writeClient?.attack || !api.readClient?.getPendingShot || !api.readClient?.getMove) {
     throw new Error('Battle client not ready')
   }
-  const existing = await api.readClient.getPendingShot(api.matchId)
-  if (!existing?.exists) {
+  // Reconcile against the chain first: a retry after a dropped receipt finds the
+  // shot already pending and skips a duplicate attack (which would revert).
+  let pending = await api.readClient.getPendingShot(api.matchId)
+  if (!pending?.exists) {
     api.wallet.actions.prepareHandoff()
     const res = await api.attackWrite.run((onState) =>
       api.writeClient!.attack!(api.matchId, cell, onState),
     )
     if (!res?.ok) throw new Error('Attack transaction failed')
+    pending = await api.readClient.getPendingShot(api.matchId)
   }
+  if (!pending?.exists) throw new Error('Player shot did not register on-chain')
+  const moveId = pending.moveId
   await finalizePending(api)
+  const move = await api.readClient.getMove(api.matchId, moveId)
+  if (!move?.finalized) throw new Error('Shot result not yet on-chain')
   api.onRefetch()
+  return chainMoveToOutcome(move)
 }
 
 /** Bot shot: run executeBotMove, read the contract-chosen cell, then finalize. */
@@ -227,7 +264,7 @@ export function BotBattleController({
   useEffect(() => {
     useStore.setState({
       screen: 'battle',
-      match: createMatch(fleets.player.slice(), fleets.bot.slice()),
+      match: createMatchVsHiddenEnemy(fleets.player.slice()),
       focus: 'enemy',
       selectedCell: null,
       busy: true,

@@ -107,8 +107,9 @@ describe('bot match frontend flow', () => {
   it('renders the 3D battle through the practice engine when fleets are retained', async () => {
     const contract = makeFakeContract()
     await contract.writeClientFor(CREATOR).createBotMatch!([], [], () => {})
-    // The create screen retains both plaintext fleets for the 3D match.
-    stashBotFleets(DEPLOYMENT_ID, '1', { player: autoPlaceFleet(), bot: autoPlaceFleet() })
+    // The create screen retains only the player's plaintext fleet for the 3D
+    // match; the bot's stays encrypted on-chain.
+    stashBotFleets(DEPLOYMENT_ID, '1', { player: autoPlaceFleet() })
 
     renderApp({
       route: ROUTE,
@@ -152,7 +153,7 @@ describe('bot match frontend flow', () => {
       currentTurn: null,
       finishedAt: nowTs,
     }
-    stashBotFleets(DEPLOYMENT_ID, '1', { player: autoPlaceFleet(), bot: autoPlaceFleet() })
+    stashBotFleets(DEPLOYMENT_ID, '1', { player: autoPlaceFleet() })
 
     renderApp({
       route: ROUTE,

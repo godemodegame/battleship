@@ -48,6 +48,70 @@ export function createMatch(
   }
 }
 
+/** A board with no known geometry: only shot markers ever land on it. */
+export function emptyBoard(): BoardState {
+  return {
+    ships: [],
+    shipAt: new Array<number>(CELL_COUNT).fill(-1),
+    shots: new Array<CellShot>(CELL_COUNT).fill(0),
+  }
+}
+
+/**
+ * A match whose enemy fleet is hidden from this client (on-chain bot mode): the
+ * player's own board is fully known, but the opponent board carries no ship
+ * geometry. Every player→enemy shot is resolved from the chain and applied with
+ * `applyResolvedShot`, so the client can never know a hit/miss before the tx —
+ * exactly like a human opponent in PvP.
+ */
+export function createMatchVsHiddenEnemy(
+  playerPlacements: Placement[],
+  firstTurn: Side = 'player',
+): MatchState {
+  return {
+    boards: { player: buildBoard(playerPlacements), bot: emptyBoard() },
+    turn: firstTurn,
+    moves: [],
+    winner: null,
+  }
+}
+
+/** A shot outcome decided elsewhere (the chain), not by local fleet geometry. */
+export interface ResolvedShot {
+  result: ShotResult
+  /** FLEET slot of the ship this shot sank, or null when nothing sank. */
+  shipSlot: number | null
+  /** True when this shot ended the match for the attacker. */
+  winner: boolean
+}
+
+/**
+ * Apply a chain-decided result of a player's shot to the hidden enemy board.
+ * Unlike `applyShot`, it never consults ship geometry (there is none) — it only
+ * stamps the cell marker (miss/hit/sunk) and threads the turn + winner the
+ * contract reported. The contract's MVP sunk rule marks just the final cell, so
+ * no no-touch halo is drawn for the enemy.
+ */
+export function applyResolvedShot(
+  match: MatchState,
+  cell: number,
+  resolved: ResolvedShot,
+): { match: MatchState; move: Move } {
+  const board = match.boards.bot
+  const shots = board.shots.slice()
+  shots[cell] = resolved.result === 'miss' ? 1 : resolved.result === 'hit' ? 2 : 3
+  const move: Move = { by: 'player', cell, result: resolved.result, shipSlot: resolved.shipSlot }
+  return {
+    match: {
+      boards: { ...match.boards, bot: { ...board, shots } },
+      turn: resolved.result === 'miss' ? 'bot' : 'player',
+      moves: [...match.moves, move],
+      winner: resolved.winner ? 'player' : null,
+    },
+    move,
+  }
+}
+
 const otherSide = (side: Side): Side => (side === 'player' ? 'bot' : 'player')
 
 /** Adjacent cells that are empty or belong to a different ship (classic no-touch halo). */

@@ -192,11 +192,12 @@ function CreateMatchScreen({ mode }: { mode: 'friend' | 'open' | 'bot' }) {
     if (isBot) {
       // The bot's fleet is auto-placed and encrypted client-side ALONGSIDE the
       // player's — both in one CoFHE proof round (≈2× faster than two) — then
-      // stored under the bot sentinel on-chain (no usable on-chain randomness;
-      // see docs/computer-opponent-design.md). Both fleets are bound to this
-      // wallet, which submits them in one createBotMatch tx. We retain both
-      // plaintext fleets in memory so the battle route can render the 3D match
-      // locally while every move is mirrored on-chain (see botFleetStash).
+      // stored under the bot sentinel on-chain. Both fleets are bound to this
+      // wallet, which submits them in one createBotMatch tx. We retain ONLY the
+      // player's plaintext fleet so the battle route can render their board and
+      // resolve incoming bot shots locally; the bot's plaintext is discarded
+      // right after encryption so the player can't know a shot's result before
+      // the tx — those results come from the contract (see botFleetStash).
       const botPlacements = autoPlaceFleet()
       const pair = await submission.encryptBotPair(placements, botPlacements)
       if (!pair) return
@@ -210,7 +211,6 @@ function CreateMatchScreen({ mode }: { mode: 'friend' | 'open' | 'bot' }) {
       if (result?.ok && playerFleet) {
         stashBotFleets(deploymentId, result.matchId.toString(), {
           player: playerFleet,
-          bot: botPlacements,
         })
       }
     } else {

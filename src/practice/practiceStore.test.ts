@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { applyAttack, createMatch } from '../game/engine'
+import { applyAttack, createMatch, createMatchVsHiddenEnemy } from '../game/engine'
 import type { MatchState, Placement } from '../game/types'
 import { seededRandom } from '../test/gameFixtures'
 
@@ -299,9 +299,10 @@ describe('on-chain battle driver', () => {
     vi.useRealTimers()
   })
 
-  it('mirrors the player shot and takes the bot target from the driver', async () => {
+  it('takes the player result from the chain and the bot target from the driver', async () => {
     startBattle(10)
-    const submitPlayerShot = vi.fn().mockResolvedValue(undefined)
+    // The player's result comes from the contract, never from local geometry.
+    const submitPlayerShot = vi.fn().mockResolvedValue({ result: 'miss', sunkShipSlot: null })
     const resolveBotShot = vi.fn().mockResolvedValueOnce(0).mockResolvedValueOnce(10)
     useStore.setState({ battleDriver: { submitPlayerShot, resolveBotShot } })
 
@@ -324,9 +325,44 @@ describe('on-chain battle driver', () => {
     expect(state.confirming).toBe(false)
   })
 
+  it('resolves the player shot purely from the chain against a hidden enemy board', async () => {
+    // The on-chain bot match seeds a geometry-less enemy board: the result can
+    // only come from the contract, never from a local fleet lookup.
+    useStore.setState({
+      screen: 'battle',
+      match: createMatchVsHiddenEnemy(twoCellShip),
+      focus: 'enemy',
+      selectedCell: 42,
+      busy: false,
+      effects: [],
+      projectiles: [],
+      toast: null,
+      forfeited: false,
+    })
+    const submitPlayerShot = vi.fn().mockResolvedValue({ result: 'sunk', sunkShipSlot: 2 })
+    const resolveBotShot = vi.fn()
+    useStore.setState({ battleDriver: { submitPlayerShot, resolveBotShot } })
+
+    const firing = useStore.getState().fire()
+    await vi.runAllTimersAsync()
+    await firing
+
+    const state = useStore.getState()
+    expect(submitPlayerShot).toHaveBeenCalledWith(42)
+    expect(state.match?.boards.bot.shots[42]).toBe(3)
+    expect(state.match?.moves).toEqual([
+      { by: 'player', cell: 42, result: 'sunk', shipSlot: 2 },
+    ])
+    // A sunk keeps the turn with the player; the bot driver never ran.
+    expect(state.match?.turn).toBe('player')
+    expect(resolveBotShot).not.toHaveBeenCalled()
+    expect(state.busy).toBe(false)
+    expect(state.confirming).toBe(false)
+  })
+
   it('does not run the bot driver when the player hits (player fires again)', async () => {
     startBattle(0)
-    const submitPlayerShot = vi.fn().mockResolvedValue(undefined)
+    const submitPlayerShot = vi.fn().mockResolvedValue({ result: 'hit', sunkShipSlot: null })
     const resolveBotShot = vi.fn()
     useStore.setState({ battleDriver: { submitPlayerShot, resolveBotShot } })
 
@@ -375,7 +411,7 @@ describe('on-chain battle driver', () => {
 
   it('recovers a stalled bot move via resumeBattle without re-sending the player shot', async () => {
     startBattle(10)
-    const submitPlayerShot = vi.fn().mockResolvedValue(undefined)
+    const submitPlayerShot = vi.fn().mockResolvedValue({ result: 'miss', sunkShipSlot: null })
     const resolveBotShot = vi
       .fn()
       .mockRejectedValueOnce(new Error('rpc down')) // bot move stalls
@@ -420,7 +456,7 @@ describe('on-chain battle driver', () => {
     const submitPlayerShot = vi
       .fn()
       .mockRejectedValueOnce(new Error('rpc down')) // the shot never lands
-      .mockResolvedValueOnce(undefined) // resume re-sends it
+      .mockResolvedValueOnce({ result: 'miss', sunkShipSlot: null }) // resume re-sends it
     const resolveBotShot = vi.fn().mockResolvedValueOnce(0).mockResolvedValueOnce(10)
     useStore.setState({ battleDriver: { submitPlayerShot, resolveBotShot } })
 
@@ -428,12 +464,14 @@ describe('on-chain battle driver', () => {
     await vi.runAllTimersAsync()
     await firing
 
-    // Player missed locally (turn → bot) but the shot never reached the chain,
-    // so the cell is remembered and the bot driver has not run yet.
+    // The shot never resolved on-chain, so nothing is applied locally (no
+    // premature result): the turn stays with the player and the cell is
+    // remembered for Retry. The bot driver has not run yet.
     let state = useStore.getState()
     expect(state.driverError).toBe(true)
     expect(state.recoveryCell).toBe(10)
-    expect(state.match?.turn).toBe('bot')
+    expect(state.match?.turn).toBe('player')
+    expect(state.match?.moves).toEqual([])
     expect(resolveBotShot).not.toHaveBeenCalled()
 
     const resuming = useStore.getState().resumeBattle()
@@ -490,5 +528,18 @@ describe('matchSummary', () => {
       playerShipsLeft: 1,
       botShipsLeft: 0,
     })
+  })
+
+  it('derives enemy ships-left from finalized player shots when geometry is hidden', () => {
+    const match = createMatchVsHiddenEnemy(twoCellShip)
+    match.moves = [
+      { by: 'player', cell: 0, result: 'sunk', shipSlot: 0 },
+      { by: 'player', cell: 1, result: 'hit', shipSlot: null },
+    ]
+
+    const summary = matchSummary(match, false)
+    // 10 enemy ships minus the one sunk; the player's own board still has its ship.
+    expect(summary.botShipsLeft).toBe(9)
+    expect(summary.playerShipsLeft).toBe(1)
   })
 })
