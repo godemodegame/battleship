@@ -194,10 +194,8 @@ function driverOutcomeThunk(
         winner: outcome.result === 'won',
       }
     } catch (err) {
-      // Surface the real cause: the stall auto-recovers, but logging the error
-      // is the only way to diagnose *why* it stalled (RPC blip, dropped receipt,
-      // proof-fetch timeout, revert) since the UI just shows "Reconnecting".
-      console.warn('[bot-match] player shot stalled on-chain:', err)
+      // The stall auto-recovers; forward the cause to the driver's onError sink
+      // for diagnostics (no console logging — release config forbids it in src).
       driver.onError?.(err instanceof Error ? err.message : String(err))
       return null
     }
@@ -327,7 +325,6 @@ export const useStore = create<AppState>((set, get) => {
         try {
           botCell = await battleDriver.resolveBotShot()
         } catch (err) {
-          console.warn('[bot-match] bot move stalled on-chain:', err)
           battleDriver.onError?.(err instanceof Error ? err.message : String(err))
           botCell = null
         } finally {
