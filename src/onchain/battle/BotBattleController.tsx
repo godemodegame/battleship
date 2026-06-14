@@ -67,6 +67,15 @@ interface DriverApi {
  */
 const RETRY_BACKOFF_MS = [700, 1800]
 
+/**
+ * Backoff (ms) for the AUTOMATIC reconnect loop. After the in-turn retries above
+ * are exhausted and the turn stalls (`driverError`), the controller keeps
+ * re-running `resumeBattle()` on this schedule — capped, but never giving up —
+ * so a longer outage (RPC down, wallet asleep) recovers on its own without the
+ * player tapping anything. The last value repeats for all further attempts.
+ */
+const RECONNECT_BACKOFF_MS = [800, 1600, 3000, 5000]
+
 async function withRetry<T>(fn: () => Promise<T>): Promise<T> {
   let lastError: unknown
   for (let attempt = 0; attempt <= RETRY_BACKOFF_MS.length; attempt++) {
@@ -199,6 +208,11 @@ export function BotBattleController({
 }: BotBattleControllerProps) {
   const screen = useStore((s) => s.screen)
   const setBattleDriver = useStore((s) => s.setBattleDriver)
+  const driverError = useStore((s) => s.driverError)
+  const busy = useStore((s) => s.busy)
+  const confirming = useStore((s) => s.confirming)
+  const turn = useStore((s) => s.match?.turn)
+  const hasWinner = useStore((s) => Boolean(s.match?.winner))
   const navigate = useNavigate()
 
   const viewer = wallet.session.address
@@ -210,8 +224,11 @@ export function BotBattleController({
   const resolveWrite = useTrackedWrite(txScope('resolve'))
   const forfeitWrite = useTrackedWrite(txScope('forfeit'))
 
+  // Start CoFHE init as soon as the wallet can write — it only needs the
+  // public/wallet clients + scope, not the bound battle write client. Kicking
+  // it off in parallel with that binding shortens the "preparing" wait.
   const cofhe = useCofheMatchClient({
-    enabled: wallet.canWrite && Boolean(writeClient?.finalizeAttackWithProof),
+    enabled: wallet.canWrite,
     scope: cofheScope,
     publicClient: wallet.publicClient,
     walletClient: wallet.walletClient,
@@ -318,7 +335,40 @@ export function BotBattleController({
     })
   }, [terminal, match.status, match.winner, viewer])
 
+  // Automatic reconnect: while a turn is stalled on-chain, re-run resumeBattle on
+  // a capped backoff until it clears — no manual Retry tap needed. resumeBattle
+  // flips busy=true (this effect backs off), then on success clears driverError
+  // (counter resets) or on a fresh stall re-sets it (next, longer attempt). It is
+  // idempotent (reconciles against the contract), so re-runs never double-fire.
+  const reconnectAttemptRef = useRef(0)
+  useEffect(() => {
+    if (busy || hasWinner || screen === 'gameover') return
+    if (!driverError) {
+      reconnectAttemptRef.current = 0
+      return
+    }
+    const attempt = reconnectAttemptRef.current
+    const wait = RECONNECT_BACKOFF_MS[Math.min(attempt, RECONNECT_BACKOFF_MS.length - 1)]
+    const timer = setTimeout(() => {
+      reconnectAttemptRef.current = attempt + 1
+      void useStore.getState().resumeBattle()
+    }, wait)
+    return () => clearTimeout(timer)
+  }, [driverError, busy, hasWinner, screen])
+
   const warming = cofhe.status !== 'ready'
+
+  // Hash of whichever on-chain write is currently in flight, for the explorer
+  // link in the confirming overlay (null until the tx is broadcast).
+  const inFlightWrite = [resolveWrite, botMoveWrite, attackWrite].find((w) => w.busy)
+  const activeTxHash = inFlightWrite?.state.hash ?? null
+
+  // Mid-battle full-screen status: a reconnect in progress, or the opponent's
+  // move settling on-chain. The player's own shot keeps its projectile/impact
+  // animation (no overlay) so the reveal still lands dramatically.
+  const reconnecting = driverError && !hasWinner
+  const opponentConfirming = confirming && turn === 'bot' && !hasWinner
+  const showChainOverlay = !warming && screen !== 'gameover' && (reconnecting || opponentConfirming)
 
   return (
     <div className="app" data-testid="bot-battle-3d">
@@ -335,6 +385,16 @@ export function BotBattleController({
           title={botBattleCopy.warmingTitle}
           sub={cofhe.status === 'error' ? botBattleCopy.syncFailed : botBattleCopy.warmingSub}
           testId="bot-battle-warming"
+        />
+      )}
+      {showChainOverlay && (
+        <StatusOverlay
+          dim
+          tone={reconnecting ? 'amber' : 'cyan'}
+          title={reconnecting ? botBattleCopy.reconnectingTitle : botBattleCopy.confirmingTitle}
+          sub={reconnecting ? botBattleCopy.reconnectingSub : botBattleCopy.confirmingBotSub}
+          txHash={activeTxHash}
+          testId={reconnecting ? 'bot-battle-reconnecting' : 'bot-battle-confirming'}
         />
       )}
       <LoadingOverlay />

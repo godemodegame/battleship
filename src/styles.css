@@ -1429,17 +1429,64 @@ body,
   justify-content: center;
   background: var(--ink);
   z-index: 50;
+  animation: overlay-in 0.22s ease-out;
+}
+
+/* Mid-battle scrim: keep the board visible behind the status. */
+.loading.dim {
+  background: rgba(7, 8, 13, 0.66);
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
 }
 
 .loading-box {
+  position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 12px;
-  width: min(320px, 76vw);
+  gap: 13px;
+  width: min(330px, 78vw);
+  padding: 30px 26px 26px;
+  border: 1px solid var(--line-dim);
+  border-radius: var(--radius);
+  background: rgba(13, 19, 30, 0.62);
+  box-shadow: inset 0 1px 0 var(--hairline), 0 0 30px rgba(33, 244, 255, 0.1);
+}
+
+/* Tactical corner brackets, matching the panel framing language. */
+.loading-box::before,
+.loading-box::after {
+  content: '';
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  border-color: var(--cyan);
+  opacity: 0.6;
+  pointer-events: none;
+}
+.loading-box::before {
+  top: 7px;
+  left: 7px;
+  border-top: 1.5px solid;
+  border-left: 1.5px solid;
+}
+.loading-box::after {
+  bottom: 7px;
+  right: 7px;
+  border-bottom: 1.5px solid;
+  border-right: 1.5px solid;
+}
+.loading-amber {
+  border-color: rgba(255, 176, 0, 0.32);
+  box-shadow: inset 0 1px 0 var(--hairline), 0 0 30px rgba(255, 176, 0, 0.12);
+}
+.loading-amber::before,
+.loading-amber::after {
+  border-color: var(--amber);
 }
 
 .loading-title {
+  position: relative;
   font-size: 15px;
   font-weight: 700;
   letter-spacing: 0.26em;
@@ -1447,6 +1494,24 @@ body,
   color: var(--cyan);
   text-shadow: 0 0 12px rgba(33, 244, 255, 0.6);
   animation: pulse 1.6s ease-in-out infinite;
+}
+/* Scan-line sweeping under the title — an "encrypted channel" cue. */
+.loading-title::after {
+  content: '';
+  position: absolute;
+  bottom: -5px;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--cyan), transparent);
+  animation: scan-sweep 2.1s ease-in-out infinite;
+}
+.loading-amber .loading-title {
+  color: var(--amber);
+  text-shadow: 0 0 12px rgba(255, 176, 0, 0.55);
+}
+.loading-amber .loading-title::after {
+  background: linear-gradient(90deg, transparent, var(--amber), transparent);
 }
 
 .loading-bar {
@@ -1467,8 +1532,24 @@ body,
 .loading-sub {
   font-size: 11px;
   letter-spacing: 0.12em;
-  color: rgba(232, 247, 255, 0.5);
+  color: rgba(232, 247, 255, 0.55);
   text-transform: uppercase;
+  text-align: center;
+  animation: subtitle-pulse 3s ease-in-out infinite;
+}
+
+.tx-explorer-link {
+  margin-top: 2px;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  color: var(--cyan);
+  text-decoration: none;
+  border-bottom: 1px solid rgba(33, 244, 255, 0.35);
+  padding-bottom: 1px;
+}
+.tx-explorer-link:hover {
+  color: #b7f7ff;
+  border-bottom-color: var(--cyan);
 }
 
 .loading-error .loading-title {
@@ -1477,18 +1558,82 @@ body,
 }
 
 .loading-spinner {
-  width: 34px;
-  height: 34px;
+  position: relative;
+  width: 42px;
+  height: 42px;
   border-radius: 50%;
-  border: 3px solid rgba(33, 244, 255, 0.18);
+  border: 3px solid rgba(33, 244, 255, 0.16);
   border-top-color: var(--cyan);
   box-shadow: 0 0 14px rgba(33, 244, 255, 0.45);
   animation: spin 0.9s linear infinite;
+  will-change: transform;
+}
+/* Counter-rotating outer ring for depth. */
+.loading-spinner::before {
+  content: '';
+  position: absolute;
+  inset: -7px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  border-top-color: rgba(33, 244, 255, 0.55);
+  border-right-color: rgba(33, 244, 255, 0.28);
+  animation: spin 1.6s linear infinite reverse;
+}
+.loading-amber .loading-spinner {
+  border-color: rgba(255, 176, 0, 0.16);
+  border-top-color: var(--amber);
+  box-shadow: 0 0 14px rgba(255, 176, 0, 0.45);
+}
+.loading-amber .loading-spinner::before {
+  border-top-color: rgba(255, 176, 0, 0.55);
+  border-right-color: rgba(255, 176, 0, 0.28);
 }
 
 @keyframes spin {
   to {
     transform: rotate(360deg);
+  }
+}
+
+@keyframes scan-sweep {
+  0%,
+  100% {
+    transform: scaleX(0);
+    opacity: 0.2;
+  }
+  50% {
+    transform: scaleX(1);
+    opacity: 1;
+  }
+}
+
+@keyframes subtitle-pulse {
+  0%,
+  100% {
+    opacity: 0.5;
+  }
+  50% {
+    opacity: 0.85;
+  }
+}
+
+@keyframes overlay-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .loading,
+  .loading-title,
+  .loading-title::after,
+  .loading-sub,
+  .loading-spinner,
+  .loading-spinner::before {
+    animation: none !important;
   }
 }
 

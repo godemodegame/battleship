@@ -404,7 +404,9 @@ describe('on-chain battle driver', () => {
     const state = useStore.getState()
     expect(state.busy).toBe(false)
     expect(state.confirming).toBe(false)
-    expect(state.toast?.tone).toBe('red')
+    // Amber, not red: the stall auto-recovers (the controller retries on a
+    // backoff), so it's a transient "reconnecting" state, not a dead error.
+    expect(state.toast?.tone).toBe('amber')
     expect(state.driverError).toBe(true)
     expect(resolveBotShot).not.toHaveBeenCalled()
   })
@@ -429,7 +431,7 @@ describe('on-chain battle driver', () => {
     expect(state.driverError).toBe(true)
     expect(state.busy).toBe(false)
     expect(state.recoveryCell).toBeNull()
-    expect(state.toast?.tone).toBe('red')
+    expect(state.toast?.tone).toBe('amber')
     expect(state.match?.turn).toBe('bot')
     expect(state.match?.moves.map((m) => [m.by, m.result])).toEqual([['player', 'miss']])
 

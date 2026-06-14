@@ -177,9 +177,16 @@ export const botBattleCopy = {
   warmingTitle: 'Securing the battlefield',
   warmingSub: 'Preparing the encryption session…',
   confirming: 'Confirming on-chain…',
+  // Full-screen overlay shown while the opponent's move settles on-chain.
+  confirmingTitle: 'Confirming on-chain',
+  confirmingBotSub: 'The opponent fired — settling the result on-chain…',
+  // Automatic recovery after an on-chain stall (no manual tap required).
+  reconnectingTitle: 'Reconnecting',
+  reconnectingStatus: 'Reconnecting…',
+  reconnectingSub: 'Lost the chain for a moment — retrying automatically.',
   syncFailed: 'On-chain sync failed — tap Retry.',
   stalledStatus: 'Sync Stalled',
-  retry: 'Retry',
+  retry: 'Retry now',
 } as const
 
 /** Open-match lobby ("Find a Game") + Quick Match (random matchmaking). */

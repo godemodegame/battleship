@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useProgress } from '@react-three/drei'
-import { appShellCopy } from '../copy/en'
+import { appShellCopy, explorerCopy } from '../copy/en'
+import { explorerTxUrl } from '../onchain/explorer'
 import { perf } from '../lib/perf'
 import { sfx } from '../lib/sfx'
 
@@ -25,23 +26,50 @@ export function MuteButton() {
  * Full-screen status overlay for an in-flight async flow (encrypting a fleet,
  * opening a match, confirming a shot on-chain). Unlike `LoadingOverlay`, which
  * tracks 3D-asset progress, this shows caller-supplied copy with an animated
- * pulse so a long encryption / transaction wait never reads as a frozen UI.
+ * spinner so a long encryption / transaction wait never reads as a frozen UI.
+ *
+ * `txHash` adds an "open in explorer" link so the player can watch the move
+ * land on-chain; `dim` swaps the opaque backdrop for a translucent scrim (used
+ * mid-battle so the board stays visible behind the status); `tone` recolours
+ * the accents (amber for an automatic-reconnect state).
  */
 export function StatusOverlay({
   title,
   sub,
   testId,
+  txHash,
+  dim,
+  tone = 'cyan',
 }: {
   title: string
   sub?: string
   testId?: string
+  txHash?: string | null
+  dim?: boolean
+  tone?: 'cyan' | 'amber'
 }) {
   return (
-    <div className="overlay loading" role="status" aria-live="polite" data-testid={testId}>
-      <div className="loading-box">
+    <div
+      className={`overlay loading${dim ? ' dim' : ''}`}
+      role="status"
+      aria-live="polite"
+      data-testid={testId}
+    >
+      <div className={`loading-box${tone === 'amber' ? ' loading-amber' : ''}`}>
         <div className="loading-spinner" aria-hidden="true" />
         <div className="loading-title">{title}</div>
         {sub && <div className="loading-sub">{sub}</div>}
+        {txHash && (
+          <a
+            className="tx-explorer-link"
+            href={explorerTxUrl(txHash)}
+            target="_blank"
+            rel="noopener noreferrer"
+            data-testid="overlay-tx-link"
+          >
+            {explorerCopy.viewTx}
+          </a>
+        )}
       </div>
     </div>
   )

@@ -31,21 +31,22 @@ function FleetStrip({ ships, label, enemy }: { ships: StripShip[]; label: string
 }
 
 /**
- * Enemy fleet pips. With a known board (offline practice) use its ships; on the
- * hidden-enemy board (on-chain bot mode there is no bot geometry) derive the
- * strip from FLEET, marking a ship sunk once a finalized player shot reported it
- * (the contract's sunkShipId maps 1:1 onto the FLEET slot).
+ * Enemy fleet pips, always the full FLEET so every ship shows from the start. A
+ * slot reads sunk once either the known board marks it sunk (offline practice)
+ * or a finalized player shot reported sinking it (on-chain bot mode, where only
+ * sunk hulls are ever revealed and the contract's sunkShipId maps 1:1 onto the
+ * FLEET slot). Robust whether or not the enemy board carries reconstructed hulls.
  */
 function enemyStripShips(match: MatchState): StripShip[] {
-  if (match.boards.bot.ships.length > 0) {
-    return match.boards.bot.ships.map((s) => ({ slot: s.slot, length: s.length, sunk: s.sunk }))
+  const sunkSlots = new Set<number>()
+  for (const ship of match.boards.bot.ships) if (ship.sunk) sunkSlots.add(ship.slot)
+  for (const m of match.moves) {
+    if (m.by === 'player' && m.result === 'sunk' && m.shipSlot !== null) sunkSlots.add(m.shipSlot)
   }
   return FLEET.map((def) => ({
     slot: def.slot,
     length: def.length,
-    sunk: match.moves.some(
-      (m) => m.by === 'player' && m.result === 'sunk' && m.shipSlot === def.slot,
-    ),
+    sunk: sunkSlots.has(def.slot),
   }))
 }
 
@@ -66,7 +67,7 @@ export function BattleHUD() {
   const status: { text: string; tone: string } = match.winner
     ? { text: 'Match Over', tone: 'amber' }
     : driverError
-      ? { text: botBattleCopy.stalledStatus, tone: 'red' }
+      ? { text: botBattleCopy.reconnectingStatus, tone: 'amber' }
       : busy
         ? match.turn === 'player'
           ? { text: 'Resolving Shot', tone: 'amber' }
@@ -115,9 +116,10 @@ export function BattleHUD() {
 
       <div className="bottom-stack battle">
         {driverError ? (
-          // The on-chain mirror stalled mid-turn: Fire is a no-op here (it's the
-          // bot's turn, or the shot hasn't landed), so offer a real retry that
-          // re-sends the pending shot and resumes the bot's reply.
+          // The on-chain mirror stalled mid-turn. The controller already retries
+          // automatically on a backoff (no tap needed); this button just lets an
+          // impatient player force an immediate retry — it re-sends the pending
+          // shot (idempotently) and resumes the bot's reply.
           <button
             className="btn fire wide"
             data-testid="resume-battle"

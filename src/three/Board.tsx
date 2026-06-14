@@ -106,7 +106,7 @@ function SealedCells({ shots }: { shots: ReadonlyArray<CellShot> }) {
   })
 
   return (
-    <instancedMesh ref={ref} args={[geometry, undefined, 100]}>
+    <instancedMesh ref={ref} args={[geometry, undefined, 100]} castShadow={false} receiveShadow={false}>
       <meshStandardMaterial
         ref={material}
         color="#0c151f"

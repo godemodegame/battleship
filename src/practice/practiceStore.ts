@@ -166,9 +166,9 @@ export function resetPracticeState() {
   })
 }
 
-/** Toast shown when an on-chain mirror write fails mid-battle (driver path). */
+/** Toast shown when an on-chain mirror write stalls; recovery is automatic. */
 function driverErrorToast(): Toast {
-  return { id: nextId++, text: botBattleCopy.syncFailed, tone: 'red' }
+  return { id: nextId++, text: botBattleCopy.reconnectingSub, tone: 'amber' }
 }
 
 /**
@@ -194,6 +194,10 @@ function driverOutcomeThunk(
         winner: outcome.result === 'won',
       }
     } catch (err) {
+      // Surface the real cause: the stall auto-recovers, but logging the error
+      // is the only way to diagnose *why* it stalled (RPC blip, dropped receipt,
+      // proof-fetch timeout, revert) since the UI just shows "Reconnecting".
+      console.warn('[bot-match] player shot stalled on-chain:', err)
       driver.onError?.(err instanceof Error ? err.message : String(err))
       return null
     }
@@ -323,6 +327,7 @@ export const useStore = create<AppState>((set, get) => {
         try {
           botCell = await battleDriver.resolveBotShot()
         } catch (err) {
+          console.warn('[bot-match] bot move stalled on-chain:', err)
           battleDriver.onError?.(err instanceof Error ? err.message : String(err))
           botCell = null
         } finally {
@@ -659,11 +664,17 @@ export function matchSummary(match: MatchState, forfeited: boolean) {
   }
   const shipsLeft = (side: Side) => {
     const board = match.boards[side]
-    if (board.ships.length > 0) return board.ships.filter((s) => !s.sunk).length
-    // Hidden enemy board (on-chain bot mode): no geometry, so count the ships
-    // the player sank from finalized shots instead.
-    const sunk = match.moves.filter((m) => m.by === 'player' && m.result === 'sunk').length
-    return Math.max(0, FLEET.length - sunk)
+    // A fully-known board (the player's, or an offline-practice bot) counts its
+    // own live hulls. The hidden enemy board's `ships` holds only reconstructed
+    // sunk hulls (for rendering), so derive remaining from FLEET minus the slots
+    // the attacker's finalized shots have sunk.
+    if (!board.hidden) return board.ships.filter((s) => !s.sunk).length
+    const attacker: Side = side === 'player' ? 'bot' : 'player'
+    const sunk = new Set<number>()
+    for (const m of match.moves) {
+      if (m.by === attacker && m.result === 'sunk' && m.shipSlot !== null) sunk.add(m.shipSlot)
+    }
+    return Math.max(0, FLEET.length - sunk.size)
   }
   return {
     winner: match.winner,
