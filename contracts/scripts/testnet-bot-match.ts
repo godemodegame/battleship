@@ -189,6 +189,19 @@ async function main(): Promise<void> {
     throw new Error(`expected bot turn, got ${match.currentTurn}`)
   }
 
+  // The exact read the frontend honest-UI bot battle now relies on: the player's
+  // hit/miss is the contract's decrypted result from getMove, never local state,
+  // so the player cannot know it before the tx (PvP parity).
+  const playerMove = await game.getMove(matchId, submitted.moveId)
+  console.log(
+    `player shot resolved via getMove: result ${playerMove.result}, sunkShipId ${playerMove.sunkShipId}, finalized ${playerMove.finalized}`,
+  )
+  if (!playerMove.finalized) throw new Error('player move not finalized in getMove')
+  // MISS_CELL is open water, so the decrypted result must be Miss (ShotResult 1).
+  if (Number(playerMove.result) !== 1) {
+    throw new Error(`expected player Miss(1) from getMove, got ${playerMove.result}`)
+  }
+
   // 4. THE BOT TURN: executeBotMove — contract picks the target (no cellIndex).
   const botReceipt = await measured('executeBotMove', () => game.executeBotMove(matchId))
   const botShot = parseEvent(game, botReceipt, 'ShotSubmitted')
