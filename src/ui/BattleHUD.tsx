@@ -1,17 +1,24 @@
 import { useState } from 'react'
 import { useStore } from '../practice/practiceStore'
-import { cellLabel } from '../game/constants'
-import type { BoardState, Side } from '../game/types'
+import { botBattleCopy } from '../copy/en'
+import { cellLabel, FLEET } from '../game/constants'
+import type { MatchState } from '../game/types'
 import { MuteButton } from './common'
 import { haptics } from '../lib/haptics'
 import { COMIC_SFX_URL } from '../lib/comicSfx'
 
-function FleetStrip({ board, label, enemy }: { board: BoardState; label: string; enemy?: boolean }) {
+interface StripShip {
+  slot: number
+  length: number
+  sunk: boolean
+}
+
+function FleetStrip({ ships, label, enemy }: { ships: StripShip[]; label: string; enemy?: boolean }) {
   return (
     <div className={`fleet-strip ${enemy ? 'enemy' : ''}`}>
       <span className="strip-label">{label}</span>
       <div className="strip-ships">
-        {board.ships.map((ship) => (
+        {ships.map((ship) => (
           <span key={ship.slot} className={`strip-ship ${ship.sunk ? 'sunk' : ''}`}>
             {Array.from({ length: ship.length }, (_, i) => (
               <i key={i} />
@@ -23,24 +30,49 @@ function FleetStrip({ board, label, enemy }: { board: BoardState; label: string;
   )
 }
 
+/**
+ * Enemy fleet pips, always the full FLEET so every ship shows from the start. A
+ * slot reads sunk once either the known board marks it sunk (offline practice)
+ * or a finalized player shot reported sinking it (on-chain bot mode, where only
+ * sunk hulls are ever revealed and the contract's sunkShipId maps 1:1 onto the
+ * FLEET slot). Robust whether or not the enemy board carries reconstructed hulls.
+ */
+function enemyStripShips(match: MatchState): StripShip[] {
+  const sunkSlots = new Set<number>()
+  for (const ship of match.boards.bot.ships) if (ship.sunk) sunkSlots.add(ship.slot)
+  for (const m of match.moves) {
+    if (m.by === 'player' && m.result === 'sunk' && m.shipSlot !== null) sunkSlots.add(m.shipSlot)
+  }
+  return FLEET.map((def) => ({
+    slot: def.slot,
+    length: def.length,
+    sunk: sunkSlots.has(def.slot),
+  }))
+}
+
 export function BattleHUD() {
   const match = useStore((s) => s.match)
   const busy = useStore((s) => s.busy)
+  const confirming = useStore((s) => s.confirming)
+  const driverError = useStore((s) => s.driverError)
   const selectedCell = useStore((s) => s.selectedCell)
   const fire = useStore((s) => s.fire)
+  const resumeBattle = useStore((s) => s.resumeBattle)
   const forfeit = useStore((s) => s.forfeit)
   const toast = useStore((s) => s.toast)
   const [confirmForfeit, setConfirmForfeit] = useState(false)
   if (!match) return null
 
-  const yourTurn = match.turn === 'player' && !busy && !match.winner
+  const yourTurn = match.turn === 'player' && !busy && !match.winner && !driverError
   const status: { text: string; tone: string } = match.winner
     ? { text: 'Match Over', tone: 'amber' }
-    : busy
-      ? match.turn === 'player'
-        ? { text: 'Resolving Shot', tone: 'amber' }
-        : { text: 'Opponent Turn', tone: 'red' }
-      : { text: 'Your Turn', tone: 'cyan' }
+    : driverError
+      ? { text: botBattleCopy.reconnectingStatus, tone: 'amber' }
+      : busy
+        ? match.turn === 'player'
+          ? { text: 'Resolving Shot', tone: 'amber' }
+          : { text: 'Opponent Turn', tone: 'red' }
+        : { text: 'Your Turn', tone: 'cyan' }
 
   const canFire = yourTurn && selectedCell !== null
 
@@ -52,14 +84,16 @@ export function BattleHUD() {
         </button>
         <div className="topbar-status">
           <span className={`status-label pulse-${status.tone}`}>{status.text}</span>
-          <span className="status-sub">Move {match.moves.length + 1}</span>
+          <span className="status-sub">
+            {confirming ? botBattleCopy.confirming : `Move ${match.moves.length + 1}`}
+          </span>
         </div>
         <MuteButton />
       </div>
 
       <div className="strips">
-        <FleetStrip board={match.boards.bot} label="Enemy fleet" enemy />
-        <FleetStrip board={match.boards.player} label="Your fleet" />
+        <FleetStrip ships={enemyStripShips(match)} label="Enemy fleet" enemy />
+        <FleetStrip ships={match.boards.player.ships} label="Your fleet" />
       </div>
 
       {toast && (
@@ -81,18 +115,35 @@ export function BattleHUD() {
       )}
 
       <div className="bottom-stack battle">
-        <button
-          className="btn fire wide"
-          onClick={() => {
-            // Prime audio context early from the actual click handler for reliable
-            // iOS Safari haptic unlock before the async fire() + later result haptics.
-            haptics.prime()
-            void fire()
-          }}
-          disabled={!canFire}
-        >
-          {canFire ? `Fire at ${cellLabel(selectedCell)}` : yourTurn ? 'Select a target cell' : status.text}
-        </button>
+        {driverError ? (
+          // The on-chain mirror stalled mid-turn. The controller already retries
+          // automatically on a backoff (no tap needed); this button just lets an
+          // impatient player force an immediate retry — it re-sends the pending
+          // shot (idempotently) and resumes the bot's reply.
+          <button
+            className="btn fire wide"
+            data-testid="resume-battle"
+            onClick={() => {
+              haptics.prime()
+              void resumeBattle()
+            }}
+          >
+            {botBattleCopy.retry}
+          </button>
+        ) : (
+          <button
+            className="btn fire wide"
+            onClick={() => {
+              // Prime audio context early from the actual click handler for reliable
+              // iOS Safari haptic unlock before the async fire() + later result haptics.
+              haptics.prime()
+              void fire()
+            }}
+            disabled={!canFire}
+          >
+            {canFire ? `Fire at ${cellLabel(selectedCell)}` : yourTurn ? 'Select a target cell' : status.text}
+          </button>
+        )}
       </div>
 
       {confirmForfeit && (
@@ -119,8 +170,4 @@ export function BattleHUD() {
       )}
     </div>
   )
-}
-
-export function sideName(side: Side) {
-  return side === 'player' ? 'You' : 'Bot'
 }

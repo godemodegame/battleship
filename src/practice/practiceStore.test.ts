@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { applyAttack, createMatch } from '../game/engine'
+import { applyAttack, createMatch, createMatchVsHiddenEnemy } from '../game/engine'
 import type { MatchState, Placement } from '../game/types'
 import { seededRandom } from '../test/gameFixtures'
 
@@ -286,6 +286,228 @@ describe('placement and match lifecycle', () => {
   })
 })
 
+describe('on-chain battle driver', () => {
+  beforeEach(() => {
+    vi.useFakeTimers()
+    mocks.chooseBotTarget.mockReset()
+    setPracticeRandomSource(seededRandom(1))
+    resetPracticeState()
+  })
+
+  afterEach(() => {
+    setPracticeRandomSource()
+    vi.useRealTimers()
+  })
+
+  it('takes the player result from the chain and the bot target from the driver', async () => {
+    startBattle(10)
+    // The player's result comes from the contract, never from local geometry.
+    const submitPlayerShot = vi.fn().mockResolvedValue({ result: 'miss', sunkShipSlot: null })
+    const resolveBotShot = vi.fn().mockResolvedValueOnce(0).mockResolvedValueOnce(10)
+    useStore.setState({ battleDriver: { submitPlayerShot, resolveBotShot } })
+
+    const firing = useStore.getState().fire()
+    await vi.runAllTimersAsync()
+    await firing
+
+    const state = useStore.getState()
+    expect(submitPlayerShot).toHaveBeenCalledWith(10)
+    // The local bot is never consulted on the driver path — the contract picks.
+    expect(mocks.chooseBotTarget).not.toHaveBeenCalled()
+    expect(resolveBotShot).toHaveBeenCalledTimes(2)
+    expect(state.match?.moves.map((m) => [m.by, m.result])).toEqual([
+      ['player', 'miss'],
+      ['bot', 'hit'],
+      ['bot', 'miss'],
+    ])
+    expect(state.match?.turn).toBe('player')
+    expect(state.busy).toBe(false)
+    expect(state.confirming).toBe(false)
+  })
+
+  it('resolves the player shot purely from the chain against a hidden enemy board', async () => {
+    // The on-chain bot match seeds a geometry-less enemy board: the result can
+    // only come from the contract, never from a local fleet lookup.
+    useStore.setState({
+      screen: 'battle',
+      match: createMatchVsHiddenEnemy(twoCellShip),
+      focus: 'enemy',
+      selectedCell: 42,
+      busy: false,
+      effects: [],
+      projectiles: [],
+      toast: null,
+      forfeited: false,
+    })
+    const submitPlayerShot = vi.fn().mockResolvedValue({ result: 'sunk', sunkShipSlot: 2 })
+    const resolveBotShot = vi.fn()
+    useStore.setState({ battleDriver: { submitPlayerShot, resolveBotShot } })
+
+    const firing = useStore.getState().fire()
+    await vi.runAllTimersAsync()
+    await firing
+
+    const state = useStore.getState()
+    expect(submitPlayerShot).toHaveBeenCalledWith(42)
+    expect(state.match?.boards.bot.shots[42]).toBe(3)
+    expect(state.match?.moves).toEqual([
+      { by: 'player', cell: 42, result: 'sunk', shipSlot: 2 },
+    ])
+    // A sunk keeps the turn with the player; the bot driver never ran.
+    expect(state.match?.turn).toBe('player')
+    expect(resolveBotShot).not.toHaveBeenCalled()
+    expect(state.busy).toBe(false)
+    expect(state.confirming).toBe(false)
+  })
+
+  it('does not run the bot driver when the player hits (player fires again)', async () => {
+    startBattle(0)
+    const submitPlayerShot = vi.fn().mockResolvedValue({ result: 'hit', sunkShipSlot: null })
+    const resolveBotShot = vi.fn()
+    useStore.setState({ battleDriver: { submitPlayerShot, resolveBotShot } })
+
+    const firing = useStore.getState().fire()
+    await vi.runAllTimersAsync()
+    await firing
+
+    expect(submitPlayerShot).toHaveBeenCalledWith(0)
+    expect(resolveBotShot).not.toHaveBeenCalled()
+    expect(useStore.getState().match?.turn).toBe('player')
+    expect(useStore.getState().busy).toBe(false)
+  })
+
+  it('routes forfeit through the driver and leaves the terminal state to the route', () => {
+    startBattle(0)
+    const forfeit = vi.fn().mockResolvedValue(undefined)
+    useStore.setState({
+      battleDriver: { submitPlayerShot: vi.fn(), resolveBotShot: vi.fn(), forfeit },
+    })
+
+    useStore.getState().forfeit()
+
+    expect(forfeit).toHaveBeenCalledTimes(1)
+    // No local game-over: the route refetch lands the contract summary.
+    expect(useStore.getState().screen).toBe('battle')
+    expect(useStore.getState().match?.winner).toBeNull()
+  })
+
+  it('aborts the turn and toasts when a shot fails on-chain', async () => {
+    startBattle(0)
+    const submitPlayerShot = vi.fn().mockRejectedValue(new Error('rpc down'))
+    const resolveBotShot = vi.fn()
+    useStore.setState({ battleDriver: { submitPlayerShot, resolveBotShot } })
+
+    const firing = useStore.getState().fire()
+    await vi.runAllTimersAsync()
+    await firing
+
+    const state = useStore.getState()
+    expect(state.busy).toBe(false)
+    expect(state.confirming).toBe(false)
+    // Amber, not red: the stall auto-recovers (the controller retries on a
+    // backoff), so it's a transient "reconnecting" state, not a dead error.
+    expect(state.toast?.tone).toBe('amber')
+    expect(state.driverError).toBe(true)
+    expect(resolveBotShot).not.toHaveBeenCalled()
+  })
+
+  it('recovers a stalled bot move via resumeBattle without re-sending the player shot', async () => {
+    startBattle(10)
+    const submitPlayerShot = vi.fn().mockResolvedValue({ result: 'miss', sunkShipSlot: null })
+    const resolveBotShot = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('rpc down')) // bot move stalls
+      .mockResolvedValueOnce(0) // resume: bot hits
+      .mockResolvedValueOnce(10) // resume: bot misses, turn passes back
+    useStore.setState({ battleDriver: { submitPlayerShot, resolveBotShot } })
+
+    const firing = useStore.getState().fire()
+    await vi.runAllTimersAsync()
+    await firing
+
+    // Stalled: the bot's turn is wedged, but the state is recoverable — not a
+    // dead end. The player's shot already landed, so there's no recovery cell.
+    let state = useStore.getState()
+    expect(state.driverError).toBe(true)
+    expect(state.busy).toBe(false)
+    expect(state.recoveryCell).toBeNull()
+    expect(state.toast?.tone).toBe('amber')
+    expect(state.match?.turn).toBe('bot')
+    expect(state.match?.moves.map((m) => [m.by, m.result])).toEqual([['player', 'miss']])
+
+    const resuming = useStore.getState().resumeBattle()
+    await vi.runAllTimersAsync()
+    await resuming
+
+    state = useStore.getState()
+    expect(state.driverError).toBe(false)
+    expect(state.busy).toBe(false)
+    expect(state.match?.turn).toBe('player')
+    expect(state.match?.moves.map((m) => [m.by, m.result])).toEqual([
+      ['player', 'miss'],
+      ['bot', 'hit'],
+      ['bot', 'miss'],
+    ])
+    // The player's shot was never re-sent — only the bot turn was resumed.
+    expect(submitPlayerShot).toHaveBeenCalledTimes(1)
+    expect(resolveBotShot).toHaveBeenCalledTimes(3)
+  })
+
+  it('re-sends a stalled player shot, then resumes the bot turn, via resumeBattle', async () => {
+    startBattle(10)
+    const submitPlayerShot = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('rpc down')) // the shot never lands
+      .mockResolvedValueOnce({ result: 'miss', sunkShipSlot: null }) // resume re-sends it
+    const resolveBotShot = vi.fn().mockResolvedValueOnce(0).mockResolvedValueOnce(10)
+    useStore.setState({ battleDriver: { submitPlayerShot, resolveBotShot } })
+
+    const firing = useStore.getState().fire()
+    await vi.runAllTimersAsync()
+    await firing
+
+    // The shot never resolved on-chain, so nothing is applied locally (no
+    // premature result): the turn stays with the player and the cell is
+    // remembered for Retry. The bot driver has not run yet.
+    let state = useStore.getState()
+    expect(state.driverError).toBe(true)
+    expect(state.recoveryCell).toBe(10)
+    expect(state.match?.turn).toBe('player')
+    expect(state.match?.moves).toEqual([])
+    expect(resolveBotShot).not.toHaveBeenCalled()
+
+    const resuming = useStore.getState().resumeBattle()
+    await vi.runAllTimersAsync()
+    await resuming
+
+    state = useStore.getState()
+    expect(submitPlayerShot).toHaveBeenCalledTimes(2)
+    expect(submitPlayerShot).toHaveBeenLastCalledWith(10)
+    expect(state.driverError).toBe(false)
+    expect(state.recoveryCell).toBeNull()
+    expect(state.busy).toBe(false)
+    expect(state.match?.turn).toBe('player')
+    expect(state.match?.moves.map((m) => [m.by, m.result])).toEqual([
+      ['player', 'miss'],
+      ['bot', 'hit'],
+      ['bot', 'miss'],
+    ])
+  })
+
+  it('ignores resumeBattle unless a stall is pending', async () => {
+    startBattle(10)
+    const submitPlayerShot = vi.fn()
+    const resolveBotShot = vi.fn()
+    useStore.setState({ battleDriver: { submitPlayerShot, resolveBotShot } })
+
+    await useStore.getState().resumeBattle()
+
+    expect(submitPlayerShot).not.toHaveBeenCalled()
+    expect(resolveBotShot).not.toHaveBeenCalled()
+    expect(useStore.getState().busy).toBe(false)
+  })
+})
+
 describe('matchSummary', () => {
   it('reports moves, rounded accuracy, ships left, and forfeit state', () => {
     const match: MatchState = createMatch(twoCellShip, twoCellShip)
@@ -308,5 +530,18 @@ describe('matchSummary', () => {
       playerShipsLeft: 1,
       botShipsLeft: 0,
     })
+  })
+
+  it('derives enemy ships-left from finalized player shots when geometry is hidden', () => {
+    const match = createMatchVsHiddenEnemy(twoCellShip)
+    match.moves = [
+      { by: 'player', cell: 0, result: 'sunk', shipSlot: 0 },
+      { by: 'player', cell: 1, result: 'hit', shipSlot: null },
+    ]
+
+    const summary = matchSummary(match, false)
+    // 10 enemy ships minus the one sunk; the player's own board still has its ship.
+    expect(summary.botShipsLeft).toBe(9)
+    expect(summary.playerShipsLeft).toBe(1)
   })
 })

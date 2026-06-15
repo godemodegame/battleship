@@ -48,15 +48,15 @@ export const resultCopy = {
 
 /** Wallet session + network copy (GAME-204 / GAME-207). */
 export const walletCopy = {
-  connect: 'Connect Wallet',
+  connect: 'Sign in',
   connecting: 'Connecting…',
-  disconnect: 'Disconnect',
+  disconnect: 'Sign out',
   networkBadge: 'Arbitrum Sepolia',
   walletLabel: 'Wallet',
   /** Truncate a checksum/lowercased address for display: 0x1234…abcd */
   shortAddress: (address: string) =>
     address.length > 10 ? `${address.slice(0, 6)}…${address.slice(-4)}` : address,
-  connectPrompt: 'Connect an external wallet on Arbitrum Sepolia to play on-chain.',
+  connectPrompt: 'Sign in with email, a social account, or a wallet to play on-chain.',
   configMissing:
     'Wallet connection is not configured in this build. Local practice still works.',
   wrongNetworkHeading: 'Wrong Network',
@@ -134,6 +134,119 @@ export const createMatchCopy = {
   validationInvalid: 'Invalid address.',
   validationSelf: 'You cannot invite yourself.',
   created: 'Match Created',
+  // Placement-first creation (GAME-505/506): arrange the fleet, then create the
+  // match and submit the encrypted fleet in one transaction.
+  placementTitle: 'Place Your Fleet',
+  placementHelper: 'Arrange your ships, then create the match and send your fleet.',
+  placementIncomplete: 'Place all ten ships before creating the match.',
+  createAndSubmit: 'Create Match & Send Fleet',
+  submittingFleet: 'Sending Fleet',
+} as const
+
+/** Open-match creation: host a game any random player can join (GAME random-mm). */
+export const openMatchCopy = {
+  kicker: 'Play a Random Opponent',
+  title: 'Host Open Game',
+  helper: 'Anyone can join this game. The first player to join becomes your opponent.',
+  placementTitle: 'Place Your Fleet',
+  placementHelper: 'Arrange your ships, then host the open game and send your fleet.',
+  placementIncomplete: 'Place all ten ships before hosting the game.',
+  createAndSubmit: 'Host Open Game & Send Fleet',
+  submittingFleet: 'Sending Fleet',
+} as const
+
+/** On-chain bot (single-player practice) match creation. */
+export const botMatchCopy = {
+  kicker: 'Practice vs Bot',
+  title: 'Play the Bot',
+  helper:
+    'A fully on-chain practice match against the hard computer opponent. Both fleets are encrypted on-chain and every shot is resolved by the contract.',
+  placementTitle: 'Place Your Fleet',
+  placementHelper: "Arrange your ships, then start the match — the bot's fleet is placed for you.",
+  placementIncomplete: 'Place all ten ships before starting the match.',
+  createAndSubmit: 'Start Bot Match',
+  submittingFleet: 'Starting Match',
+} as const
+
+/** Loading + status copy for the on-chain bot battle (3D, auto-chained txs). */
+export const botBattleCopy = {
+  preparingTitle: 'Preparing your encrypted battle',
+  preparingSub: 'Encrypting both fleets and opening the match on-chain…',
+  startingTitle: 'Starting the battle',
+  startingSub: 'Validating your fleet on-chain…',
+  warmingTitle: 'Securing the battlefield',
+  warmingSub: 'Preparing the encryption session…',
+  confirming: 'Confirming on-chain…',
+  // Full-screen overlays shown while a move settles on-chain (player + bot).
+  confirmingTitle: 'Confirming on-chain',
+  confirmingBotSub: 'The opponent fired — settling the result on-chain…',
+  resolvingTitle: 'Resolving shot',
+  resolvingSub: 'Your shot is landing on-chain…',
+  // Automatic recovery after an on-chain stall (no manual tap required).
+  reconnectingTitle: 'Reconnecting',
+  reconnectingStatus: 'Reconnecting…',
+  reconnectingSub: 'Lost the chain for a moment — retrying automatically.',
+  syncFailed: 'On-chain sync failed — tap Retry.',
+  stalledStatus: 'Sync Stalled',
+  retry: 'Retry now',
+} as const
+
+/** Open-match lobby ("Find a Game") + Quick Match (random matchmaking). */
+export const lobbyCopy = {
+  kicker: 'Random Matchmaking',
+  title: 'Find a Game',
+  menuEntry: 'Find a Game',
+  quickMatch: 'Quick Match',
+  quickMatchSearching: 'Finding a Game…',
+  hostNew: 'Host Open Game',
+  sectionJoinable: 'Open Games',
+  sectionMine: 'Your Open Game',
+  joinLabel: 'Join',
+  hostedBy: 'Hosted by',
+  waitingForYou: 'Waiting for a challenger',
+  empty: 'No open games right now. Host one and wait for a challenger.',
+  emptyCta: 'Host Open Game',
+  loading: 'Loading open games…',
+  loadError: 'Could not load open games.',
+  partialError: 'Some games failed to load.',
+  retry: 'Retry',
+  refresh: 'Refresh',
+  back: 'Back',
+  connectPrompt: 'Connect your wallet to find a game.',
+  // Quick Match navigates to the oldest joinable game, or hosts one if none.
+  quickMatchHosting: 'No open game found — hosting one for you.',
+} as const
+
+/** Wallet-scoped match list ("My Battles"). */
+export const matchListCopy = {
+  kicker: 'On-chain Battles',
+  title: 'My Battles',
+  menuEntry: 'My Battles',
+  sectionWaiting: 'Waiting for Opponent',
+  sectionActive: 'In Progress',
+  sectionFinished: 'Finished',
+  roleCreator: 'You created',
+  roleJoiner: 'You joined',
+  opponentLabel: 'vs',
+  noOpponentYet: 'No opponent yet',
+  statusPlacement: 'Placing Fleet',
+  statusStarting: 'Starting Match',
+  resultWon: 'Won',
+  resultLost: 'Lost',
+  open: 'Open',
+  empty: 'No battles yet. Create a match to start one.',
+  emptyCta: 'Play Against Friend',
+  loading: 'Loading battles…',
+  loadError: 'Could not load your battles.',
+  partialError: 'Some battles failed to load.',
+  retry: 'Retry',
+  loadMore: 'Load Older Battles',
+  loadingMore: 'Loading…',
+  back: 'Back',
+  connectPrompt: 'Connect your wallet to see your battles.',
+  // The contract indexes matches at create/join; an invite a wallet never
+  // joined only surfaces through its invite link.
+  invitedNote: 'Invites you have not joined appear once you join them.',
 } as const
 
 /** Invite link sharing + creator waiting state (GAME-506/508, Flow 7). */
@@ -148,16 +261,27 @@ export const inviteCopy = {
   share: 'Share Invite',
   cancelMatch: 'Cancel Match',
   cancelling: 'Cancelling Match',
+  // Open-match host waiting for any challenger (random matchmaking).
+  openWaitingTitle: 'Waiting for a Challenger',
+  openWaitingBody: 'This is an open game. The match starts as soon as any player joins.',
 } as const
 
 /** Invited-wallet join flow (GAME-507, Flow 8). */
 export const joinCopy = {
   title: 'Join Match',
   invitedBody: 'You are invited to this match. Join to place your fleet.',
+  // Open match (random matchmaking): no invite, any player may join.
+  openTitle: 'Join Open Game',
+  openBody: 'This is an open game. Place your fleet to join and start the battle.',
   creatorLabel: 'Created by',
-  join: 'Join Match',
-  joining: 'Joining Match',
   wrongWallet: 'This invite is for another wallet.',
+  // Placement-first join (GAME-507): arrange the fleet, then join and submit the
+  // encrypted fleet in one transaction.
+  placementTitle: 'Place Your Fleet',
+  placementHelper: 'Arrange your ships, then join the match and send your fleet.',
+  placementIncomplete: 'Place all ten ships before joining the match.',
+  joinAndSubmit: 'Join & Send Fleet',
+  submittingFleet: 'Sending Fleet',
 } as const
 
 /** Encrypted on-chain fleet placement (GAME-602..611). */
@@ -203,6 +327,8 @@ export const battleCopy = {
   fireAt: (cell: string) => `Fire at ${cell}`,
   selectTarget: 'Select a target cell',
   opponentTurn: 'Waiting for the opponent to fire.',
+  botTurnTitle: "Opponent's turn",
+  advanceBotTurn: 'Advance Opponent Turn',
   firing: 'Sending Attack',
   resolvingTitle: 'Resolving Shot',
   resolvingBody:

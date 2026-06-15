@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import { WalletSessionBar } from './WalletSessionBar'
 import { DISCONNECTED_SESSION, type WalletSession } from './session'
+import { walletCopy } from '../../copy/en'
 
 const READY: WalletSession = {
   status: 'ready',
@@ -23,7 +24,7 @@ describe('WalletSessionBar', () => {
       />,
     )
     const btn = screen.getByTestId('wallet-connect')
-    expect(btn.textContent).toBe('Connect Wallet')
+    expect(btn.textContent).toBe(walletCopy.connect)
     await userEvent.click(btn)
     expect(onConnect).toHaveBeenCalledOnce()
   })

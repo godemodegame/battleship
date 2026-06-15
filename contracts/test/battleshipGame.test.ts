@@ -70,6 +70,12 @@ async function joinedMatchFixture() {
   return base
 }
 
+async function createdOpenMatchFixture() {
+  const base = await deployGameFixture()
+  await base.game.connect(base.creator).createOpenMatch()
+  return { ...base, matchId: 1n }
+}
+
 describe('BattleshipGame public lifecycle', () => {
   describe('constants', () => {
     it('exposes the board and timeout configuration from the data model', async () => {
@@ -238,6 +244,156 @@ describe('BattleshipGame public lifecycle', () => {
       await expect(game.connect(friend).joinMatch(matchId)).to.be.revertedWithCustomError(
         game,
         'InvalidMatchStatus',
+      )
+    })
+  })
+
+  describe('open matchmaking', () => {
+    it('creates an open match joinable by anyone, with no invited opponent', async () => {
+      const { game, creator } = await loadFixture(deployGameFixture)
+
+      await expect(game.connect(creator).createOpenMatch())
+        .to.emit(game, 'MatchCreated')
+        .withArgs(1n, creator.address, ZERO_ADDRESS)
+
+      const createdAt = BigInt(await time.latest())
+      const view = await game.getMatch(1n)
+      expect(view.id).to.equal(1n)
+      expect(view.matchType).to.equal(MatchType.Open)
+      expect(view.status).to.equal(MatchStatus.WaitingForOpponent)
+      expect(view.creator).to.equal(creator.address)
+      expect(view.opponent).to.equal(ZERO_ADDRESS)
+      expect(view.invitedOpponent).to.equal(ZERO_ADDRESS)
+      expect(view.timeoutState.joinDeadline).to.equal(createdAt + DAY)
+
+      const [creatorView] = await game.getPlayers(1n)
+      expect(creatorView.player).to.equal(creator.address)
+      expect(creatorView.joined).to.equal(true)
+      expect(creatorView.placementStatus).to.equal(PlacementStatus.NotSubmitted)
+    })
+
+    it('indexes a new open match in the lobby view', async () => {
+      const { game, matchId } = await loadFixture(createdOpenMatchFixture)
+      expect(await game.getOpenMatchCount()).to.equal(1n)
+      expect(await game.getOpenMatches(0, 50)).to.deep.equal([matchId])
+    })
+
+    it('does not index strict friend matches in the lobby view', async () => {
+      const { game, creator, friend } = await loadFixture(deployGameFixture)
+      await game.connect(creator).createMatch(friend.address)
+      expect(await game.getOpenMatchCount()).to.equal(0n)
+      expect(await game.getOpenMatches(0, 50)).to.deep.equal([])
+    })
+
+    it('lets any non-invited wallet join an open match', async () => {
+      const { game, outsider, matchId } = await loadFixture(createdOpenMatchFixture)
+
+      await expect(game.connect(outsider).joinMatch(matchId))
+        .to.emit(game, 'MatchJoined')
+        .withArgs(matchId, outsider.address)
+
+      const view = await game.getMatch(matchId)
+      expect(view.status).to.equal(MatchStatus.WaitingForPlacement)
+      expect(view.opponent).to.equal(outsider.address)
+
+      // The match has left WaitingForOpponent and is dropped from the lobby.
+      expect(await game.getOpenMatchCount()).to.equal(0n)
+      expect(await game.getOpenMatches(0, 50)).to.deep.equal([])
+    })
+
+    it('rejects the creator joining their own open match', async () => {
+      const { game, creator, matchId } = await loadFixture(createdOpenMatchFixture)
+      await expect(game.connect(creator).joinMatch(matchId)).to.be.revertedWithCustomError(
+        game,
+        'CreatorCannotJoinOwnMatch',
+      )
+    })
+
+    it('rejects a second join after an open match is filled', async () => {
+      const { game, friend, outsider, matchId } = await loadFixture(createdOpenMatchFixture)
+      await game.connect(friend).joinMatch(matchId)
+      await expect(game.connect(outsider).joinMatch(matchId)).to.be.revertedWithCustomError(
+        game,
+        'OpponentAlreadyJoined',
+      )
+    })
+
+    it('tracks two independent open matches and keeps both joinable', async () => {
+      const { game, creator, friend, outsider } = await loadFixture(deployGameFixture)
+      await game.connect(creator).createOpenMatch()
+      await game.connect(friend).createOpenMatch()
+
+      expect(await game.getOpenMatchCount()).to.equal(2n)
+      expect(await game.getOpenMatches(0, 50)).to.deep.equal([1n, 2n])
+
+      // A stranger joins the first; only the second remains joinable.
+      await game.connect(outsider).joinMatch(1n)
+      expect(await game.getOpenMatchCount()).to.equal(1n)
+      expect(await game.getOpenMatches(0, 50)).to.deep.equal([2n])
+    })
+
+    it('lets the creator cancel an open match and drops it from the lobby', async () => {
+      const { game, creator, matchId } = await loadFixture(createdOpenMatchFixture)
+      await expect(game.connect(creator).cancelMatch(matchId))
+        .to.emit(game, 'MatchCancelled')
+        .withArgs(matchId)
+      expect(await game.getOpenMatchCount()).to.equal(0n)
+      expect(await game.getOpenMatches(0, 50)).to.deep.equal([])
+    })
+
+    it('rejects a non-creator cancelling an open match', async () => {
+      const { game, outsider, matchId } = await loadFixture(createdOpenMatchFixture)
+      await expect(game.connect(outsider).cancelMatch(matchId)).to.be.revertedWithCustomError(
+        game,
+        'OnlyCreator',
+      )
+    })
+
+    it('rejects joining an open match after the join deadline, leaving cancel as recovery', async () => {
+      const { game, creator, outsider, matchId } = await loadFixture(createdOpenMatchFixture)
+      await time.increase(DAY + 1n)
+      await expect(game.connect(outsider).joinMatch(matchId)).to.be.revertedWithCustomError(
+        game,
+        'JoinDeadlineExpired',
+      )
+      // The creator can still reclaim the expired open match.
+      await expect(game.connect(creator).cancelMatch(matchId)).to.emit(game, 'MatchCancelled')
+      expect(await game.getOpenMatchCount()).to.equal(0n)
+    })
+
+    it('removes the middle of three open matches without corrupting the index', async () => {
+      const { game, creator, friend, outsider } = await loadFixture(deployGameFixture)
+      await game.connect(creator).createOpenMatch() // id 1
+      await game.connect(friend).createOpenMatch() // id 2
+      await game.connect(outsider).createOpenMatch() // id 3
+
+      // Cancel the middle entry; swap-pop moves id 3 into its slot.
+      await game.connect(friend).cancelMatch(2n)
+      expect(await game.getOpenMatchCount()).to.equal(2n)
+      expect(await game.getOpenMatches(0, 50)).to.deep.equal([1n, 3n])
+
+      // The surviving ids stay independently joinable.
+      await game.connect(friend).joinMatch(3n)
+      expect(await game.getOpenMatches(0, 50)).to.deep.equal([1n])
+    })
+
+    it('paginates the open-match lobby and enforces the page cap', async () => {
+      const { game, creator } = await loadFixture(deployGameFixture)
+      await game.connect(creator).createOpenMatch()
+      await game.connect(creator).createOpenMatch()
+      await game.connect(creator).createOpenMatch()
+
+      expect(await game.getOpenMatchCount()).to.equal(3n)
+      expect(await game.getOpenMatches(0, 2)).to.deep.equal([1n, 2n])
+      expect(await game.getOpenMatches(2, 2)).to.deep.equal([3n])
+      expect(await game.getOpenMatches(3, 2)).to.deep.equal([])
+      await expect(game.getOpenMatches(0, 0)).to.be.revertedWithCustomError(
+        game,
+        'InvalidPaginationLimit',
+      )
+      await expect(game.getOpenMatches(0, 51)).to.be.revertedWithCustomError(
+        game,
+        'InvalidPaginationLimit',
       )
     })
   })

@@ -48,6 +48,7 @@ export function WrongNetworkPanel({
       <div className="home-actions">
         <button
           className="btn primary"
+          data-ic="switch"
           data-testid="wrong-network-switch"
           onClick={onSwitch}
           disabled={switching}

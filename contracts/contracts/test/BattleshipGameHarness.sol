@@ -34,4 +34,24 @@ contract BattleshipGameHarness is BattleshipGame {
         m.currentTurn = m.opponent;
         m.timeoutState.turnDeadline = nowTs + TURN_TIMEOUT;
     }
+
+    /// @dev Expose the pure hard-bot target selector for deterministic tests.
+    function exposeChooseBotTarget(
+        uint128 attacked,
+        uint128 missMask,
+        uint128 hitMask,
+        uint128 sunkMask,
+        uint16 sunkShips,
+        uint256 seed
+    ) external pure returns (uint8 target, bool found) {
+        return _chooseBotTarget(attacked, missMask, hitMask, sunkMask, sunkShips, seed);
+    }
+
+    /// @dev Expose the sunk-hull reconstruction for deterministic tests.
+    function exposeExpandSunk(
+        uint128 sunkMask,
+        uint128 hitMask
+    ) external pure returns (uint128) {
+        return _expandSunk(sunkMask, hitMask);
+    }
 }

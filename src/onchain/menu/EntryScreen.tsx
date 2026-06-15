@@ -49,6 +49,7 @@ export function EntryScreen() {
         ) : (
           <button
             className="btn primary"
+            data-ic="login"
             data-testid="entry-connect"
             disabled={connecting}
             onClick={wallet.actions.connect}

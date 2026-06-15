@@ -1,4 +1,4 @@
-import { CELL_COUNT, FLEET } from './constants'
+import { BOARD_SIZE, CELL_COUNT, FLEET, cellIndex } from './constants'
 import { neighborhood, shipCells } from './board'
 import type {
   BoardState,
@@ -48,7 +48,144 @@ export function createMatch(
   }
 }
 
-export const otherSide = (side: Side): Side => (side === 'player' ? 'bot' : 'player')
+/** A board with no known geometry: only shot markers ever land on it. */
+export function emptyBoard(): BoardState {
+  return {
+    ships: [],
+    shipAt: new Array<number>(CELL_COUNT).fill(-1),
+    shots: new Array<CellShot>(CELL_COUNT).fill(0),
+    hidden: true,
+  }
+}
+
+/**
+ * A match whose enemy fleet is hidden from this client (on-chain bot mode): the
+ * player's own board is fully known, but the opponent board carries no ship
+ * geometry. Every player→enemy shot is resolved from the chain and applied with
+ * `applyResolvedShot`, so the client can never know a hit/miss before the tx —
+ * exactly like a human opponent in PvP.
+ */
+export function createMatchVsHiddenEnemy(
+  playerPlacements: Placement[],
+  firstTurn: Side = 'player',
+): MatchState {
+  return {
+    boards: { player: buildBoard(playerPlacements), bot: emptyBoard() },
+    turn: firstTurn,
+    moves: [],
+    winner: null,
+  }
+}
+
+/** A shot outcome decided elsewhere (the chain), not by local fleet geometry. */
+export interface ResolvedShot {
+  result: ShotResult
+  /** FLEET slot of the ship this shot sank, or null when nothing sank. */
+  shipSlot: number | null
+  /** True when this shot ended the match for the attacker. */
+  winner: boolean
+}
+
+/** Orthogonally-connected run of hit/sunk cells through `from` (one ship). */
+function connectedHitRun(shots: ReadonlyArray<CellShot>, from: number): number[] {
+  const run: number[] = []
+  const seen = new Set<number>()
+  const stack = [from]
+  while (stack.length > 0) {
+    const c = stack.pop()!
+    if (seen.has(c) || (shots[c] !== 2 && shots[c] !== 3)) continue
+    seen.add(c)
+    run.push(c)
+    const row = Math.floor(c / BOARD_SIZE)
+    const col = c % BOARD_SIZE
+    if (row > 0) stack.push(cellIndex(row - 1, col))
+    if (row < BOARD_SIZE - 1) stack.push(cellIndex(row + 1, col))
+    if (col > 0) stack.push(cellIndex(row, col - 1))
+    if (col < BOARD_SIZE - 1) stack.push(cellIndex(row, col + 1))
+  }
+  return run.sort((a, b) => a - b)
+}
+
+/** First FLEET def of a given length, for the rare null sunkShipSlot. */
+function fleetByLength(length: number) {
+  return FLEET.find((def) => def.length === length) ?? FLEET[FLEET.length - 1]
+}
+
+/**
+ * Reveal a just-sunk enemy ship on the otherwise-hidden board. The ship's
+ * footprint is reconstructed purely from public shot markers — the connected run
+ * of hit/sunk cells through the final cell, which the no-touch rule guarantees is
+ * exactly one ship — so this leaks nothing the player couldn't already deduce.
+ * The reconstructed hull is appended (sunk) so the scene renders its destroyed
+ * model, the whole run reads as sunk, and the no-touch halo is marked as misses.
+ */
+function revealSunkEnemyShip(
+  board: BoardState,
+  finalCell: number,
+  shipSlot: number | null,
+): BoardState {
+  const cells = connectedHitRun(board.shots, finalCell)
+  const rows = cells.map((c) => Math.floor(c / BOARD_SIZE))
+  const cols = cells.map((c) => c % BOARD_SIZE)
+  const orientation: 'h' | 'v' = new Set(rows).size === 1 ? 'h' : 'v'
+  const def = shipSlot !== null ? FLEET[shipSlot] : fleetByLength(cells.length)
+
+  const shots = board.shots.slice()
+  for (const c of cells) shots[c] = 3
+  const ships = board.ships.slice()
+  const shipAt = board.shipAt.slice()
+  const shipIndex = ships.length
+  ships.push({
+    slot: def.slot,
+    classId: def.classId,
+    label: def.label,
+    length: cells.length,
+    row: Math.min(...rows),
+    col: Math.min(...cols),
+    orientation,
+    cells,
+    hitMask: (1 << cells.length) - 1,
+    sunk: true,
+  })
+  for (const c of cells) shipAt[c] = shipIndex
+  const next: BoardState = { ...board, ships, shipAt, shots }
+  markSunkHaloMisses(shots, next, shipIndex)
+  return next
+}
+
+/**
+ * Apply a chain-decided result of a player's shot to the hidden enemy board.
+ * Unlike `applyShot`, it never consults a known fleet (there is none) — it stamps
+ * the cell marker (miss/hit/sunk) and threads the turn + winner the contract
+ * reported. On a sink it additionally reveals the ship's destroyed hull and the
+ * no-touch halo, reconstructed from the now-public markers (see
+ * `revealSunkEnemyShip`), so the player never learned geometry before the kill.
+ */
+export function applyResolvedShot(
+  match: MatchState,
+  cell: number,
+  resolved: ResolvedShot,
+): { match: MatchState; move: Move } {
+  const board = match.boards.bot
+  const shots = board.shots.slice()
+  shots[cell] = resolved.result === 'miss' ? 1 : resolved.result === 'hit' ? 2 : 3
+  const move: Move = { by: 'player', cell, result: resolved.result, shipSlot: resolved.shipSlot }
+  const nextBoard =
+    resolved.result === 'sunk'
+      ? revealSunkEnemyShip({ ...board, shots }, cell, resolved.shipSlot)
+      : { ...board, shots }
+  return {
+    match: {
+      boards: { ...match.boards, bot: nextBoard },
+      turn: resolved.result === 'miss' ? 'bot' : 'player',
+      moves: [...match.moves, move],
+      winner: resolved.winner ? 'player' : null,
+    },
+    move,
+  }
+}
+
+const otherSide = (side: Side): Side => (side === 'player' ? 'bot' : 'player')
 
 /** Adjacent cells that are empty or belong to a different ship (classic no-touch halo). */
 function haloCellsAroundShip(board: BoardState, shipIndex: number): number[] {
@@ -102,9 +239,9 @@ function applyShot(board: BoardState, cell: number): { board: BoardState; result
   }
 }
 
-export const allSunk = (board: BoardState) => board.ships.every((s) => s.sunk)
+const allSunk = (board: BoardState) => board.ships.every((s) => s.sunk)
 
-export const isAttacked = (board: BoardState, cell: number) => board.shots[cell] !== 0
+const isAttacked = (board: BoardState, cell: number) => board.shots[cell] !== 0
 
 /**
  * Resolve an attack by `by` against the opposing board. Returns a new match

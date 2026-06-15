@@ -11,7 +11,6 @@
 
 import { render } from '@testing-library/react'
 import { MemoryRouter, Routes } from 'react-router-dom'
-import type { ReactElement } from 'react'
 import { vi } from 'vitest'
 import { appRoutes } from '../app/routes/appRoutes'
 import type {
@@ -52,6 +51,8 @@ import {
 export const CREATOR = '0xaaaa000000000000000000000000000000000001' as HexAddress
 export const INVITED = '0xbbbb000000000000000000000000000000000002' as HexAddress
 export const STRANGER = '0xcccc000000000000000000000000000000000003' as HexAddress
+/** Virtual bot opponent sentinel — mirrors BattleshipGame.BOT_OPPONENT. */
+export const BOT_OPPONENT = '0x0000000000000000000000000000000000000b07' as HexAddress
 export const CONTRACT_ADDRESS = '0xdddd000000000000000000000000000000000004' as HexAddress
 export const TX_HASH = '0xeeee000000000000000000000000000000000000000000000000000000000005' as const
 
@@ -162,6 +163,11 @@ export function emptyPlayerView(
 export interface FakeContract {
   /** Current single match state (this fake hosts at most one match). */
   match: ChainMatchView | null
+  /**
+   * Per-address indexed match ids, oldest first — mirrors the contract's
+   * `playerMatchIds` (pushed at create and join).
+   */
+  playerMatchIds: Map<string, bigint[]>
   /** Public per-player boards, mirrored into getPlayers reads. */
   players: MatchPlayersView | null
   /** Public move history, oldest first. */
@@ -192,6 +198,16 @@ export function makeFakeContract(): FakeContract {
   const watchers = new Map<string, (events: MatchEventRef[]) => void>()
   let watcherSeq = 0
 
+  const playerMatchIds = new Map<string, bigint[]>()
+  const indexMatchFor = (player: HexAddress, id: bigint) => {
+    const key = player.toLowerCase()
+    const ids = playerMatchIds.get(key) ?? []
+    if (!ids.includes(id)) {
+      ids.push(id)
+      playerMatchIds.set(key, ids)
+    }
+  }
+
   const walk = (onState: (s: TxState) => void) => {
     onState({ phase: 'wallet', hash: null, replaced: false, error: null })
     onState({ phase: 'pending', hash: TX_HASH, replaced: false, error: null })
@@ -200,6 +216,7 @@ export function makeFakeContract(): FakeContract {
 
   const fake: FakeContract = {
     match: null,
+    playerMatchIds,
     players: null,
     moves: [],
     pendingShot: null,
@@ -221,6 +238,8 @@ export function makeFakeContract(): FakeContract {
     startBattle(options = {}) {
       const currentTurn = options.currentTurn ?? INVITED
       const nowTs = Math.floor(Date.now() / 1000)
+      indexMatchFor(CREATOR, 1n)
+      indexMatchFor(INVITED, 1n)
       fake.match = {
         deploymentId: DEPLOYMENT_ID,
         matchId: '1',
@@ -260,6 +279,20 @@ export function makeFakeContract(): FakeContract {
         if (!fake.match || fake.match.matchIdBig !== matchId) return null
         return { ...fake.match }
       },
+      async getPlayerMatchCount(player: HexAddress) {
+        return fake.playerMatchIds.get(player.toLowerCase())?.length ?? 0
+      },
+      async getPlayerMatches(player: HexAddress, offset: number, limit: number) {
+        // Mirrors the contract's InvalidPaginationLimit guard (MAX_PAGE_LIMIT
+        // 50), in the decoded-custom-error shape viem reverts carry.
+        if (limit === 0 || limit > 50) {
+          throw Object.assign(new Error('InvalidPaginationLimit'), {
+            data: { errorName: 'InvalidPaginationLimit' },
+          })
+        }
+        const ids = fake.playerMatchIds.get(player.toLowerCase()) ?? []
+        return ids.slice(offset, offset + limit)
+      },
       async getPlayers() {
         const players = fake.players ?? {
           creator: emptyPlayerView(fake.match?.creator ?? null),
@@ -272,6 +305,10 @@ export function makeFakeContract(): FakeContract {
       },
       async getMoveHistory() {
         return fake.moves.map((move) => ({ ...move }))
+      },
+      async getMove(_matchId: bigint, moveId: number) {
+        const move = fake.moves.find((entry) => entry.moveId === moveId)
+        return move ? { ...move } : null
       },
       async getPendingShot() {
         return fake.pendingShot ? { ...fake.pendingShot } : null
@@ -317,6 +354,81 @@ export function makeFakeContract(): FakeContract {
               resolvingDeadline: 0,
             },
           }
+          indexMatchFor(account, 1n)
+          fake.emit('MatchCreated')
+          return { ok: true, hash: TX_HASH, matchId: 1n }
+        },
+
+        async createWithFleet(invitedOpponent, _segments, onState) {
+          walk(onState)
+          fake.match = {
+            deploymentId: DEPLOYMENT_ID,
+            matchId: '1',
+            matchIdBig: 1n,
+            status: 'WaitingForOpponent',
+            matchType: 'Friend',
+            creator: account,
+            opponent: null,
+            invitedOpponent,
+            currentTurn: null,
+            winner: null,
+            createdAt: 1_000,
+            joinedAt: 0,
+            startedAt: 0,
+            finishedAt: 0,
+            lastActionAt: 1_000,
+            moveCount: 0,
+            pendingMoveId: 0,
+            deadlines: {
+              joinDeadline: Math.floor(Date.now() / 1000) + DAY,
+              placementDeadline: 0,
+              turnDeadline: 0,
+              resolvingDeadline: 0,
+            },
+          }
+          indexMatchFor(account, 1n)
+          fake.emit('MatchCreated')
+          return { ok: true, hash: TX_HASH, matchId: 1n }
+        },
+
+        async createBotMatch(_playerSegments, _botSegments, onState) {
+          walk(onState)
+          // The bot fleet is valid on creation and the player moves first, so
+          // the match lands InProgress directly (the validation phase is shared
+          // with PvP and covered elsewhere).
+          const nowTs = Math.floor(Date.now() / 1000)
+          fake.match = {
+            deploymentId: DEPLOYMENT_ID,
+            matchId: '1',
+            matchIdBig: 1n,
+            status: 'InProgress',
+            matchType: 'Bot',
+            creator: account,
+            opponent: BOT_OPPONENT,
+            invitedOpponent: null,
+            currentTurn: account,
+            winner: null,
+            createdAt: nowTs - 5,
+            joinedAt: nowTs - 5,
+            startedAt: nowTs,
+            finishedAt: 0,
+            lastActionAt: nowTs,
+            moveCount: 0,
+            pendingMoveId: 0,
+            deadlines: {
+              joinDeadline: 0,
+              placementDeadline: 0,
+              turnDeadline: nowTs + DAY,
+              resolvingDeadline: 0,
+            },
+          }
+          fake.players = {
+            creator: emptyPlayerView(account, 'Valid'),
+            opponent: emptyPlayerView(BOT_OPPONENT, 'Valid'),
+          }
+          fake.moves = []
+          fake.pendingShot = null
+          indexMatchFor(account, 1n)
           fake.emit('MatchCreated')
           return { ok: true, hash: TX_HASH, matchId: 1n }
         },
@@ -330,6 +442,22 @@ export function makeFakeContract(): FakeContract {
               status: 'WaitingForPlacement',
               joinedAt: 2_000,
             }
+            indexMatchFor(account, matchId)
+            fake.emit('MatchJoined')
+          }
+          return { ok: true, hash: TX_HASH }
+        },
+
+        async joinWithFleet(matchId, _segments, onState) {
+          walk(onState)
+          if (fake.match && fake.match.matchIdBig === matchId) {
+            fake.match = {
+              ...fake.match,
+              opponent: account,
+              status: 'ValidatingPlacement',
+              joinedAt: 2_000,
+            }
+            indexMatchFor(account, matchId)
             fake.emit('MatchJoined')
           }
           return { ok: true, hash: TX_HASH }
@@ -396,6 +524,60 @@ export function makeFakeContract(): FakeContract {
             moveId,
             attacker: account,
             defender,
+            cellIndex,
+            resultCtHash: BigInt(moveId * 2 + 1),
+            sunkShipCtHash: BigInt(moveId * 2 + 2),
+            submittedAt: nowTs,
+          }
+          fake.match = {
+            ...m,
+            status: 'ResolvingShot',
+            moveCount: moveId,
+            pendingMoveId: moveId,
+          }
+          fake.emit('ShotSubmitted')
+          return { ok: true, hash: TX_HASH }
+        },
+
+        async executeBotMove(matchId, onState) {
+          walk(onState)
+          const m = fake.match
+          if (!m || m.matchIdBig !== matchId || m.status !== 'InProgress') {
+            return { ok: false, error: 'invalid-status' }
+          }
+          if (m.matchType !== 'Bot') return { ok: false, error: 'invalid-status' }
+          if (m.currentTurn !== BOT_OPPONENT) return { ok: false, error: 'not-your-turn' }
+
+          // The bot attacks the human (creator); the contract picks the target,
+          // here just the first untried cell on the player's board.
+          const defenderSlot = fake.players!.creator
+          let cellIndex = 0
+          while (
+            cellIndex < 100 &&
+            defenderSlot.publicBoard.attackedMask & (1n << BigInt(cellIndex))
+          ) {
+            cellIndex++
+          }
+          defenderSlot.publicBoard.attackedMask |= 1n << BigInt(cellIndex)
+
+          const nowTs = Math.floor(Date.now() / 1000)
+          const moveId = m.moveCount + 1
+          fake.moves.push({
+            moveId,
+            attacker: BOT_OPPONENT,
+            defender: m.creator!,
+            cellIndex,
+            result: 'None',
+            sunkShipId: 0,
+            submittedAt: nowTs,
+            resolvedAt: 0,
+            finalized: false,
+          })
+          fake.pendingShot = {
+            exists: true,
+            moveId,
+            attacker: BOT_OPPONENT,
+            defender: m.creator!,
             cellIndex,
             resultCtHash: BigInt(moveId * 2 + 1),
             sunkShipCtHash: BigInt(moveId * 2 + 2),
@@ -519,32 +701,6 @@ export function renderApp({
           <MemoryRouter initialEntries={[route]}>
             <Routes>{appRoutes}</Routes>
           </MemoryRouter>
-        </BattleshipClientsOverrideContext.Provider>
-      </CofheClientFactoryContext.Provider>
-    </WalletSessionContext.Provider>,
-  )
-}
-
-/** Mount an arbitrary element with the same providers (for single screens). */
-export function renderWithProviders(
-  ui: ReactElement,
-  {
-    wallet,
-    clients = null,
-    route = '/',
-    cofheFactory = makeFakeCofheFactory(),
-  }: {
-    wallet: WalletContextValue
-    clients?: BattleshipClients | null
-    route?: string
-    cofheFactory?: CofheClientFactory
-  },
-) {
-  return render(
-    <WalletSessionContext.Provider value={wallet}>
-      <CofheClientFactoryContext.Provider value={cofheFactory}>
-        <BattleshipClientsOverrideContext.Provider value={clients ? () => clients : null}>
-          <MemoryRouter initialEntries={[route]}>{ui}</MemoryRouter>
         </BattleshipClientsOverrideContext.Provider>
       </CofheClientFactoryContext.Provider>
     </WalletSessionContext.Provider>,

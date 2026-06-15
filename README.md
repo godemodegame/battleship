@@ -12,9 +12,11 @@ All project documentation, game UI text, player-facing copy, errors, labels, and
 
 The repository contains the complete local practice game and the implemented
 on-chain friend-match client/contract stack through Phase 9. Practice remains
-wallet-free. On-chain routes support Privy external wallets, Arbitrum Sepolia,
-strict friend invites, encrypted fleet submission, contract-derived battle
-results, recovery, and terminal states.
+wallet-free. On-chain routes support Privy sign-in with an external wallet or
+social/email (which mints a Privy embedded wallet), Arbitrum Sepolia, gasless
+sponsored writes for embedded wallets (EIP-7702), strict friend invites,
+encrypted fleet submission, contract-derived battle results, recovery, and
+terminal states.
 
 Playable now:
 

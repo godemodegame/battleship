@@ -4,7 +4,10 @@ export default defineConfig({
   testDir: './tests/e2e',
   fullyParallel: !process.env.CI,
   workers: process.env.CI ? 1 : 2,
-  timeout: process.env.CI ? 90_000 : 60_000,
+  // CI renders the 3D scenes (ocean shader + reflections) under software WebGL
+  // (swiftshader), so the multi-phase practice flow needs well beyond the local
+  // budget to finish a single attempt.
+  timeout: process.env.CI ? 240_000 : 60_000,
   forbidOnly: Boolean(process.env.CI),
   retries: process.env.CI ? 2 : 0,
   reporter: process.env.CI ? 'github' : 'list',

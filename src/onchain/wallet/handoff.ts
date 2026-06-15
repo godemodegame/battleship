@@ -15,7 +15,7 @@
 
 const HANDOFF_KEY = 'onchain:handoff:intent:v1'
 
-export interface HandoffIntent {
+interface HandoffIntent {
   /** The pathname (and optional search) to restore, e.g. "/match/arb-sepolia-v1/abc123" */
   target: string
   /** When the handoff was recorded (epoch ms). For staleness discard. */

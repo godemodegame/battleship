@@ -11,6 +11,8 @@ import type {
   BattleshipReadClient,
   BattleshipWriteClient,
   MatchEventRef,
+  PublicClientLike,
+  WalletClientLike,
 } from '../client/battleshipClient'
 import type { ChainMatchView, MatchPlayersView } from '../client/mapping'
 import type { TxState } from '../client/txTracker'
@@ -18,6 +20,11 @@ import {
   BattleshipClientsOverrideContext,
   type BattleshipClients,
 } from '../client/useBattleshipClients'
+import {
+  CofheClientFactoryContext,
+  type CofheClientFactory,
+} from '../fhenix/useCofheMatchClient'
+import { cofheScopeKey } from '../fhenix/types'
 import type { HexAddress } from '../phaseResolver'
 import {
   DISCONNECTED_CONTEXT,
@@ -35,10 +42,13 @@ const LOCAL_EVENT = 'battleship:e2e-chain'
 
 interface StoredMatch {
   matchId: string
-  status: 'WaitingForOpponent' | 'WaitingForPlacement' | 'Cancelled'
+  status: 'WaitingForOpponent' | 'WaitingForPlacement' | 'ValidatingPlacement' | 'Cancelled'
+  /** 'Open' matches accept any non-creator joiner (random matchmaking). */
+  matchType: 'Friend' | 'Open'
   creator: HexAddress
   opponent: HexAddress | null
-  invitedOpponent: HexAddress
+  /** Null for open matches (no invited opponent). */
+  invitedOpponent: HexAddress | null
   createdAt: number
   joinedAt: number
   finishedAt: number
@@ -49,6 +59,11 @@ function activeAccount(): HexAddress | null {
   if (wallet === 'creator') return CREATOR
   if (wallet === 'opponent') return OPPONENT
   return null
+}
+
+/** `?e2eGas=sponsored` models an embedded-wallet (gasless) session. */
+function isSponsoredGas(): boolean {
+  return new URLSearchParams(window.location.search).get('e2eGas') === 'sponsored'
 }
 
 function readStoredMatch(): StoredMatch | null {
@@ -73,7 +88,7 @@ function toMatchView(match: StoredMatch): ChainMatchView {
     matchId: match.matchId,
     matchIdBig: BigInt(match.matchId),
     status: match.status,
-    matchType: 'Friend',
+    matchType: match.matchType,
     creator: match.creator,
     opponent: match.opponent,
     invitedOpponent: match.invitedOpponent,
@@ -117,10 +132,64 @@ function emitTx(onState: (state: TxState) => void) {
 }
 
 function makeClients(account: HexAddress | null): BattleshipClients {
+  // Mirrors the contract's playerMatchIds index over the single stored match:
+  // the creator is indexed from creation, the opponent only after joining.
+  const indexedIdsFor = (player: HexAddress): bigint[] => {
+    const match = readStoredMatch()
+    if (!match) return []
+    const account = player.toLowerCase()
+    return match.creator === account || match.opponent === account
+      ? [BigInt(match.matchId)]
+      : []
+  }
+
+  // Friend matches stay invite-gated; open matches accept any non-creator.
+  const canJoin = (match: StoredMatch, joiner: HexAddress): boolean => {
+    if (joiner === match.creator) return false
+    return match.matchType === 'Open' ? true : joiner === match.invitedOpponent
+  }
+
+  // Mirrors the contract's openMatchIds index: an open match appears only while
+  // it is still waiting for any opponent (swap-popped on join/cancel).
+  const openMatchIds = (): bigint[] => {
+    const match = readStoredMatch()
+    if (
+      !match ||
+      match.matchType !== 'Open' ||
+      match.status !== 'WaitingForOpponent' ||
+      match.opponent !== null
+    ) {
+      return []
+    }
+    return [BigInt(match.matchId)]
+  }
+
   const readClient: BattleshipReadClient = {
     async getMatch(matchId) {
       const match = readStoredMatch()
       return match && BigInt(match.matchId) === matchId ? toMatchView(match) : null
+    },
+    async getPlayerMatchCount(player) {
+      return indexedIdsFor(player).length
+    },
+    async getPlayerMatches(player, offset, limit) {
+      if (limit === 0 || limit > 50) {
+        throw Object.assign(new Error('InvalidPaginationLimit'), {
+          data: { errorName: 'InvalidPaginationLimit' },
+        })
+      }
+      return indexedIdsFor(player).slice(offset, offset + limit)
+    },
+    async getOpenMatchCount() {
+      return openMatchIds().length
+    },
+    async getOpenMatches(offset, limit) {
+      if (limit === 0 || limit > 50) {
+        throw Object.assign(new Error('InvalidPaginationLimit'), {
+          data: { errorName: 'InvalidPaginationLimit' },
+        })
+      }
+      return openMatchIds().slice(offset, offset + limit)
     },
     async getPlayers() {
       const match = readStoredMatch()
@@ -169,6 +238,7 @@ function makeClients(account: HexAddress | null): BattleshipClients {
             {
               matchId: '1',
               status: 'WaitingForOpponent',
+              matchType: 'Friend',
               creator: account,
               opponent: null,
               invitedOpponent,
@@ -180,20 +250,90 @@ function makeClients(account: HexAddress | null): BattleshipClients {
           )
           return { ok: true, hash: TX_HASH, matchId: 1n }
         },
+        async createWithFleet(invitedOpponent, _segments, onState) {
+          emitTx(onState)
+          const now = Math.floor(Date.now() / 1000)
+          writeStoredMatch(
+            {
+              matchId: '1',
+              status: 'WaitingForOpponent',
+              matchType: 'Friend',
+              creator: account,
+              opponent: null,
+              invitedOpponent,
+              createdAt: now,
+              joinedAt: 0,
+              finishedAt: 0,
+            },
+            'MatchCreated',
+          )
+          return { ok: true, hash: TX_HASH, matchId: 1n }
+        },
+        async createOpenMatch(onState) {
+          emitTx(onState)
+          const now = Math.floor(Date.now() / 1000)
+          writeStoredMatch(
+            {
+              matchId: '1',
+              status: 'WaitingForOpponent',
+              matchType: 'Open',
+              creator: account,
+              opponent: null,
+              invitedOpponent: null,
+              createdAt: now,
+              joinedAt: 0,
+              finishedAt: 0,
+            },
+            'MatchCreated',
+          )
+          return { ok: true, hash: TX_HASH, matchId: 1n }
+        },
+        async createOpenWithFleet(_segments, onState) {
+          emitTx(onState)
+          const now = Math.floor(Date.now() / 1000)
+          writeStoredMatch(
+            {
+              matchId: '1',
+              status: 'WaitingForOpponent',
+              matchType: 'Open',
+              creator: account,
+              opponent: null,
+              invitedOpponent: null,
+              createdAt: now,
+              joinedAt: 0,
+              finishedAt: 0,
+            },
+            'MatchCreated',
+          )
+          return { ok: true, hash: TX_HASH, matchId: 1n }
+        },
         async joinMatch(matchId, onState) {
           emitTx(onState)
           const match = readStoredMatch()
-          if (
-            !match ||
-            BigInt(match.matchId) !== matchId ||
-            account !== match.invitedOpponent
-          ) {
+          if (!match || BigInt(match.matchId) !== matchId || !canJoin(match, account)) {
             return { ok: false, error: 'not-invited' }
           }
           writeStoredMatch(
             {
               ...match,
               status: 'WaitingForPlacement',
+              opponent: account,
+              joinedAt: Math.floor(Date.now() / 1000),
+            },
+            'MatchJoined',
+          )
+          return { ok: true, hash: TX_HASH }
+        },
+        async joinWithFleet(matchId, _segments, onState) {
+          emitTx(onState)
+          const match = readStoredMatch()
+          if (!match || BigInt(match.matchId) !== matchId || !canJoin(match, account)) {
+            return { ok: false, error: 'not-invited' }
+          }
+          writeStoredMatch(
+            {
+              ...match,
+              status: 'ValidatingPlacement',
               opponent: account,
               joinedAt: Math.floor(Date.now() / 1000),
             },
@@ -242,8 +382,34 @@ function makeClients(account: HexAddress | null): BattleshipClients {
   }
 }
 
+// Non-null stub clients so useCofheMatchClient activates (it only checks they
+// exist); the mock CoFHE factory below ignores them.
+const STUB_PUBLIC_CLIENT = {} as unknown as PublicClientLike
+const STUB_WALLET_CLIENT = {} as unknown as WalletClientLike
+
+// Mock CoFHE client so the placement-first encrypt step resolves instantly in
+// e2e; encryptFleet returns opaque dummy ciphertext, never real keys.
+const e2eCofheFactory: CofheClientFactory = (config) => ({
+  execution: 'worker',
+  scopeKey: cofheScopeKey(config.scope),
+  initialize: async () => {},
+  encryptFleet: async (segments) =>
+    segments.map((segment, index) => ({
+      ctHash: BigInt(segment + index + 1),
+      securityZone: 0,
+      utype: 2,
+      signature: `0x${index.toString(16).padStart(2, '0')}`,
+    })),
+  fetchDecryptProof: async (ctHash) => ({
+    value: ctHash & 0xffn,
+    signature: '0xproof' as `0x${string}`,
+  }),
+  dispose: () => {},
+})
+
 function walletValue(account: HexAddress | null): WalletContextValue {
   if (!account) return DISCONNECTED_CONTEXT
+  const gasSponsored = isSponsoredGas()
   return {
     ...DISCONNECTED_CONTEXT,
     session: {
@@ -253,10 +419,15 @@ function walletValue(account: HexAddress | null): WalletContextValue {
       isCorrectChain: true,
       isConnected: true,
     },
+    publicClient: STUB_PUBLIC_CLIENT,
+    walletClient: STUB_WALLET_CLIENT,
     writeBlockedReason: null,
     canWrite: true,
-    balance: 10n ** 18n,
-    balanceStatus: 'ok',
+    // Sponsored (embedded) sessions never report a balance — the funding UX is
+    // gated off. Paid sessions keep the funded stub balance.
+    gasSponsored,
+    balance: gasSponsored ? null : 10n ** 18n,
+    balanceStatus: gasSponsored ? 'unknown' : 'ok',
   }
 }
 
@@ -268,7 +439,9 @@ export default function E2EMockProviders({ children }: { children: ReactNode }) 
   return (
     <WalletSessionContext.Provider value={wallet}>
       <BattleshipClientsOverrideContext.Provider value={() => clients}>
-        {children}
+        <CofheClientFactoryContext.Provider value={e2eCofheFactory}>
+          {children}
+        </CofheClientFactoryContext.Provider>
       </BattleshipClientsOverrideContext.Provider>
     </WalletSessionContext.Provider>
   )

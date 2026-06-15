@@ -19,9 +19,9 @@ import { create } from 'zustand'
 
 export type MotionSetting = 'system' | 'reduced' | 'full'
 export type QualitySetting = 'auto' | 'low' | 'medium' | 'high'
-export type QualityLevel = Exclude<QualitySetting, 'auto'>
+type QualityLevel = Exclude<QualitySetting, 'auto'>
 
-export interface QualityProfile {
+interface QualityProfile {
   /** Device-pixel-ratio cap passed to the Canvas. */
   dpr: number
   antialias: boolean
@@ -70,7 +70,7 @@ function persist(motion: MotionSetting, quality: QualitySetting): void {
   }
 }
 
-export interface SettingsState {
+interface SettingsState {
   motion: MotionSetting
   quality: QualitySetting
   setMotion: (motion: MotionSetting) => void
@@ -90,7 +90,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
 }))
 
 /** The OS-level reduced-motion preference (false where unsupported). */
-export function systemPrefersReducedMotion(): boolean {
+function systemPrefersReducedMotion(): boolean {
   if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return false
   return window.matchMedia('(prefers-reduced-motion: reduce)').matches
 }
@@ -106,7 +106,7 @@ export function isReducedMotion(
 }
 
 /** True for touch-first devices (phones/tablets); drives the 'auto' default. */
-export function isCoarsePointer(): boolean {
+function isCoarsePointer(): boolean {
   if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return false
   return window.matchMedia('(pointer: coarse)').matches
 }

@@ -14,7 +14,7 @@
 
 import type { ChainMoveView } from '../client/mapping'
 
-export interface MoveFxKey {
+interface MoveFxKey {
   deploymentId: string
   matchId: string
 }

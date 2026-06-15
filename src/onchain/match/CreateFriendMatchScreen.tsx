@@ -1,30 +1,60 @@
 /**
  * Friend match creation (GAME-505 / GAME-506, Flow 5 in docs/user-flows.md).
  *
- * Strict friend invite: the creator enters the friend's wallet address, the
- * write client submits `createMatch(invitedOpponent)`, and on confirmation the
- * creator lands on the versioned match route where the invite link lives.
- * Validation happens before the wallet ever opens; duplicate submission is
- * blocked by the tracked-write busy state.
+ * Placement-first invite: the creator enters the friend's wallet address AND
+ * arranges their fleet locally, then a single action encrypts the fleet and
+ * submits `createWithFleet(invitedOpponent, segments)` — one transaction that
+ * both creates the match and locks in the encrypted fleet. The match stays
+ * WaitingForOpponent; the creator's fleet validates in the background. On
+ * confirmation the creator lands on the versioned match route where the invite
+ * link lives. Validation happens before the wallet ever opens; duplicate
+ * submission is blocked by the tracked-write busy state.
  */
 
-import { useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
-import { createMatchCopy, deploymentCopy, matchStateCopy, walletCopy } from '../../copy/en'
+import {
+  createMatchCopy,
+  openMatchCopy,
+  botMatchCopy,
+  botBattleCopy,
+  deploymentCopy,
+  encryptedPlacementCopy,
+  matchStateCopy,
+  walletCopy,
+} from '../../copy/en'
+import { StatusOverlay } from '../../ui/common'
+import { errorMessage } from '../../copy/errors'
+import { autoPlaceFleet, isFleetComplete } from '../../game/board'
 import { useBattleshipClients } from '../client/useBattleshipClients'
 import { pendingTxScope } from '../client/pendingTxStore'
 import { isTxBusy } from '../client/txTracker'
 import { useTrackedWrite } from '../client/useTrackedWrite'
 import { getActiveDeploymentId } from '../deployments'
+import { type CofheScope } from '../fhenix/types'
 import { inviteLinkPath } from '../inviteLink'
 import type { HexAddress } from '../phaseResolver'
 import { useWalletSession } from '../wallet/WalletSessionContext'
 import { WalletSessionBar } from '../wallet/WalletSessionBar'
 import { WrongNetworkPanel } from '../wallet/WrongNetworkPanel'
 import { LowBalanceNotice, LowBalanceWarning, FAUCET_URL } from '../wallet/LowBalanceNotice'
+import { FleetPlacementBoard } from '../placement/FleetPlacementBoard'
+import { useFleetSubmission } from '../placement/useFleetSubmission'
+import {
+  completedFleet,
+  placementScopeKey,
+  usePlacementStore,
+  type PlacementScope,
+} from '../placement/placementStore'
+import { stashBotFleets } from './botFleetStash'
 import { TxStatusLine } from './TxStatusLine'
 
 const ADDRESS_RE = /^0x[0-9a-fA-F]{40}$/
+
+// No contract match id exists while placing; the placement / CoFHE / recovery
+// scopes use this provisional key. Ciphertext binds to the account, not the
+// match id, so encrypting here stays valid for the createWithFleet call.
+const PROVISIONAL_MATCH_ID = 'new'
 
 /** Pure input validation (GAME-505); returns player-facing copy or null. */
 export function validateInvitedAddress(
@@ -40,7 +70,17 @@ export function validateInvitedAddress(
   return null
 }
 
-export function CreateFriendMatchScreen() {
+/**
+ * Shared placement-first creation screen for both match modes:
+ *   - `friend` → invite a specific wallet, then `createWithFleet`;
+ *   - `open`   → host a game any random player can join, then `createOpenWithFleet`.
+ * Open mode drops the invited-address input entirely (random matchmaking).
+ */
+function CreateMatchScreen({ mode }: { mode: 'friend' | 'open' | 'bot' }) {
+  const isOpen = mode === 'open'
+  const isBot = mode === 'bot'
+  const isFriend = mode === 'friend'
+  const copy = isBot ? botMatchCopy : isOpen ? openMatchCopy : createMatchCopy
   const wallet = useWalletSession()
   const navigate = useNavigate()
   const location = useLocation()
@@ -51,7 +91,7 @@ export function CreateFriendMatchScreen() {
     wallet.session.address
       ? pendingTxScope({
           deploymentId,
-          matchId: 'new',
+          matchId: PROVISIONAL_MATCH_ID,
           address: wallet.session.address,
           kind: 'create',
         })
@@ -70,7 +110,61 @@ export function CreateFriendMatchScreen() {
   const session = wallet.session
   const { resolution, writeClient } = clients
   const deploymentReady = resolution.ok && resolution.ready
-  const busy = isTxBusy(tx.state)
+
+  // Local fleet placement, bound to the provisional pre-match scope.
+  const placements = usePlacementStore((state) => state.placements)
+  const bindScope = usePlacementStore((state) => state.bindScope)
+  const clearFleet = usePlacementStore((state) => state.clearFleet)
+
+  const walletAddress = session.address
+  const chainId = session.chainId
+  const placementScope = useMemo<PlacementScope | null>(
+    () =>
+      walletAddress && chainId
+        ? {
+            address: walletAddress,
+            chainId,
+            deploymentId,
+            matchId: PROVISIONAL_MATCH_ID,
+          }
+        : null,
+    [walletAddress, chainId, deploymentId],
+  )
+  const placementKey = placementScope ? placementScopeKey(placementScope) : null
+  const cofheScope = useMemo<CofheScope | null>(
+    () =>
+      walletAddress && chainId
+        ? {
+            address: walletAddress,
+            chainId,
+            deploymentId,
+            matchId: PROVISIONAL_MATCH_ID,
+          }
+        : null,
+    [walletAddress, chainId, deploymentId],
+  )
+
+  useEffect(() => {
+    bindScope(placementScope)
+    return () => bindScope(null)
+  }, [bindScope, placementKey])
+
+  const canCreate = isBot
+    ? Boolean(writeClient?.createBotMatch)
+    : isOpen
+      ? Boolean(writeClient?.createOpenWithFleet)
+      : Boolean(writeClient?.createWithFleet)
+  const submission = useFleetSubmission({
+    enabled: wallet.canWrite && deploymentReady && canCreate,
+    cofheScope,
+    placementScope,
+    publicClient: wallet.publicClient,
+    walletClient: wallet.walletClient,
+  })
+
+  const complete = isFleetComplete(placements)
+  const placedCount = placements.filter(Boolean).length
+  const busy = isTxBusy(tx.state) || submission.encrypting
 
   async function onPaste() {
     setPasteNote(null)
@@ -84,25 +178,78 @@ export function CreateFriendMatchScreen() {
   }
 
   async function onCreate() {
-    const problem = validateInvitedAddress(address, session.address)
-    setValidationError(problem)
-    if (problem || !writeClient || !wallet.canWrite || busy) return
+    // Only friend mode validates an invited address; open and bot have none.
+    if (isFriend) {
+      const problem = validateInvitedAddress(address, session.address)
+      setValidationError(problem)
+      if (problem) return
+    }
+    if (!complete || !canCreate || !wallet.canWrite || busy) {
+      return
+    }
 
-    // A mobile wallet confirmation may background the browser; record the
-    // route so the return path restores match creation (GAME-210).
-    wallet.actions.prepareHandoff()
-    const invited = address.trim().toLowerCase() as HexAddress
-    const result = await tx.run((onState) => writeClient.createMatch(invited, onState))
+    let result
+    if (isBot) {
+      // The bot's fleet is auto-placed and encrypted client-side ALONGSIDE the
+      // player's — both in one CoFHE proof round (≈2× faster than two) — then
+      // stored under the bot sentinel on-chain. Both fleets are bound to this
+      // wallet, which submits them in one createBotMatch tx. We retain ONLY the
+      // player's plaintext fleet so the battle route can render their board and
+      // resolve incoming bot shots locally; the bot's plaintext is discarded
+      // right after encryption so the player can't know a shot's result before
+      // the tx — those results come from the contract (see botFleetStash).
+      const botPlacements = autoPlaceFleet()
+      const pair = await submission.encryptBotPair(placements, botPlacements)
+      if (!pair) return
+      // A mobile wallet confirmation may background the browser; record the
+      // route so the return path restores match creation (GAME-210).
+      wallet.actions.prepareHandoff()
+      result = await tx.run((onState) =>
+        writeClient!.createBotMatch!(pair.player, pair.bot, onState),
+      )
+      const playerFleet = completedFleet({ placements })
+      if (result?.ok && playerFleet) {
+        stashBotFleets(deploymentId, result.matchId.toString(), {
+          player: playerFleet,
+        })
+      }
+    } else {
+      const encrypted = await submission.encrypt()
+      if (!encrypted) return
+      wallet.actions.prepareHandoff()
+      if (isOpen) {
+        result = await tx.run((onState) => writeClient!.createOpenWithFleet!(encrypted, onState))
+      } else {
+        result = await tx.run((onState) =>
+          writeClient!.createWithFleet!(
+            address.trim().toLowerCase() as HexAddress,
+            encrypted,
+            onState,
+          ),
+        )
+      }
+    }
     if (result?.ok) {
+      // GAME-607: clear the plaintext fleet once the fleet is on-chain.
+      clearFleet()
       navigate(inviteLinkPath(deploymentId, result.matchId.toString()))
     }
   }
 
   return (
-    <div className="overlay home" data-testid="create-match-screen">
+    <div
+      className="overlay home match-placement-route"
+      data-testid={
+        isBot
+          ? 'create-bot-match-screen'
+          : isOpen
+            ? 'create-open-match-screen'
+            : 'create-match-screen'
+      }
+    >
       <div className="title-lockup">
-        <span className="title-kicker">{createMatchCopy.kicker}</span>
-        <h1>{createMatchCopy.title}</h1>
+        <span className="title-kicker">{copy.kicker}</span>
+        <h1>{copy.title}</h1>
       </div>
 
       <WalletSessionBar
@@ -141,10 +288,12 @@ export function CreateFriendMatchScreen() {
         </p>
       )}
 
-      {/* GAME-804: non-blocking warning when the balance may not last a match. */}
-      {session.isConnected && session.isCorrectChain && wallet.balanceStatus === 'low' && (
-        <LowBalanceWarning balanceWei={wallet.balance} />
-      )}
+      {/* GAME-804: non-blocking warning when the balance may not last a match.
+          Skipped under sponsored gas — embedded-wallet writes are gasless. */}
+      {!wallet.gasSponsored &&
+        session.isConnected &&
+        session.isCorrectChain &&
+        wallet.balanceStatus === 'low' && <LowBalanceWarning balanceWei={wallet.balance} />}
 
       {session.isConnected && wallet.lastError === 'unsupported-wallet' && (
         <p className="error-note" role="alert" data-testid="unsupported-wallet">
@@ -152,7 +301,8 @@ export function CreateFriendMatchScreen() {
         </p>
       )}
 
-      {session.isConnected &&
+      {!wallet.gasSponsored &&
+        session.isConnected &&
         session.isCorrectChain &&
         wallet.balanceStatus === 'zero' && (
           <LowBalanceNotice
@@ -168,62 +318,158 @@ export function CreateFriendMatchScreen() {
         )}
 
       {session.isConnected && session.isCorrectChain && deploymentReady && (
-        <div className="home-actions" data-testid="create-match-form">
-          <label className="field-label" htmlFor="invited-address">
-            {createMatchCopy.addressLabel}
-          </label>
-          <input
-            id="invited-address"
-            className="text-field"
-            data-testid="invited-address-input"
-            type="text"
-            inputMode="text"
-            autoComplete="off"
-            autoCapitalize="off"
-            spellCheck={false}
-            placeholder={createMatchCopy.addressPlaceholder}
-            value={address}
-            disabled={busy}
-            onChange={(e) => {
-              setAddress(e.target.value)
-              if (validationError) setValidationError(null)
-            }}
-          />
-          {validationError && (
-            <p className="error-note" role="alert" data-testid="address-validation-error">
-              {validationError}
-            </p>
-          )}
-          {pasteNote && (
-            <p className="footnote" data-testid="paste-note">
-              {pasteNote}
-            </p>
-          )}
-          <p className="footnote">{createMatchCopy.helper}</p>
+        <section className="onchain-placement panel" data-testid="create-match-form">
+          {isFriend && (
+            <>
+              <label className="field-label" htmlFor="invited-address">
+                {createMatchCopy.addressLabel}
+              </label>
+              <input
+                id="invited-address"
+                className="text-field"
+                data-testid="invited-address-input"
+                type="text"
+                inputMode="text"
+                autoComplete="off"
+                autoCapitalize="off"
+                spellCheck={false}
+                placeholder={createMatchCopy.addressPlaceholder}
+                value={address}
+                disabled={busy}
+                onChange={(e) => {
+                  setAddress(e.target.value)
+                  if (validationError) setValidationError(null)
+                }}
+              />
+              {validationError && (
+                <p className="error-note" role="alert" data-testid="address-validation-error">
+                  {validationError}
+                </p>
+              )}
+              {pasteNote && (
+                <p className="footnote" data-testid="paste-note">
+                  {pasteNote}
+                </p>
+              )}
+              <p className="footnote">{createMatchCopy.helper}</p>
 
-          <div className="button-row">
-            <button className="btn" data-testid="paste-address" disabled={busy} onClick={onPaste}>
-              {createMatchCopy.paste}
-            </button>
-            <button
-              className="btn primary"
-              data-testid="create-match"
-              disabled={busy || !wallet.canWrite}
-              onClick={onCreate}
-            >
-              {busy ? createMatchCopy.creating : createMatchCopy.create}
-            </button>
+              <div className="button-row">
+                <button
+                  className="btn"
+                  data-testid="paste-address"
+                  disabled={busy}
+                  onClick={onPaste}
+                >
+                  {createMatchCopy.paste}
+                </button>
+              </div>
+            </>
+          )}
+
+          {!isFriend && (
+            <p className="footnote" data-testid={isBot ? 'bot-match-helper' : 'open-match-helper'}>
+              {copy.helper}
+            </p>
+          )}
+
+          <div className="placement-heading">
+            <div>
+              <span className="status-label">{copy.placementTitle}</span>
+              <p className="status-sub">
+                {placedCount}/10 placed · {copy.placementHelper}
+              </p>
+            </div>
           </div>
 
+          <FleetPlacementBoard busy={busy} />
+
+          {submission.cofhe.status === 'initializing' && (
+            <p className="status-sub" data-testid="cofhe-initializing">
+              {encryptedPlacementCopy.preparing}
+            </p>
+          )}
+          {submission.cofhe.status === 'error' && (
+            <p className="error-note" role="alert">
+              {errorMessage('encryption-failed')}
+            </p>
+          )}
+          {submission.encrypting && (
+            <p className="status-sub" data-testid="encryption-progress">
+              {encryptedPlacementCopy.encrypting}:{' '}
+              {encryptedPlacementCopy.progress[submission.progress]}
+            </p>
+          )}
+          {submission.error && (
+            <p className="error-note" role="alert" data-testid="encryption-error">
+              {errorMessage(submission.error)}
+            </p>
+          )}
+          {!complete && (
+            <p className="footnote" data-testid="placement-incomplete">
+              {copy.placementIncomplete}
+            </p>
+          )}
+
+          <button
+            className="btn primary wide"
+            data-ic="plus"
+            data-testid="create-match"
+            disabled={
+              busy ||
+              !complete ||
+              !wallet.canWrite ||
+              submission.cofhe.status !== 'ready' ||
+              !canCreate
+            }
+            onClick={onCreate}
+          >
+            {busy ? copy.submittingFleet : copy.createAndSubmit}
+          </button>
+
           <TxStatusLine state={tx.state} onRetry={tx.reset} />
-        </div>
+        </section>
       )}
 
       <div className="home-actions">
-        <Link className="btn ghost" data-testid="create-back" to="/practice">
+        <Link
+          className="btn ghost"
+          data-ic="back"
+          data-testid="create-back"
+          to={isOpen ? '/lobby' : '/practice'}
+        >
           {matchStateCopy.backToMenu}
         </Link>
       </div>
+
+      {/* A bot match encrypts both fleets then opens the match on-chain; that
+          whole gap reads as one continuous load so the frozen button is never
+          on screen (the layout above stays behind it). */}
+      {isBot && busy && (
+        <StatusOverlay
+          title={botBattleCopy.preparingTitle}
+          sub={
+            submission.encrypting
+              ? encryptedPlacementCopy.progress[submission.progress]
+              : botBattleCopy.preparingSub
+          }
+          testId="bot-create-loading"
+        />
+      )}
     </div>
   )
+}
+
+/** Friend match creation route (`/match/new`): invite a specific wallet. */
+export function CreateFriendMatchScreen() {
+  return <CreateMatchScreen mode="friend" />
+}
+
+/** Open match creation route (`/match/open`): host a game for any player. */
+export function CreateOpenMatchScreen() {
+  return <CreateMatchScreen mode="open" />
+}
+
+/** Bot match creation route (`/match/bot`): practice against the on-chain bot. */
+export function CreateBotMatchScreen() {
+  return <CreateMatchScreen mode="bot" />
 }

@@ -1,8 +1,8 @@
-import { Suspense, lazy, useEffect, useMemo, useState } from 'react'
-import { FLEET, cellLabel } from '../../game/constants'
-import { isFleetComplete, shipCells } from '../../game/board'
-import { encryptedPlacementCopy } from '../../copy/en'
-import { perf } from '../../lib/perf'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { FLEET } from '../../game/constants'
+import { isFleetComplete } from '../../game/board'
+import { botBattleCopy, encryptedPlacementCopy } from '../../copy/en'
+import { StatusOverlay } from '../../ui/common'
 import { errorMessage, type ErrorCode } from '../../copy/errors'
 import type { TxState } from '../client/txTracker'
 import { pendingTxScope } from '../client/pendingTxStore'
@@ -15,51 +15,16 @@ import type { ChainMatchView } from '../client/mapping'
 import type { MatchPhase } from '../phaseResolver'
 import type { WalletContextValue } from '../wallet/WalletSessionContext'
 import { TxStatusLine } from '../match/TxStatusLine'
-import { cofheScopeKey, type CofheProgress, type CofheScope } from '../fhenix/types'
-import { useCofheMatchClient } from '../fhenix/useCofheMatchClient'
-import { encodeFleetSegments } from './fleetEncoding'
+import type { CofheProgress, CofheScope } from '../fhenix/types'
+import { FleetPlacementBoard } from './FleetPlacementBoard'
+import { useFleetSubmission } from './useFleetSubmission'
 import {
-  completedFleet,
   placementScopeKey,
   usePlacementStore,
   type PlacementScope,
 } from './placementStore'
 
 type PlacementPhase = Extract<MatchPhase, { kind: 'placement' }>
-
-// The 3D board (three.js) loads as its own chunk so the panel stays light;
-// the DOM grid below doubles as the loading state and the no-WebGL fallback.
-const PlacementCanvas = lazy(() =>
-  import('../../three/PlacementCanvas').then((m) => ({ default: m.PlacementCanvas })),
-)
-
-let webglProbe: boolean | null = null
-function supportsWebgl(): boolean {
-  if (webglProbe !== null) return webglProbe
-  try {
-    const canvas = document.createElement('canvas')
-    const gl = canvas.getContext('webgl2') ?? canvas.getContext('webgl')
-    webglProbe = Boolean(gl)
-    // Contexts count against a per-page budget; don't let the probe hold one.
-    gl?.getExtension('WEBGL_lose_context')?.loseContext()
-  } catch {
-    webglProbe = false
-  }
-  return webglProbe
-}
-
-function occupiedSlots(
-  placements: ReturnType<typeof usePlacementStore.getState>['placements'],
-): Array<number | null> {
-  const cells: Array<number | null> = Array.from({ length: 100 }, () => null)
-  for (const placement of placements) {
-    if (!placement) continue
-    for (const cell of shipCells(placement, FLEET[placement.slot].length) ?? []) {
-      cells[cell] = placement.slot
-    }
-  }
-  return cells
-}
 
 function progressLabel(progress: CofheProgress): string {
   return encryptedPlacementCopy.progress[progress]
@@ -83,13 +48,7 @@ export function EncryptedFleetPanel({
   onRefetch,
 }: EncryptedFleetPanelProps) {
   const placements = usePlacementStore((state) => state.placements)
-  const selectedSlot = usePlacementStore((state) => state.selectedSlot)
   const orientation = usePlacementStore((state) => state.placeOrientation)
-  const selectSlot = usePlacementStore((state) => state.selectSlot)
-  const rotateSelected = usePlacementStore((state) => state.rotateSelected)
-  const placeAt = usePlacementStore((state) => state.placeAt)
-  const pickUpAt = usePlacementStore((state) => state.pickUpAt)
-  const autoPlace = usePlacementStore((state) => state.autoPlace)
   const clearFleet = usePlacementStore((state) => state.clearFleet)
   const bindScope = usePlacementStore((state) => state.bindScope)
 
@@ -106,10 +65,6 @@ export function EncryptedFleetPanel({
       : null
   const submitWrite = useTrackedWrite(txScope('submit-fleet'))
   const validationWrite = useTrackedWrite(txScope('validation'))
-  const [encryptionProgress, setEncryptionProgress] =
-    useState<CofheProgress>('initializing')
-  const [encryptionError, setEncryptionError] = useState<ErrorCode | null>(null)
-  const [encrypting, setEncrypting] = useState(false)
   const [awaitingAuthoritativeRead, setAwaitingAuthoritativeRead] = useState(false)
   const [fetchingProof, setFetchingProof] = useState(false)
   const [proofError, setProofError] = useState<ErrorCode | null>(null)
@@ -141,7 +96,6 @@ export function EncryptedFleetPanel({
         : null,
     [address, chainId, match.deploymentId, match.matchIdBig],
   )
-  const expectedCofheKey = cofheScope ? cofheScopeKey(cofheScope) : null
 
   useEffect(() => {
     bindScope(placementScope)
@@ -155,76 +109,53 @@ export function EncryptedFleetPanel({
   }, [phase.invalid, phase.validating, phase.waitingForOpponent])
 
   // The CoFHE session is needed for fleet encryption while placing and for
-  // the validation decrypt-proof fetch while the result is pending.
+  // the validation decrypt-proof fetch while the result is pending. The shared
+  // hook owns the session plus the encrypt + scope-stability logic; this panel
+  // wraps the returned ciphertext in its own tracked submit write.
   const validating = phase.validating || awaitingAuthoritativeRead
-  const cofhe = useCofheMatchClient({
+  const {
+    cofhe,
+    encrypting,
+    progress: encryptionProgress,
+    error: encryptionError,
+    encrypt,
+  } = useFleetSubmission({
     enabled:
       wallet.canWrite &&
       ((phase.canSubmit && Boolean(writeClient?.submitFleet)) ||
         (validating && Boolean(writeClient?.finalizeFleetValidationWithProof))),
-    scope: cofheScope,
+    cofheScope,
+    placementScope,
     publicClient: wallet.publicClient,
     walletClient: wallet.walletClient,
   })
 
   const complete = isFleetComplete(placements)
   const placedCount = placements.filter(Boolean).length
-  const cells = useMemo(() => occupiedSlots(placements), [placements])
   const busy = encrypting || fetchingProof || submitWrite.busy || validationWrite.busy
 
   async function submitFleet() {
-    const fleet = completedFleet(usePlacementStore.getState())
-    if (
-      !fleet ||
-      !placementKey ||
-      !expectedCofheKey ||
-      !cofhe.client ||
-      !writeClient?.submitFleet ||
-      !wallet.canWrite
-    ) {
-      return
-    }
+    if (!writeClient?.submitFleet || !wallet.canWrite) return
 
-    setEncryptionError(null)
-    setEncryptionProgress('initializing')
-    setEncrypting(true)
     submitWrite.reset()
-    let encrypted: Awaited<ReturnType<typeof cofhe.client.encryptFleet>> | null = null
-    // GAME-809: encryption duration, recorded locally only (no payload data).
-    const stopEncryptTimer = perf.start('encrypt-fleet')
-    try {
-      encrypted = await cofhe.client.encryptFleet(
-        encodeFleetSegments(fleet),
-        setEncryptionProgress,
-      )
-      stopEncryptTimer()
+    // `encrypt` reads the completed fleet from the store, runs the CoFHE encrypt
+    // with progress/error wiring, and enforces scope stability; it returns null
+    // (and sets `encryptionError`) if the fleet is incomplete, the session is
+    // not ready, encryption fails, or the scope drifted mid-encryption.
+    const encrypted = await encrypt()
+    if (!encrypted) return
 
-      const currentPlacementKey = usePlacementStore.getState().scopeKey
-      if (
-        currentPlacementKey !== placementKey ||
-        cofhe.client.scopeKey !== expectedCofheKey
-      ) {
-        throw new Error('Placement scope changed during encryption')
-      }
-
-      wallet.actions.prepareHandoff()
-      const result = await submitWrite.run((onState: (state: TxState) => void) =>
-        writeClient.submitFleet!(match.matchIdBig, encrypted!, onState),
-      )
-      if (result?.ok) {
-        // GAME-607: clear plaintext immediately after the receipt confirms.
-        // The CoFHE session stays alive: the validation decrypt-proof fetch
-        // needs it, and it holds no fleet data after the encrypt call.
-        clearFleet()
-        setAwaitingAuthoritativeRead(true)
-        onRefetch()
-      }
-    } catch {
-      setEncryptionError('encryption-failed')
-    } finally {
-      // Do not retain account-bound ciphertext inputs for retries or another scope.
-      encrypted = null
-      setEncrypting(false)
+    wallet.actions.prepareHandoff()
+    const result = await submitWrite.run((onState: (state: TxState) => void) =>
+      writeClient.submitFleet!(match.matchIdBig, encrypted, onState),
+    )
+    if (result?.ok) {
+      // GAME-607: clear plaintext immediately after the receipt confirms.
+      // The CoFHE session stays alive: the validation decrypt-proof fetch
+      // needs it, and it holds no fleet data after the encrypt call.
+      clearFleet()
+      setAwaitingAuthoritativeRead(true)
+      onRefetch()
     }
   }
 
@@ -278,13 +209,51 @@ export function EncryptedFleetPanel({
     if (result?.ok) onRefetch()
   }
 
+  // Bot match: the player should never press "Finalize Validation". The bot's
+  // fleet is auto-valid on-chain, so once the CoFHE session is ready we publish
+  // the player's validation proof automatically and flow straight into battle.
+  // Latched to one auto-attempt; on failure the manual button below is the
+  // fallback (re-armed only when the panel remounts).
+  const isBot = match.matchType === 'Bot'
+  const autoFinalizeRef = useRef(false)
+  const validationFailed =
+    proofError !== null ||
+    cofhe.status === 'error' ||
+    validationWrite.state.phase === 'error'
+  useEffect(() => {
+    if (
+      isBot &&
+      validating &&
+      !autoFinalizeRef.current &&
+      !validationFailed &&
+      wallet.canWrite &&
+      cofhe.status === 'ready' &&
+      Boolean(writeClient?.finalizeFleetValidationWithProof) &&
+      Boolean(readClient?.getPendingPlacementValidation) &&
+      !busy
+    ) {
+      autoFinalizeRef.current = true
+      void finalizeValidation()
+    }
+    // finalizeValidation is a stable closure over the same deps tracked here.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isBot, validating, validationFailed, wallet.canWrite, cofhe.status, busy])
+
   if (validating) {
     return (
       <section className="onchain-placement panel" data-testid="placement-validating">
+        {isBot && !validationFailed && (
+          <StatusOverlay
+            title={botBattleCopy.startingTitle}
+            sub={botBattleCopy.startingSub}
+            testId="bot-validation-loading"
+          />
+        )}
         <span className="status-label">{encryptedPlacementCopy.validatingTitle}</span>
         <p className="status-sub">{encryptedPlacementCopy.validatingBody}</p>
         <button
           className="btn primary wide"
+          data-ic="check"
           data-testid="finalize-validation"
           disabled={
             busy ||
@@ -349,84 +318,7 @@ export function EncryptedFleetPanel({
         </div>
       )}
 
-      {(() => {
-        const grid = (
-          <div className="placement-grid" role="grid" aria-label="Fleet placement grid">
-            {cells.map((slot, cell) => (
-              <button
-                key={cell}
-                type="button"
-                role="gridcell"
-                className={`placement-cell ${slot !== null ? 'occupied' : ''}`}
-                aria-label={`${cellLabel(cell)}${slot !== null ? `, ${FLEET[slot].label}` : ''}`}
-                onClick={() => {
-                  if (busy) return
-                  if (slot !== null) pickUpAt(cell)
-                  else placeAt(Math.floor(cell / 10), cell % 10)
-                }}
-              >
-                {slot !== null ? slot + 1 : ''}
-              </button>
-            ))}
-          </div>
-        )
-        if (!supportsWebgl()) return grid
-        return (
-          <div className="placement-stage" data-testid="placement-stage">
-            <Suspense fallback={grid}>
-              <PlacementCanvas
-                placements={placements}
-                selectedSlot={selectedSlot}
-                orientation={orientation}
-                disabled={busy}
-                onPlace={(row, col) => void placeAt(row, col)}
-                onPickUp={(cell) => void pickUpAt(cell)}
-              />
-            </Suspense>
-          </div>
-        )
-      })()}
-
-      <div className="fleet-tray">
-        {FLEET.map((ship) => {
-          const placed = placements[ship.slot] !== null
-          const active = selectedSlot === ship.slot
-          return (
-            <button
-              type="button"
-              key={ship.slot}
-              className={`chip ${placed ? 'placed' : ''} ${active ? 'active' : ''}`}
-              disabled={busy}
-              onClick={() => selectSlot(active ? null : ship.slot)}
-            >
-              <span className="chip-cells">
-                {Array.from({ length: ship.length }, (_, index) => <i key={index} />)}
-              </span>
-              <span className="chip-label">{ship.label}</span>
-            </button>
-          )
-        })}
-      </div>
-
-      <div className="button-row">
-        <button
-          className="btn small"
-          disabled={busy || selectedSlot === null}
-          onClick={rotateSelected}
-        >
-          {encryptedPlacementCopy.rotate}
-        </button>
-        <button className="btn small" disabled={busy} onClick={() => autoPlace()}>
-          {encryptedPlacementCopy.autoPlace}
-        </button>
-        <button
-          className="btn small"
-          disabled={busy || placedCount === 0}
-          onClick={clearFleet}
-        >
-          {encryptedPlacementCopy.clear}
-        </button>
-      </div>
+      <FleetPlacementBoard busy={busy} />
 
       {cofhe.status === 'initializing' && (
         <p className="status-sub" data-testid="cofhe-initializing">
@@ -458,6 +350,7 @@ export function EncryptedFleetPanel({
 
       <button
         className="btn primary wide"
+        data-ic="check"
         data-testid="submit-encrypted-fleet"
         disabled={
           !complete ||

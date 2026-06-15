@@ -7,22 +7,35 @@ friend-match flow. Phase 2 added Privy and the Arbitrum Sepolia guard; Phases
 5 through 9 connected those clients to every contract write, recovery path,
 security test, and release check.
 
+> **Update (2026-06): social/email login + sponsored gas enabled.** The
+> wallet-only / user-pays-gas constraints below were the original first-milestone
+> scope. The app now also offers social/email sign-in and mints a Privy embedded
+> wallet for users without an external wallet, and sponsors gas (EIP-7702) for
+> those embedded wallets. External-wallet users are unchanged and keep paying
+> their own gas. Lines marked _(superseded)_ describe the original scope.
+
 ## Decision Summary
 
-- Use Privy as the only wallet login, connection, and session UI.
-- Start with wallet-only authentication.
-- Support external EVM wallets; do not create Privy embedded wallets in the
-  first on-chain slice.
+- Use Privy as the only login, connection, and session UI.
+- Offer external EVM wallets **and** social/email sign-in (the full set of
+  dashboard-enabled Privy login methods).
+- Mint a Privy embedded EVM wallet for any user who signs in without an external
+  wallet (`createOnLogin: 'users-without-wallets'`).
 - Use Arbitrum Sepolia only.
 - Treat the connected EVM address, not the Privy user id, as the on-chain match
-  identity.
+  identity. This holds for embedded wallets too: gas sponsorship uses EIP-7702,
+  which keeps the embedded wallet's address identical to the EOA the contract
+  sees as `msg.sender` and that CoFHE binds permits to — so identity and
+  encryption are unchanged. (A separate smart-account address, e.g. classic
+  ERC-4337, would break both and must not be introduced.)
+- Sponsor gas for embedded-wallet sessions via Privy native "App pays"
+  (EIP-7702). External-wallet sessions pay their own gas.
 - Use viem-compatible clients for contract and CoFHE calls.
 - wagmi may be used through Privy's wagmi integration for React hooks, but it
   must not introduce a second connection modal.
 
-Email, social login, passkeys, embedded wallets, smart wallets, gas
-sponsorship, and multi-chain gameplay require separate product and security
-decisions.
+Smart wallets with a distinct account address and multi-chain gameplay remain
+out of scope and require separate product and security decisions.
 
 ## Required Network
 
@@ -51,13 +64,16 @@ Install and initialize the Privy React SDK at the application root.
 Required configuration:
 
 - Privy app id supplied through `VITE_PRIVY_APP_ID`;
-- wallet login enabled in the Privy dashboard;
-- non-wallet login methods disabled for the first milestone;
+- wallet login plus social/email login enabled in the Privy dashboard;
 - `defaultChain` set to Arbitrum Sepolia;
 - `supportedChains` limited to Arbitrum Sepolia;
-- embedded wallet creation disabled;
+- embedded wallet creation for users without an external wallet
+  (`createOnLogin: 'users-without-wallets'`);
+- gas sponsorship ("App pays") enabled for Arbitrum Sepolia, so embedded-wallet
+  writes are gasless (EIP-7702);
 - Ethereum/EVM wallets shown, with non-EVM wallet families hidden;
-- one active external wallet identity per session.
+- one active wallet identity per session — the embedded wallet is preferred when
+  present (see `activeWallet.ts`).
 
 `defaultChain` improves the connection prompt but is not a security boundary.
 An external wallet can decline the chain switch and remain connected on another
@@ -71,17 +87,24 @@ connection surface. Privy's connect UI owns wallet discovery and connection.
 
 Per Privy app (one for development, one for staging):
 
-- enable wallet login; disable email, SMS, social, and passkey login methods;
-- disable embedded wallet creation;
+- enable wallet login **and** the social/email methods you want to surface
+  (Email needs no OAuth setup; each social provider needs its own dashboard
+  credentials — Twitter/X additionally needs an X developer app);
+- enable embedded wallets (required for `createOnLogin: 'users-without-wallets'`
+  to take effect);
+- under Wallet Infrastructure → Gas sponsorship, set mode to **App pays** and
+  enable Arbitrum Sepolia (`421614`) so embedded-wallet writes are gasless;
 - set the allowed origins to the local dev origin and the staging domain;
 - copy the app id into `VITE_PRIVY_APP_ID` (local `.env.local`, staging env).
 
 The code-side configuration that backs these choices lives in
-`src/onchain/wallet/privyConfig.ts` (`loginMethods: ['wallet']`,
-`embeddedWallets.ethereum.createOnLogin: 'off'`, `walletChainType:
-'ethereum-only'`, `supportedChains`/`defaultChain` = Arbitrum Sepolia). When
-`VITE_PRIVY_APP_ID` is unset the app runs practice-only and on-chain routes show
-a recoverable "wallet not configured" message; see `.env.example`.
+`src/onchain/wallet/privyConfig.ts` (`loginMethods: ENABLED_LOGIN_METHODS`,
+`embeddedWallets.ethereum.createOnLogin: 'users-without-wallets'`,
+`walletChainType: 'ethereum-only'`, `supportedChains`/`defaultChain` = Arbitrum
+Sepolia). The sponsored send itself is wired in `PrivyWalletBridge.tsx` via
+`useSendTransaction({ sponsor: true })`. When `VITE_PRIVY_APP_ID` is unset the
+app runs practice-only and on-chain routes show a recoverable "wallet not
+configured" message; see `.env.example`.
 
 ### Implementation Status
 
@@ -303,13 +326,17 @@ These strings should be centralized in the future `src/copy/` module.
 The wallet/network milestone is complete when:
 
 - Privy is the only connection UI;
-- wallet-only login works without creating an embedded wallet;
+- wallet, social, and email sign-in all work; a user without an external wallet
+  receives a Privy embedded wallet;
+- embedded-wallet writes are gasless (sponsored, EIP-7702); external-wallet
+  writes are paid by the wallet;
 - MetaMask and Coinbase Wallet complete desktop and mobile connection tests;
 - the app blocks writes on every chain except `421614`;
 - rejected connection, signature, and chain-switch requests are recoverable;
 - browser return from a mobile wallet restores the intended match route;
 - account switching clears private local state and refetches contract state;
-- zero-balance wallets receive a funding message before the match flow;
+- zero-balance external wallets receive a funding message before the match flow
+  (suppressed for sponsored embedded-wallet sessions);
 - confirmed transactions trigger contract refetches;
 - local practice remains playable without a wallet.
 

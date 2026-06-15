@@ -925,8 +925,9 @@ Explicitly deferred:
 - NFTs and marketplace;
 - chat and social profiles;
 - on-chain bot mode;
-- embedded wallets and social login;
-- sponsored gas or account abstraction;
+- smart wallets with a distinct account address (classic ERC-4337) — note:
+  social login, embedded wallets, and EIP-7702 sponsored gas are now **shipped**
+  (2026-06), and intentionally preserve the EOA address;
 - native mobile application;
 - PWA/offline support;
 - authoritative backend;

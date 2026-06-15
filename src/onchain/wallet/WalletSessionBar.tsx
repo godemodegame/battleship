@@ -45,7 +45,7 @@ export function WalletSessionBar({
         <span className="wallet-address" data-testid="wallet-address" title={session.address}>
           {walletCopy.shortAddress(session.address)}
         </span>
-        <button className="btn ghost" data-testid="wallet-disconnect" onClick={onDisconnect}>
+        <button className="btn ghost" data-ic="power" data-testid="wallet-disconnect" onClick={onDisconnect}>
           {walletCopy.disconnect}
         </button>
       </div>
@@ -57,6 +57,7 @@ export function WalletSessionBar({
     <div className="wallet-bar" data-testid="wallet-bar" data-wallet-status={session.status}>
       <button
         className="btn primary"
+        data-ic="login"
         data-testid="wallet-connect"
         onClick={onConnect}
         disabled={connecting}

@@ -3,7 +3,6 @@
  *
  * Presentational pieces composed by `MatchRouteShell` once authoritative match
  * data exists:
- * - `JoinPanel` — invited wallet's join action with deadline awareness;
  * - `InviteWaitingPanel` — creator's invite link, share, and cancel actions;
  * - `MatchIdentityPanel` — contract explorer link.
  *
@@ -15,7 +14,6 @@ import { useState } from 'react'
 import {
   explorerCopy,
   inviteCopy,
-  joinCopy,
   matchStateCopy,
   walletCopy,
 } from '../../copy/en'
@@ -44,59 +42,6 @@ function useLifecycleTxScope(match: ChainMatchView, kind: string): string | null
         kind,
       })
     : null
-}
-
-export interface JoinPanelProps {
-  match: ChainMatchView
-  writeClient: BattleshipWriteClient | null
-  canWrite: boolean
-  /** Called after a confirmed join so the route refetches immediately. */
-  onJoined: () => void
-  prepareHandoff: () => void
-}
-
-/** Invited wallet's view of a waiting match (GAME-507). */
-export function JoinPanel({ match, writeClient, canWrite, onJoined, prepareHandoff }: JoinPanelProps) {
-  const tx = useTrackedWrite(useLifecycleTxScope(match, 'join'))
-  const busy = isTxBusy(tx.state)
-  const expired = isJoinExpired(match, nowSeconds())
-
-  if (expired) {
-    return (
-      <div className="home-actions" data-testid="join-expired">
-        <p className="status-label">{matchStateCopy.expiredTitle}</p>
-        <p className="status-sub">{matchStateCopy.expiredJoinBody}</p>
-      </div>
-    )
-  }
-
-  async function onJoin() {
-    if (!writeClient || !canWrite || busy) return
-    prepareHandoff()
-    const result = await tx.run((onState) => writeClient.joinMatch(match.matchIdBig, onState))
-    if (result?.ok) onJoined()
-  }
-
-  return (
-    <div className="home-actions" data-testid="join-panel">
-      <p className="status-label">{joinCopy.title}</p>
-      <p className="status-sub">{joinCopy.invitedBody}</p>
-      {match.creator && (
-        <p className="footnote">
-          {joinCopy.creatorLabel}: {walletCopy.shortAddress(match.creator)}
-        </p>
-      )}
-      <button
-        className="btn primary"
-        data-testid="join-match"
-        disabled={busy || !canWrite || !writeClient}
-        onClick={onJoin}
-      >
-        {busy ? joinCopy.joining : joinCopy.join}
-      </button>
-      <TxStatusLine state={tx.state} onRetry={tx.reset} />
-    </div>
-  )
 }
 
 export interface InviteWaitingPanelProps {
@@ -156,6 +101,11 @@ export function InviteWaitingPanel({
             {matchStateCopy.expiredTitle}
           </p>
           <p className="status-sub">{matchStateCopy.expiredBody}</p>
+        </>
+      ) : match.matchType === 'Open' ? (
+        <>
+          <p className="status-label">{inviteCopy.openWaitingTitle}</p>
+          <p className="status-sub">{inviteCopy.openWaitingBody}</p>
         </>
       ) : (
         <>

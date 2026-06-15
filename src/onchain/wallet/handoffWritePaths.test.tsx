@@ -74,16 +74,23 @@ beforeEach(() => {
 afterEach(cleanup)
 
 describe('mobile wallet handoff on write paths (GAME-801)', () => {
-  it('join records handoff intent before joinMatch', async () => {
+  it('join records handoff intent before joinWithFleet', async () => {
     const contract = makeFakeContract()
     await contract.writeClientFor(CREATOR).createMatch(INVITED, () => {})
     const { order, wallet, clients } = instrumented(INVITED, contract)
 
     renderApp({ route: ROUTE, wallet, clients })
     await waitFor(() => expect(screen.getByTestId('join-panel')).toBeTruthy())
+    // Placement-first join: arrange a fleet, then the single action encrypts
+    // and submits joinWithFleet (handoff recorded before the write opens).
+    await userEvent.click(await screen.findByRole('button', { name: 'Auto Place' }))
+    await waitFor(() =>
+      expect((screen.getByTestId('join-match') as HTMLButtonElement).disabled).toBe(false),
+    )
     await userEvent.click(screen.getByTestId('join-match'))
 
-    expectHandoffBefore(order, 'write:joinMatch')
+    await waitFor(() => expect(order).toContain('write:joinWithFleet'))
+    expectHandoffBefore(order, 'write:joinWithFleet')
   })
 
   it('cancel records handoff intent before cancelMatch', async () => {

@@ -102,13 +102,19 @@ describe('match route with live contract data (GAME-507/508)', () => {
     await waitFor(() => expect(screen.getByTestId('join-panel')).toBeTruthy())
     expect(screen.getByTestId('match-phase-kind').textContent).toContain('join')
 
+    // Placement-first join: arrange a fleet, then join and submit in one action.
+    await userEvent.click(await screen.findByRole('button', { name: 'Auto Place' }))
+    await waitFor(() =>
+      expect((screen.getByTestId('join-match') as HTMLButtonElement).disabled).toBe(false),
+    )
     await userEvent.click(screen.getByTestId('join-match'))
 
     // Authoritative refetch after the confirmed join moves the phase forward.
     await waitFor(() =>
       expect(screen.getByTestId('match-phase-kind').textContent).toContain('placement'),
     )
-    expect(fake.match!.status).toBe('WaitingForPlacement')
+    // joinWithFleet advances straight to placement validation.
+    expect(fake.match!.status).toBe('ValidatingPlacement')
   })
 
   it('tells a non-invited wallet the invite belongs to someone else', async () => {

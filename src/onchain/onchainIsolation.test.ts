@@ -37,6 +37,7 @@ describe('on-chain module isolation (GAME-103 empty shell)', () => {
       './wallet/network.ts',
       './wallet/session.ts',
       './wallet/writeGuard.ts',
+      './wallet/activeWallet.ts',
       './wallet/privyConfig.ts',
       './wallet/WalletSessionContext.ts',
       './wallet/WalletProvider.tsx',

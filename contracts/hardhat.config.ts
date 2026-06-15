@@ -28,8 +28,12 @@ const config: HardhatUserConfig = {
       // needs the Cancun EVM target. Arbitrum Sepolia supports Cancun.
       evmVersion: 'cancun',
       optimizer: {
+        // The on-chain hard-bot heatmap added enough bytecode to push the
+        // contract toward the 24576-byte EIP-170 limit at runs: 800. 200 keeps
+        // comfortable deploy headroom; the runtime-gas cost is negligible next
+        // to the multi-million-gas FHE operations that dominate every call.
         enabled: true,
-        runs: 800,
+        runs: 200,
       },
     },
   },
@@ -47,6 +51,10 @@ const config: HardhatUserConfig = {
       // are not meaningful; live gas is measured on Arbitrum Sepolia.
       blockGasLimit: 1_000_000_000,
       gas: 500_000_000,
+      // Test-only: the BattleshipGameHarness subclass (never deployed to a real
+      // network) carries extra expose/forcing helpers and exceeds EIP-170. The
+      // production BattleshipGame stays within the limit (validated at deploy).
+      allowUnlimitedContractSize: true,
     },
     localhost: {
       url: 'http://127.0.0.1:8545',

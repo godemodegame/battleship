@@ -135,6 +135,7 @@ function readClient(over: Partial<BattleshipReadClient> = {}): BattleshipReadCli
 
 function renderPanel(options: {
   phase?: ReturnType<typeof placementPhase>
+  matchView?: ChainMatchView
   client?: BattleshipWriteClient
   reads?: BattleshipReadClient
   factory?: CofheClientFactory
@@ -147,7 +148,7 @@ function renderPanel(options: {
     >
       <EncryptedFleetPanel
         phase={options.phase ?? placementPhase()}
-        match={match()}
+        match={options.matchView ?? match()}
         readClient={options.reads ?? readClient()}
         writeClient={options.client ?? writeClient()}
         wallet={wallet}
@@ -294,6 +295,39 @@ describe('EncryptedFleetPanel (GAME-602..611)', () => {
     await waitFor(() => expect(finalizeFleetValidationWithProof).toHaveBeenCalledTimes(1))
     expect(screen.queryByTestId('proof-error')).toBeNull()
     expect(onRefetch).toHaveBeenCalledTimes(1)
+  })
+
+  it('auto-finalizes a bot-match validation without a manual press', async () => {
+    const finalizeFleetValidationWithProof = vi.fn(async (
+      _matchId: bigint,
+      _player: string,
+      _proof: { value: bigint; signature: `0x${string}` },
+      onState: (state: TxState) => void,
+    ) => {
+      txSuccess(onState)
+      return { ok: true as const, hash: TX_HASH }
+    })
+    const onRefetch = vi.fn()
+    renderPanel({
+      matchView: match({ matchType: 'Bot', status: 'ValidatingPlacement' }),
+      phase: placementPhase({
+        canSubmit: false,
+        submitted: true,
+        validating: true,
+        waitingForOpponent: false,
+      }),
+      client: writeClient({ finalizeFleetValidationWithProof }),
+      factory: makeFakeCofheFactory(),
+      onRefetch,
+    })
+
+    // No click: the effect fires once CoFHE is ready. The overlay reads as a
+    // continuous load into battle.
+    expect(screen.getByTestId('bot-validation-loading')).toBeTruthy()
+    await waitFor(() =>
+      expect(finalizeFleetValidationWithProof).toHaveBeenCalledTimes(1),
+    )
+    expect(onRefetch).toHaveBeenCalled()
   })
 
   it('shows an invalid contract verdict as a recoverable fresh placement', () => {

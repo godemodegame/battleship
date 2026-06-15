@@ -16,7 +16,7 @@
 import type { HexAddress } from '../phaseResolver'
 import { isSupportedChain } from './network'
 
-export type WalletStatus =
+type WalletStatus =
   /** Privy not ready, or no external wallet connected. */
   | 'disconnected'
   /** Privy is resolving a login / wallet selection. */

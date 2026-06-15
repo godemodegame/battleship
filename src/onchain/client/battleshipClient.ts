@@ -13,12 +13,12 @@
  * GAME-511). Reads are authoritative; events only trigger refetches.
  */
 
-import { parseEventLogs } from 'viem'
+import { encodeFunctionData, parseEventLogs } from 'viem'
 import type { ErrorCode } from '../../copy/errors'
 import { battleshipGameAbi } from '../abi/battleshipGame'
 import type { DecryptProof, EncryptedFleetSegment } from '../fhenix/types'
 import type { HexAddress } from '../phaseResolver'
-import { decodeReadError, decodeTxError } from './decodeError'
+import { decodeReadError } from './decodeError'
 import {
   toChainMatchView,
   toChainMoveView,
@@ -54,10 +54,34 @@ export interface MatchEventRef {
 export interface BattleshipReadClient {
   /** Authoritative match read; `null` when the match does not exist. */
   getMatch(matchId: bigint): Promise<ChainMatchView | null>
+  /** Total matches the contract indexed for this player (creator or joiner). */
+  getPlayerMatchCount?(player: HexAddress): Promise<number>
+  /**
+   * One page of the player's match ids, oldest first. The contract reverts
+   * `InvalidPaginationLimit` on a zero limit or a limit above
+   * MAX_PAGE_LIMIT (50); an offset at/past the end returns an empty page.
+   */
+  getPlayerMatches?(player: HexAddress, offset: number, limit: number): Promise<bigint[]>
+  /** Number of open matches currently waiting for any opponent (lobby size). */
+  getOpenMatchCount?(): Promise<number>
+  /**
+   * One page of open-match ids waiting for any opponent, for the matchmaking
+   * lobby. Same pagination contract as `getPlayerMatches` (zero/over-cap limit
+   * reverts `InvalidPaginationLimit`). The set is swap-pop maintained, so order
+   * is not stable across joins — callers hydrate with `getMatch` and sort.
+   */
+  getOpenMatches?(offset: number, limit: number): Promise<bigint[]>
   /** Public placement/board state for both player slots. */
   getPlayers?(matchId: bigint): Promise<MatchPlayersView>
   /** Complete public move history, oldest first (GAME-708). */
   getMoveHistory?(matchId: bigint, moveCount: number): Promise<ChainMoveView[]>
+  /**
+   * One resolved move by id, or `null` when it does not exist. Used by the
+   * on-chain bot battle to read a player shot's finalized result (the only
+   * authoritative source of hit/miss, since the bot fleet is no longer known
+   * client-side).
+   */
+  getMove?(matchId: bigint, moveId: number): Promise<ChainMoveView | null>
   /** The match's unresolved shot, or `null` when none is pending (GAME-705). */
   getPendingShot?(matchId: bigint): Promise<ChainPendingShotView | null>
   /**
@@ -88,7 +112,53 @@ export interface BattleshipWriteClient {
     invitedOpponent: HexAddress,
     onState: (state: TxState) => void,
   ): Promise<CreateMatchResult>
+  /**
+   * Placement-first creation: create a friend match and submit the creator's
+   * encrypted fleet in one transaction. The match stays WaitingForOpponent;
+   * the creator's fleet validates asynchronously (GAME-505/506).
+   */
+  createWithFleet?(
+    invitedOpponent: HexAddress,
+    segments: readonly EncryptedFleetSegment[],
+    onState: (state: TxState) => void,
+  ): Promise<CreateMatchResult>
+  /**
+   * Create an open match that any player may join (random matchmaking). No
+   * invited opponent; the match is listed in the public open-match lobby until
+   * someone joins or the creator cancels.
+   */
+  createOpenMatch?(onState: (state: TxState) => void): Promise<CreateMatchResult>
+  /**
+   * Placement-first open creation: create an open match and submit the
+   * creator's encrypted fleet in one transaction. Mirrors `createWithFleet`
+   * with no invited opponent.
+   */
+  createOpenWithFleet?(
+    segments: readonly EncryptedFleetSegment[],
+    onState: (state: TxState) => void,
+  ): Promise<CreateMatchResult>
+  /**
+   * Create a single-player practice match against the on-chain hard bot in one
+   * transaction. The caller submits BOTH encrypted fleets: their own (validated
+   * asynchronously) and the bot's (client auto-placed, trusted). The player
+   * moves first. The bot fleet is client-supplied because the CoFHE stack has
+   * no usable on-chain randomness; see docs/computer-opponent-design.md.
+   */
+  createBotMatch?(
+    playerSegments: readonly EncryptedFleetSegment[],
+    botSegments: readonly EncryptedFleetSegment[],
+    onState: (state: TxState) => void,
+  ): Promise<CreateMatchResult>
   joinMatch(matchId: bigint, onState: (state: TxState) => void): Promise<WriteResult>
+  /**
+   * Placement-first join: join a match and submit the encrypted fleet in one
+   * transaction. The match advances to ValidatingPlacement (GAME-507).
+   */
+  joinWithFleet?(
+    matchId: bigint,
+    segments: readonly EncryptedFleetSegment[],
+    onState: (state: TxState) => void,
+  ): Promise<WriteResult>
   cancelMatch(matchId: bigint, onState: (state: TxState) => void): Promise<WriteResult>
   forfeit(matchId: bigint, onState: (state: TxState) => void): Promise<WriteResult>
   submitFleet?(
@@ -112,6 +182,12 @@ export interface BattleshipWriteClient {
     cellIndex: number,
     onState: (state: TxState) => void,
   ): Promise<WriteResult>
+  /**
+   * Advance the bot's turn in a Bot match. Permissionless: the contract chooses
+   * the target cell (the caller cannot). Followed by `finalizeAttackWithProof`
+   * to resolve the bot's shot, exactly like a human attack.
+   */
+  executeBotMove?(matchId: bigint, onState: (state: TxState) => void): Promise<WriteResult>
   /**
    * Publish both decrypt proofs (shot result, sunk-ship id) and finalize the
    * pending shot. Permissionless, like fleet-validation finalization.
@@ -178,6 +254,20 @@ export interface WalletClientLike {
   writeContract(request: never): Promise<Hash>
 }
 
+/**
+ * Sponsored (gasless) send for embedded-wallet sessions (EIP-7702). Receives a
+ * fully-encoded contract call and returns the broadcast transaction hash. The
+ * embedded wallet keeps the SAME address as the EOA the contract sees as
+ * `msg.sender` and that CoFHE binds permits to, so sponsorship is transparent
+ * to the contract and the encryption layer. Built from Privy's
+ * `useSendTransaction({ sponsor: true })` in `PrivyWalletBridge`.
+ */
+export type SponsoredSend = (request: {
+  to: HexAddress
+  data: `0x${string}`
+  value?: bigint
+}) => Promise<Hash>
+
 export interface BattleshipClientConfig {
   publicClient: PublicClientLike
   contractAddress: HexAddress
@@ -188,6 +278,12 @@ export interface BattleshipWriteClientConfig extends BattleshipClientConfig {
   walletClient: WalletClientLike
   /** The active wallet address; every write is simulated and sent as it. */
   account: HexAddress
+  /**
+   * When present (embedded-wallet sessions), writes are sent gaslessly through
+   * this sponsored sender instead of `walletClient.writeContract`. The
+   * simulate-for-error-decoding step runs either way.
+   */
+  sponsoredSend?: SponsoredSend
 }
 
 interface WatchedLog {
@@ -221,6 +317,46 @@ export function createBattleshipReadClient(
       }
     },
 
+    async getPlayerMatchCount(player) {
+      const raw = await publicClient.readContract({
+        address: contractAddress,
+        abi: battleshipGameAbi,
+        functionName: 'getPlayerMatchCount',
+        args: [player],
+      })
+      return Number(raw as bigint)
+    },
+
+    async getPlayerMatches(player, offset, limit) {
+      const raw = await publicClient.readContract({
+        address: contractAddress,
+        abi: battleshipGameAbi,
+        functionName: 'getPlayerMatches',
+        args: [player, offset, limit],
+      })
+      return [...(raw as readonly bigint[])]
+    },
+
+    async getOpenMatchCount() {
+      const raw = await publicClient.readContract({
+        address: contractAddress,
+        abi: battleshipGameAbi,
+        functionName: 'getOpenMatchCount',
+        args: [],
+      })
+      return Number(raw as bigint)
+    },
+
+    async getOpenMatches(offset, limit) {
+      const raw = await publicClient.readContract({
+        address: contractAddress,
+        abi: battleshipGameAbi,
+        functionName: 'getOpenMatches',
+        args: [offset, limit],
+      })
+      return [...(raw as readonly bigint[])]
+    },
+
     async getPlayers(matchId) {
       const raw = await publicClient.readContract({
         address: contractAddress,
@@ -249,6 +385,21 @@ export function createBattleshipReadClient(
         if (page.length < MOVE_PAGE_LIMIT) break
       }
       return moves
+    },
+
+    async getMove(matchId, moveId) {
+      try {
+        const raw = await publicClient.readContract({
+          address: contractAddress,
+          abi: battleshipGameAbi,
+          functionName: 'getMove',
+          args: [matchId, moveId],
+        })
+        return toChainMoveView(raw as RawMoveView)
+      } catch (err) {
+        if (decodeReadError(err) === 'match-not-found') return null
+        throw err
+      }
     },
 
     async getPendingShot(matchId) {
@@ -320,17 +471,23 @@ export function extractCreatedMatchId(
 export function createBattleshipWriteClient(
   config: BattleshipWriteClientConfig,
 ): BattleshipWriteClient {
-  const { publicClient, walletClient, contractAddress, account } = config
+  const { publicClient, walletClient, contractAddress, account, sponsoredSend } = config
 
   async function performWrite(
     functionName:
       | 'createMatch'
+      | 'createWithFleet'
+      | 'createOpenMatch'
+      | 'createOpenWithFleet'
+      | 'createBotMatch'
       | 'joinMatch'
+      | 'joinWithFleet'
       | 'cancelMatch'
       | 'forfeit'
       | 'submitFleet'
       | 'finalizeFleetValidationWithProof'
       | 'attack'
+      | 'executeBotMove'
       | 'finalizeAttackWithProof'
       | 'claimTimeoutWin',
     args: readonly unknown[],
@@ -339,7 +496,9 @@ export function createBattleshipWriteClient(
     const outcome = await trackTransaction<ReceiptLike>({
       send: async () => {
         // Simulation decodes contract reverts into named errors before the
-        // wallet prompt; the returned request is what the wallet signs.
+        // wallet prompt; the returned request is what the EOA path signs. It
+        // runs as `account` (the EOA, unchanged under 7702), so the decode is
+        // accurate for both the sponsored and the wallet-pays paths.
         const { request } = await publicClient.simulateContract({
           address: contractAddress,
           abi: battleshipGameAbi,
@@ -347,6 +506,17 @@ export function createBattleshipWriteClient(
           args,
           account,
         })
+        if (sponsoredSend) {
+          // Embedded wallet: send gaslessly. simulate() returns no encoded
+          // calldata, so re-encode the same call. All BattleshipGame writes are
+          // non-payable, so no value is forwarded.
+          const data = encodeFunctionData({
+            abi: battleshipGameAbi,
+            functionName: functionName as never,
+            args: args as never,
+          })
+          return sponsoredSend({ to: contractAddress, data })
+        }
         return walletClient.writeContract(request as never)
       },
       wait: (hash: Hash, onReplaced: (info: ReplacementInfo) => void) =>
@@ -363,68 +533,104 @@ export function createBattleshipWriteClient(
     return { ok: true, receipt: outcome.receipt }
   }
 
+  /** Shared epilogue for the createX writes: surface the new match id from the
+   * confirmed receipt, or degrade to a recoverable error. */
+  function finishCreate(
+    result: Awaited<ReturnType<typeof performWrite>>,
+  ): CreateMatchResult {
+    if (!result.ok) return result
+    const matchId = extractCreatedMatchId(result.receipt.logs, contractAddress)
+    if (matchId === null) {
+      // Confirmed receipt without a MatchCreated log should be impossible;
+      // degrade to a recoverable error rather than navigating nowhere.
+      return { ok: false, error: 'unknown' }
+    }
+    return { ok: true, hash: result.receipt.transactionHash, matchId }
+  }
+
+  /** Shared epilogue for the non-create writes: return the confirmed hash or
+   * pass the failure through unchanged. */
+  function finishWrite(
+    result: Awaited<ReturnType<typeof performWrite>>,
+  ): WriteResult {
+    return result.ok ? { ok: true, hash: result.receipt.transactionHash } : result
+  }
+
   return {
     async createMatch(invitedOpponent, onState) {
-      const result = await performWrite('createMatch', [invitedOpponent], onState)
-      if (!result.ok) return result
-      const matchId = extractCreatedMatchId(result.receipt.logs, contractAddress)
-      if (matchId === null) {
-        // Confirmed receipt without a MatchCreated log should be impossible;
-        // degrade to a recoverable error rather than navigating nowhere.
-        return { ok: false, error: 'unknown' }
-      }
-      return { ok: true, hash: result.receipt.transactionHash, matchId }
+      return finishCreate(await performWrite('createMatch', [invitedOpponent], onState))
+    },
+
+    async createWithFleet(invitedOpponent, segments, onState) {
+      return finishCreate(
+        await performWrite('createWithFleet', [invitedOpponent, segments], onState),
+      )
+    },
+
+    async createOpenMatch(onState) {
+      return finishCreate(await performWrite('createOpenMatch', [], onState))
+    },
+
+    async createOpenWithFleet(segments, onState) {
+      return finishCreate(await performWrite('createOpenWithFleet', [segments], onState))
+    },
+
+    async createBotMatch(playerSegments, botSegments, onState) {
+      return finishCreate(
+        await performWrite('createBotMatch', [playerSegments, botSegments], onState),
+      )
     },
 
     async joinMatch(matchId, onState) {
-      const result = await performWrite('joinMatch', [matchId], onState)
-      return result.ok ? { ok: true, hash: result.receipt.transactionHash } : result
+      return finishWrite(await performWrite('joinMatch', [matchId], onState))
+    },
+
+    async joinWithFleet(matchId, segments, onState) {
+      return finishWrite(await performWrite('joinWithFleet', [matchId, segments], onState))
     },
 
     async cancelMatch(matchId, onState) {
-      const result = await performWrite('cancelMatch', [matchId], onState)
-      return result.ok ? { ok: true, hash: result.receipt.transactionHash } : result
+      return finishWrite(await performWrite('cancelMatch', [matchId], onState))
     },
 
     async forfeit(matchId, onState) {
-      const result = await performWrite('forfeit', [matchId], onState)
-      return result.ok ? { ok: true, hash: result.receipt.transactionHash } : result
+      return finishWrite(await performWrite('forfeit', [matchId], onState))
     },
 
     async submitFleet(matchId, segments, onState) {
-      const result = await performWrite('submitFleet', [matchId, segments], onState)
-      return result.ok ? { ok: true, hash: result.receipt.transactionHash } : result
+      return finishWrite(await performWrite('submitFleet', [matchId, segments], onState))
     },
 
     async finalizeFleetValidationWithProof(matchId, player, proof, onState) {
-      const result = await performWrite(
-        'finalizeFleetValidationWithProof',
-        [matchId, player, proof.value, proof.signature],
-        onState,
+      return finishWrite(
+        await performWrite(
+          'finalizeFleetValidationWithProof',
+          [matchId, player, proof.value, proof.signature],
+          onState,
+        ),
       )
-      return result.ok ? { ok: true, hash: result.receipt.transactionHash } : result
     },
 
     async attack(matchId, cellIndex, onState) {
-      const result = await performWrite('attack', [matchId, cellIndex], onState)
-      return result.ok ? { ok: true, hash: result.receipt.transactionHash } : result
+      return finishWrite(await performWrite('attack', [matchId, cellIndex], onState))
+    },
+
+    async executeBotMove(matchId, onState) {
+      return finishWrite(await performWrite('executeBotMove', [matchId], onState))
     },
 
     async finalizeAttackWithProof(matchId, moveId, result, sunkShip, onState) {
-      const outcome = await performWrite(
-        'finalizeAttackWithProof',
-        [matchId, moveId, result.value, result.signature, sunkShip.value, sunkShip.signature],
-        onState,
+      return finishWrite(
+        await performWrite(
+          'finalizeAttackWithProof',
+          [matchId, moveId, result.value, result.signature, sunkShip.value, sunkShip.signature],
+          onState,
+        ),
       )
-      return outcome.ok ? { ok: true, hash: outcome.receipt.transactionHash } : outcome
     },
 
     async claimTimeoutWin(matchId, onState) {
-      const result = await performWrite('claimTimeoutWin', [matchId], onState)
-      return result.ok ? { ok: true, hash: result.receipt.transactionHash } : result
+      return finishWrite(await performWrite('claimTimeoutWin', [matchId], onState))
     },
   }
 }
-
-/** Re-export for consumers that only import the client module. */
-export { decodeTxError }

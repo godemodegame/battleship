@@ -17,12 +17,12 @@ import {
 } from '../copy/en'
 import { errorMessage } from '../copy/errors'
 import { parseMatchIdParam } from './client/mapping'
+import { peekBotFleets } from './match/botFleetStash'
 import { useBattleshipClients } from './client/useBattleshipClients'
 import { usePendingTxRecovery } from './client/usePendingTxRecovery'
 import { useMatchView } from './useMatchView'
 import {
   InviteWaitingPanel,
-  JoinPanel,
   MatchIdentityPanel,
 } from './match/MatchLifecyclePanels'
 import { useDeploymentHealth } from './useDeploymentHealth'
@@ -37,9 +37,19 @@ const EncryptedFleetPanel = lazy(async () => {
   return { default: module.EncryptedFleetPanel }
 })
 
+const JoinWithFleetPanel = lazy(async () => {
+  const module = await import('./placement/JoinWithFleetPanel')
+  return { default: module.JoinWithFleetPanel }
+})
+
 const OnchainBattlePanel = lazy(async () => {
   const module = await import('./battle/OnchainBattlePanel')
   return { default: module.OnchainBattlePanel }
+})
+
+const BotBattleController = lazy(async () => {
+  const module = await import('./battle/BotBattleController')
+  return { default: module.BotBattleController }
 })
 
 const MatchSummaryPanel = lazy(async () => {
@@ -96,6 +106,10 @@ function makeDemoMatch(deploymentId: string, matchId: string): MatchView {
     { key: 'valid',       patch: { status: 'ValidatingPlacement', opponent: DEMO_OPPONENT } },
     { key: 'ready',       patch: { status: 'ReadyToStart', opponent: DEMO_OPPONENT } },
     { key: 'wait-opp',    patch: { status: 'WaitingForOpponent', opponent: DEMO_OPPONENT } },
+    // Open match (random matchmaking): no invited opponent; any non-creator
+    // wallet resolves to the join phase. 'open' is checked before 'join' so
+    // demo-open-join keeps the Open patch while still selecting a stranger wallet.
+    { key: 'open',        patch: { status: 'WaitingForOpponent', matchType: 'Open', invitedOpponent: null } },
     { key: 'join',        patch: { status: 'WaitingForOpponent' } },
     { key: 'cancel',      patch: { status: 'Cancelled', opponent: DEMO_OPPONENT } },
     { key: 'forfeit',     patch: { status: 'Forfeited', opponent: DEMO_OPPONENT } },
@@ -338,6 +352,7 @@ export function MatchRouteShell() {
 
   // Placement, battle, and terminal phases hold tall panels; the route scrolls.
   const scrollingPhase =
+    phase.kind === 'join' ||
     phase.kind === 'placement' ||
     phase.kind === 'battle' ||
     phase.kind === 'resolving' ||
@@ -412,8 +427,10 @@ export function MatchRouteShell() {
         />
       )}
 
-      {/* GAME-209: surface funding guidance for zero-balance wallets on real routes. */}
+      {/* GAME-209: surface funding guidance for zero-balance wallets on real routes.
+          Skipped under sponsored gas — embedded-wallet writes are gasless. */}
       {!hasDemoMarker &&
+        !wallet.gasSponsored &&
         wallet.session.isConnected &&
         wallet.session.isCorrectChain &&
         wallet.balanceStatus === 'zero' && (
@@ -431,6 +448,7 @@ export function MatchRouteShell() {
 
       {/* GAME-804: non-blocking low-balance warning before long write flows. */}
       {!hasDemoMarker &&
+        !wallet.gasSponsored &&
         wallet.session.isConnected &&
         wallet.session.isCorrectChain &&
         wallet.balanceStatus === 'low' && <LowBalanceWarning balanceWei={wallet.balance} />}
@@ -487,13 +505,14 @@ export function MatchRouteShell() {
           {phase.kind !== 'placement' && <PhasePanel phase={phase} />}
 
           {phase.kind === 'join' && (
-            <JoinPanel
-              match={match}
-              writeClient={writeClient}
-              canWrite={wallet.canWrite}
-              onJoined={query.refetch}
-              prepareHandoff={wallet.actions.prepareHandoff}
-            />
+            <Suspense fallback={<PlacementLoading />}>
+              <JoinWithFleetPanel
+                match={match}
+                writeClient={writeClient}
+                wallet={wallet}
+                onJoined={query.refetch}
+              />
+            </Suspense>
           )}
 
           {phase.kind === 'waiting-for-opponent' &&
@@ -539,25 +558,56 @@ export function MatchRouteShell() {
             </>
           )}
 
-          {/* On-chain battle and resolving states (GAME-701..708, 710, 712). */}
-          {(phase.kind === 'battle' || phase.kind === 'resolving') && (
-            <Suspense fallback={<BattleLoading />}>
-              <OnchainBattlePanel
-                phase={phase}
-                match={match}
-                writeClient={writeClient}
-                wallet={wallet}
-                onRefetch={query.refetch}
-              />
-            </Suspense>
-          )}
-
-          {/* Contract-derived terminal summary (GAME-709/710/711). */}
-          {(phase.kind === 'finished' || phase.kind === 'forfeited') && (
-            <Suspense fallback={<BattleLoading />}>
-              <MatchSummaryPanel match={match} wallet={wallet} />
-            </Suspense>
-          )}
+          {/* On-chain battle, resolving, AND terminal states (GAME-701..712).
+              A bot match created in this session renders the full practice 3D
+              engine (BotBattleController) from the locally-retained fleets — and
+              that engine owns the terminal screen too (the 3D victory/defeat
+              overlay), so the flat DOM summary is never the bot-mode result.
+              Any other case — friend/open, or a refresh that dropped the stash
+              (no plaintext fleets to rebuild the 3D boards) — uses the
+              authoritative public-data DOM panels. */}
+          {(phase.kind === 'battle' ||
+            phase.kind === 'resolving' ||
+            phase.kind === 'finished' ||
+            phase.kind === 'forfeited') &&
+            (() => {
+              const botFleets =
+                match.matchType === 'Bot'
+                  ? peekBotFleets(match.deploymentId, match.matchId)
+                  : null
+              if (botFleets) {
+                return (
+                  <Suspense fallback={<BattleLoading />}>
+                    <BotBattleController
+                      fleets={botFleets}
+                      match={match}
+                      writeClient={writeClient}
+                      readClient={readClient}
+                      wallet={wallet}
+                      onRefetch={query.refetch}
+                    />
+                  </Suspense>
+                )
+              }
+              if (phase.kind === 'battle' || phase.kind === 'resolving') {
+                return (
+                  <Suspense fallback={<BattleLoading />}>
+                    <OnchainBattlePanel
+                      phase={phase}
+                      match={match}
+                      writeClient={writeClient}
+                      wallet={wallet}
+                      onRefetch={query.refetch}
+                    />
+                  </Suspense>
+                )
+              }
+              return (
+                <Suspense fallback={<BattleLoading />}>
+                  <MatchSummaryPanel match={match} wallet={wallet} />
+                </Suspense>
+              )
+            })()}
 
           {phase.kind === 'cancelled' && (
             <p className="status-sub" data-testid="match-cancelled">

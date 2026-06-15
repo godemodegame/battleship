@@ -17,6 +17,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import {
   PrivyProvider,
   usePrivy,
+  useSendTransaction,
   useWallets,
   type ConnectedWallet,
 } from '@privy-io/react-auth'
@@ -30,6 +31,7 @@ import {
 } from 'viem'
 import type { ErrorCode } from '../../copy/errors'
 import { arbitrumSepolia, ARBITRUM_SEPOLIA_CHAIN_ID, parseChainId } from './network'
+import { isEmbeddedWallet, selectActiveWallet } from './activeWallet'
 import { deriveWalletSession } from './session'
 import { evaluateWriteReadiness } from './writeGuard'
 import {
@@ -41,18 +43,36 @@ import { clearHandoffIntent, consumeHandoffIntent, saveHandoffIntent } from './h
 import { LOW_BALANCE_THRESHOLD_WEI } from './LowBalanceNotice'
 import { clearAllPendingTx } from '../client/pendingTxStore'
 
-/** The active external wallet for the session: the first connected EVM wallet. */
+/**
+ * The active wallet for the session. Prefers the Privy embedded wallet (so
+ * social/email users land on the gas-sponsorable wallet) and falls back to the
+ * first connected wallet for external-wallet users. See `activeWallet.ts`.
+ */
 function activeWalletOf(wallets: ConnectedWallet[]): ConnectedWallet | null {
-  return wallets.length > 0 ? wallets[0] : null
+  return selectActiveWallet(wallets)
 }
 
 /**
  * Inner bridge — rendered inside `PrivyProvider` so it may use Privy hooks.
  * Derives the session, builds viem clients, and wires connection actions.
  */
+/** Record the current on-chain match route so the user can be returned to it
+ * after a mobile wallet-app handoff (GAME-210). Best-effort; never throws. */
+function recordMatchHandoffIntent() {
+  try {
+    if (typeof window !== 'undefined') {
+      const p = window.location.pathname + window.location.search
+      if (p.startsWith('/match/')) saveHandoffIntent(p)
+    }
+  } catch {}
+}
+
 function WalletSessionBridge({ children }: { children: ReactNode }) {
   const { ready, authenticated, login, logout, connectWallet } = usePrivy()
   const { wallets } = useWallets()
+  // Gasless sends for embedded wallets (EIP-7702). The hook is always called
+  // (rules of hooks); `sendTransaction` is only invoked for embedded wallets.
+  const { sendTransaction } = useSendTransaction()
   // An injected wallet stays in `wallets` after logout (the extension's
   // connection to the site outlives the Privy session). Only an authenticated
   // session has an active wallet; otherwise Disconnect would appear to do
@@ -71,6 +91,10 @@ function WalletSessionBridge({ children }: { children: ReactNode }) {
 
   const chainId = parseChainId(wallet?.chainId)
   const address = wallet?.address ?? null
+  // A Privy embedded wallet (social/email sign-in) is the only kind whose
+  // writes we sponsor. Its address is unchanged from the EOA the contract sees
+  // as msg.sender and that CoFHE binds permits to, so sponsorship is transparent.
+  const gasSponsored = isEmbeddedWallet(wallet)
 
   // A single public client for reads; the transport never changes.
   const publicClient = useMemo<PublicClient>(
@@ -122,7 +146,10 @@ function WalletSessionBridge({ children }: { children: ReactNode }) {
   // Fetch balance for funding guidance when we have a usable address on the
   // correct chain. Re-fetches when address or chain readiness changes.
   // Balance is advisory (GAME-209); it does not hard-block the write guard.
-  const readyForBalance = Boolean(address && isSupportedChainForBalance(chainId))
+  // Sponsored (embedded) sessions never pay gas, so balance is irrelevant — skip
+  // the fetch entirely. balance stays null, funding UX never triggers.
+  const readyForBalance =
+    Boolean(address && isSupportedChainForBalance(chainId)) && !gasSponsored
   const balanceKey = readyForBalance ? address : null
   useEffect(() => {
     let cancelled = false
@@ -236,12 +263,7 @@ function WalletSessionBridge({ children }: { children: ReactNode }) {
     setConnecting(true)
     // Before we may hand off on mobile, record the current on-chain route so we
     // can return the user to it after the wallet app (GAME-210).
-    try {
-      if (typeof window !== 'undefined') {
-        const p = window.location.pathname + window.location.search
-        if (p.startsWith('/match/')) saveHandoffIntent(p)
-      }
-    } catch {}
+    recordMatchHandoffIntent()
     // Privy owns wallet discovery + connection. `login` opens the connect UI;
     // with wallet-only login methods this is the wallet selection modal.
     try {
@@ -273,17 +295,35 @@ function WalletSessionBridge({ children }: { children: ReactNode }) {
   }, [wallet])
 
   const prepareHandoff = useCallback(() => {
-    try {
-      if (typeof window !== 'undefined') {
-        const p = window.location.pathname + window.location.search
-        if (p.startsWith('/match/')) saveHandoffIntent(p)
-      }
-    } catch {}
+    recordMatchHandoffIntent()
   }, [])
 
   const clearHandoffRestore = useCallback(() => {
     setHandoffRestored(false)
   }, [])
+
+  // Gasless send for the embedded wallet: encode-free request in, broadcast
+  // hash out. Privy sponsors the gas (EIP-7702) when the dashboard "App pays"
+  // policy covers Arbitrum Sepolia. The wallet (and thus msg.sender) is the
+  // same EOA, so the contract and CoFHE see no difference from a paid write.
+  const sponsoredSend = useCallback(
+    async ({
+      to,
+      data,
+      value,
+    }: {
+      to: `0x${string}`
+      data: `0x${string}`
+      value?: bigint
+    }): Promise<`0x${string}`> => {
+      const { hash } = await sendTransaction(
+        { to, data, value, chainId: ARBITRUM_SEPOLIA_CHAIN_ID },
+        { sponsor: true },
+      )
+      return hash
+    },
+    [sendTransaction],
+  )
 
   const value: WalletContextValue = {
     session,
@@ -299,6 +339,10 @@ function WalletSessionBridge({ children }: { children: ReactNode }) {
     // *Like types are the subset of the viem API the client layer uses.
     publicClient: publicClient as unknown as WalletContextValue['publicClient'],
     walletClient: walletClient as unknown as WalletContextValue['walletClient'],
+    gasSponsored,
+    // Only expose the sponsored sender for embedded wallets; external-wallet
+    // sessions keep paying their own gas via the viem wallet client.
+    sponsoredSend: gasSponsored ? sponsoredSend : undefined,
     actions: {
       connect,
       disconnect,

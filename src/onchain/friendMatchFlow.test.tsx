@@ -27,6 +27,15 @@ vi.mock('../lib/haptics', () => ({
   haptics: new Proxy({}, { get: () => vi.fn() }),
 }))
 
+// Placement-first flows gate the create/join action behind a complete fleet
+// and a ready CoFHE session; auto-place then wait for the action to enable.
+async function placeFleetAndWaitReady(actionTestId: string) {
+  await userEvent.click(await screen.findByRole('button', { name: 'Auto Place' }))
+  await waitFor(() =>
+    expect((screen.getByTestId(actionTestId) as HTMLButtonElement).disabled).toBe(false),
+  )
+}
+
 describe('two-wallet friend match flow (Phase 5 exit criterion)', () => {
   it('creator creates from the UI; the invited wallet joins through the invite link', async () => {
     Object.defineProperty(navigator, 'clipboard', {
@@ -43,6 +52,7 @@ describe('two-wallet friend match flow (Phase 5 exit criterion)', () => {
     })
 
     await userEvent.type(await screen.findByTestId('invited-address-input'), INVITED)
+    await placeFleetAndWaitReady('create-match')
     await userEvent.click(screen.getByTestId('create-match'))
 
     await waitFor(() => expect(screen.getByTestId('invite-panel')).toBeTruthy())
@@ -61,13 +71,15 @@ describe('two-wallet friend match flow (Phase 5 exit criterion)', () => {
     })
 
     await waitFor(() => expect(screen.getByTestId('join-panel')).toBeTruthy())
+    await placeFleetAndWaitReady('join-match')
     await userEvent.click(screen.getByTestId('join-match'))
 
     await waitFor(() =>
       expect(screen.getByTestId('match-phase-kind').textContent).toContain('placement'),
     )
     expect(contract.match!.opponent).toBe(INVITED)
-    expect(contract.match!.status).toBe('WaitingForPlacement')
+    // joinWithFleet advances straight to placement validation.
+    expect(contract.match!.status).toBe('ValidatingPlacement')
 
     // --- Wallet A returns (refresh): sees the joined match state -------------
     cleanup()

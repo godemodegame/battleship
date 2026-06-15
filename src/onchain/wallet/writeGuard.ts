@@ -35,7 +35,7 @@ export interface WriteReadinessInput {
   walletClientReady: boolean
 }
 
-export interface WriteReadiness {
+interface WriteReadiness {
   canWrite: boolean
   /** Null only when `canWrite` is true. */
   blockedReason: WriteBlockReason | null

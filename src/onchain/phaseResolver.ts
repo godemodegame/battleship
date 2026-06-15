@@ -50,6 +50,12 @@ export interface MatchView {
   deploymentId: string
   matchId: string
   status: MatchStatus
+  /**
+   * Friend matches are invite-gated; Open matches accept any non-creator
+   * (random matchmaking). Optional so older call sites default to Friend
+   * semantics. Mirrors `ChainMatchView.matchType`.
+   */
+  matchType?: 'Friend' | 'Open' | 'Bot'
   creator: HexAddress | null
   opponent: HexAddress | null
   invitedOpponent: HexAddress | null
@@ -131,7 +137,11 @@ export function resolveMatchPhase(input: PhaseResolverInput): MatchPhase {
 
   switch (match.status) {
     case 'WaitingForOpponent': {
-      if (isInvited && !match.opponent) {
+      // Friend: only the invited wallet may join. Open: any connected wallet
+      // that is not the creator (random matchmaking). The creator always falls
+      // through to the passive "waiting for a challenger" state.
+      const canJoinOpen = match.matchType === 'Open' && !isCreator
+      if (!match.opponent && (isInvited || canJoinOpen)) {
         return { kind: 'join' }
       }
       return { kind: 'waiting-for-opponent' }

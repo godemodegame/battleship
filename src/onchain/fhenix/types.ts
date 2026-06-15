@@ -4,7 +4,12 @@ export interface CofheScope {
   address: HexAddress
   chainId: number
   deploymentId: string
-  matchId: bigint
+  /**
+   * Contract match id, or a provisional key (e.g. 'new') while a match is being
+   * created placement-first and no id exists yet. Used only for the session
+   * scope key; ciphertext binds to the account, not the match id.
+   */
+  matchId: bigint | string
 }
 
 export function cofheScopeKey(scope: CofheScope): string {
@@ -56,6 +61,15 @@ export interface CofheMatchClient {
   readonly execution: 'worker' | 'main-thread'
   readonly scopeKey: string
   initialize(): Promise<void>
+  /**
+   * Optional best-effort pre-warm, run in the background while the player is
+   * still placing ships. It primes the heavy one-time costs of the first
+   * encrypt — loading the TFHE engine (`InitTfhe`) and fetching the FHE public
+   * keys (`FetchKeys`), both cached for the session — so the real fleet encrypt
+   * after "Start" only pays for packing + proving. A failure is swallowed: the
+   * first real encrypt just pays the full cost as before. Idempotent.
+   */
+  warm?(): Promise<void>
   encryptFleet(
     segments: readonly number[],
     onProgress?: (progress: CofheProgress) => void,

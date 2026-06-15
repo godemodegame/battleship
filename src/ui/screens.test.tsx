@@ -108,30 +108,30 @@ afterEach(() => {
 })
 
 describe('HomeScreen', () => {
-  it('updates difficulty, opens help, and starts practice placement', async () => {
+  it('opens help and routes the live match modes (bot is now on-chain)', async () => {
     const user = userEvent.setup()
     render(<App />)
 
-    const hard = await screen.findByRole('radio', { name: 'Hard' })
-    await user.click(hard)
-    expect(hard.getAttribute('aria-checked')).toBe('true')
-    expect(useStore.getState().difficulty).toBe('hard')
-
-    // Phase 5: Play Against Friend is live (routes to /match/new); Open Match
-    // stays disabled until post-MVP matchmaking exists.
+    // The offline difficulty selector is gone — the bot match is fully on-chain
+    // and always hard. Play Against Friend (→ /match/new), Find a Game
+    // (→ /lobby), and Practice vs Bot (→ /match/bot) are all live.
+    await screen.findByRole('button', { name: 'Practice vs Bot' })
+    expect(screen.queryByRole('radio', { name: 'Hard' })).toBeNull()
     expect((screen.getByRole('button', { name: 'Play Against Friend' }) as HTMLButtonElement).disabled)
       .toBe(false)
-    expect((screen.getByRole('button', { name: 'Open Match' }) as HTMLButtonElement).disabled)
-      .toBe(true)
+    expect((screen.getByRole('button', { name: 'Find a Game' }) as HTMLButtonElement).disabled)
+      .toBe(false)
 
     await user.click(screen.getByRole('button', { name: 'How It Works' }))
     expect(screen.getByRole('heading', { name: 'How It Works' })).toBeTruthy()
     await user.click(screen.getByRole('button', { name: 'Done' }))
     expect(screen.queryByRole('heading', { name: 'How It Works' })).toBeNull()
 
+    // Practice vs Bot now navigates to the on-chain bot create route rather than
+    // starting a local game, so the practice store stays on the home screen.
     await user.click(screen.getByRole('button', { name: 'Practice vs Bot' }))
-    expect(screen.getByText('Deploy Fleet')).toBeTruthy()
-    expect(useStore.getState().screen).toBe('placement')
+    expect(window.location.pathname).toBe('/match/bot')
+    expect(useStore.getState().screen).toBe('home')
   })
 })
 
@@ -192,6 +192,31 @@ describe('BattleHUD', () => {
     await user.click(screen.getAllByRole('button', { name: 'Forfeit' })[1])
     expect(screen.getByRole('heading', { name: 'Defeat' })).toBeTruthy()
     expect(screen.getByText('Match forfeited')).toBeTruthy()
+  })
+
+  it('swaps the Fire button for a working Retry when an on-chain turn stalls', async () => {
+    const user = userEvent.setup()
+    startBattle()
+    render(<App />)
+    const resumeBattle = vi.fn()
+    const match = useStore.getState().match!
+    // Reproduce the stall: it's the bot's turn on-chain but the driver failed,
+    // so the old build left a dead "Your Turn" button. Now Retry resumes it.
+    act(() =>
+      useStore.setState({
+        match: { ...match, turn: 'bot' },
+        busy: false,
+        driverError: true,
+        resumeBattle,
+      }),
+    )
+
+    expect(screen.queryByRole('button', { name: 'Select a target cell' })).toBeNull()
+    const retry = screen.getByTestId('resume-battle')
+    expect(retry.hasAttribute('disabled')).toBe(false)
+
+    await user.click(retry)
+    expect(resumeBattle).toHaveBeenCalledTimes(1)
   })
 })
 

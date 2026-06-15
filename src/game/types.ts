@@ -41,6 +41,12 @@ export interface BoardState {
   /** Index into ships[] for each cell, -1 when empty. */
   shipAt: number[]
   shots: CellShot[]
+  /**
+   * True for the on-chain enemy board, whose fleet is hidden: `ships` only ever
+   * holds hulls reconstructed when a ship sinks (for rendering), so fleet
+   * accounting must come from finalized moves, not from `ships`.
+   */
+  hidden?: boolean
 }
 
 export type Side = 'player' | 'bot'

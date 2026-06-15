@@ -1,6 +1,14 @@
 import { describe, expect, it } from 'vitest'
 import { COMPLETE_FLEET, cloneMatch } from '../test/gameFixtures'
-import { applyAttack, buildBoard, createMatch, sunkHalo } from './engine'
+import {
+  applyAttack,
+  applyResolvedShot,
+  buildBoard,
+  createMatch,
+  createMatchVsHiddenEnemy,
+  emptyBoard,
+  sunkHalo,
+} from './engine'
 import type { Placement } from './types'
 
 const twoCellShip: Placement[] = [
@@ -88,6 +96,118 @@ describe('applyAttack', () => {
     applyAttack(match, 'player', 0)
 
     expect(match).toEqual(snapshot)
+  })
+})
+
+describe('createMatchVsHiddenEnemy', () => {
+  it('builds a known player board and a geometry-less enemy board', () => {
+    const match = createMatchVsHiddenEnemy(twoCellShip)
+
+    expect(match.boards.player.ships).toHaveLength(1)
+    // The enemy fleet is hidden: no ships, no lookup, no shots yet.
+    expect(match.boards.bot.ships).toEqual([])
+    expect(match.boards.bot.shipAt).toEqual(new Array(100).fill(-1))
+    expect(match.boards.bot.shots).toEqual(new Array(100).fill(0))
+    expect(match.turn).toBe('player')
+  })
+
+  it('emptyBoard has no ships and an all-empty lookup', () => {
+    const board = emptyBoard()
+    expect(board.ships).toEqual([])
+    expect(board.shipAt.every((v) => v === -1)).toBe(true)
+    expect(board.shots.every((v) => v === 0)).toBe(true)
+  })
+})
+
+describe('applyResolvedShot', () => {
+  it('stamps a chain miss and passes the turn — without any geometry', () => {
+    const resolved = applyResolvedShot(createMatchVsHiddenEnemy(twoCellShip), 10, {
+      result: 'miss',
+      shipSlot: null,
+      winner: false,
+    })
+
+    expect(resolved.move).toEqual({ by: 'player', cell: 10, result: 'miss', shipSlot: null })
+    expect(resolved.match.boards.bot.shots[10]).toBe(1)
+    expect(resolved.match.turn).toBe('bot')
+    expect(resolved.match.winner).toBeNull()
+  })
+
+  it('stamps a chain hit and keeps the turn', () => {
+    const resolved = applyResolvedShot(createMatchVsHiddenEnemy(twoCellShip), 5, {
+      result: 'hit',
+      shipSlot: null,
+      winner: false,
+    })
+
+    expect(resolved.match.boards.bot.shots[5]).toBe(2)
+    expect(resolved.match.turn).toBe('player')
+  })
+
+  it('reveals the sunk hull from public markers and draws the no-touch halo', () => {
+    // Hit one cell, then sink the adjacent cell: the connected run {7,8}
+    // reconstructs a horizontal 2-cell hull even though the enemy board started
+    // geometry-less — deduced purely from the now-public hit/sunk markers.
+    const hit = applyResolvedShot(createMatchVsHiddenEnemy(twoCellShip), 7, {
+      result: 'hit',
+      shipSlot: null,
+      winner: false,
+    })
+    const resolved = applyResolvedShot(hit.match, 8, {
+      result: 'sunk',
+      shipSlot: 2,
+      winner: false,
+    })
+    const board = resolved.match.boards.bot
+
+    expect(resolved.move).toMatchObject({ result: 'sunk', shipSlot: 2 })
+    // The whole hull now reads as sunk (not just the final cell).
+    expect(board.shots[7]).toBe(3)
+    expect(board.shots[8]).toBe(3)
+    // A destroyed hull is revealed with the reconstructed geometry.
+    expect(board.ships).toHaveLength(1)
+    expect(board.ships[0]).toMatchObject({ length: 2, orientation: 'h', sunk: true, cells: [7, 8] })
+    // The provably-empty no-touch halo is stamped as misses.
+    const halo = sunkHalo(board)
+    expect(halo.size).toBeGreaterThan(0)
+    for (const cell of halo) expect(board.shots[cell]).toBe(1)
+    expect(resolved.match.turn).toBe('player')
+  })
+
+  it('reconstructs a vertical hull from a column run', () => {
+    const hit = applyResolvedShot(createMatchVsHiddenEnemy(twoCellShip), 30, {
+      result: 'hit',
+      shipSlot: null,
+      winner: false,
+    })
+    const resolved = applyResolvedShot(hit.match, 40, {
+      result: 'sunk',
+      shipSlot: 5,
+      winner: false,
+    })
+
+    expect(resolved.match.boards.bot.ships[0]).toMatchObject({
+      orientation: 'v',
+      cells: [30, 40],
+      length: 2,
+    })
+  })
+
+  it('sets the player as winner on a chain win', () => {
+    const resolved = applyResolvedShot(createMatchVsHiddenEnemy(twoCellShip), 9, {
+      result: 'sunk',
+      shipSlot: 0,
+      winner: true,
+    })
+
+    expect(resolved.match.winner).toBe('player')
+  })
+
+  it('does not mutate the input match', () => {
+    const match = createMatchVsHiddenEnemy(twoCellShip)
+    const before = JSON.stringify(match)
+    applyResolvedShot(match, 3, { result: 'hit', shipSlot: null, winner: false })
+    expect(JSON.stringify(match)).toBe(before)
   })
 })
 
