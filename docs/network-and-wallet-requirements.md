@@ -17,8 +17,11 @@ security test, and release check.
 ## Decision Summary
 
 - Use Privy as the only login, connection, and session UI.
-- Offer external EVM wallets **and** social/email sign-in (the full set of
-  dashboard-enabled Privy login methods).
+- Offer external EVM wallets **and** social/email sign-in. The surfaced set is
+  wallet, email, Google, X/Twitter and passkey, and it must match what the Privy
+  dashboard enables: Privy renders a button for every method the client config
+  lists, but answers a login with a method the dashboard disallows with
+  `403 disallowed_login_method`, which the modal swallows silently.
 - Mint a Privy embedded EVM wallet for any user who signs in without an external
   wallet (`createOnLogin: 'users-without-wallets'`).
 - Use Arbitrum Sepolia only.

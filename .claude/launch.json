@@ -26,6 +26,12 @@
       "port": 5173
     },
     {
+      "name": "battleship-preview",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "preview", "--", "--port", "4173", "--strictPort"],
+      "port": 4173
+    },
+    {
       "name": "vfx-app",
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "dev", "--prefix", "vfx-app", "--", "--port", "5180", "--strictPort"],

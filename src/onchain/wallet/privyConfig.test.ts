@@ -3,14 +3,12 @@ import { ARBITRUM_SEPOLIA_CHAIN_ID } from './network'
 import { buildPrivyConfig, ENABLED_LOGIN_METHODS } from './privyConfig'
 
 describe('buildPrivyConfig', () => {
-  it('offers wallet plus social/email login', () => {
+  it('offers exactly the login methods enabled in the Privy dashboard', () => {
     const config = buildPrivyConfig()
     expect(config.loginMethods).toBe(ENABLED_LOGIN_METHODS)
-    // Wallet stays available alongside the social/email methods.
-    expect(ENABLED_LOGIN_METHODS).toContain('wallet')
-    for (const method of ['email', 'google', 'twitter', 'apple', 'farcaster', 'passkey']) {
-      expect(ENABLED_LOGIN_METHODS).toContain(method)
-    }
+    // Anything listed here but disabled in the dashboard ships a dead button:
+    // Privy renders it, then answers the login with 403 disallowed_login_method.
+    expect(ENABLED_LOGIN_METHODS).toEqual(['wallet', 'email', 'google', 'twitter', 'passkey'])
   })
 
   it('mints an embedded wallet for users without an external wallet', () => {

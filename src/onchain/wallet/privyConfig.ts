@@ -21,29 +21,22 @@ import type { PrivyClientConfig } from '@privy-io/react-auth'
 import { arbitrumSepolia } from './network'
 
 /**
- * Every login method we surface in Privy's modal. This is the full set the SDK
- * accepts (minus cross-app `privy:${appId}` providers); each entry must also be
- * toggled on in the Privy dashboard to actually appear. `wallet` keeps external
- * EVM wallets available alongside the social/email methods.
+ * The login methods we surface in Privy's modal, deliberately kept to the small
+ * set that is also switched on in the Privy dashboard: external EVM wallets,
+ * email, Google, X/Twitter and passkeys.
+ *
+ * Keep this list in sync with the dashboard. Privy renders a button for every
+ * method listed here whether or not the dashboard allows it, and a disallowed
+ * one fails silently — `POST /api/v1/oauth/init` answers
+ * `403 disallowed_login_method` and the modal simply does nothing. Listing a
+ * method we have not enabled therefore ships a dead button.
  */
 export const ENABLED_LOGIN_METHODS: NonNullable<PrivyClientConfig['loginMethods']> = [
   'wallet',
   'email',
-  'sms',
   'google',
-  'apple',
   'twitter',
-  'discord',
-  'github',
-  'linkedin',
-  'farcaster',
-  'telegram',
   'passkey',
-  'tiktok',
-  'twitch',
-  'line',
-  'spotify',
-  'instagram',
 ]
 
 /** Read the Privy app id from the build environment, or null when unset. */
