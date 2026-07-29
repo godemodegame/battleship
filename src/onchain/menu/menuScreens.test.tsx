@@ -42,12 +42,17 @@ describe('EntryScreen (GAME-504)', () => {
     expect(screen.getByTestId('wallet-address').textContent).toBe('0xaaaa…0001')
   })
 
-  it('keeps practice reachable through Skip without a wallet', async () => {
+  it('offers no guest path — playing is sign-in only', () => {
     renderApp({ route: '/', wallet: makeWalletValue() })
-    await userEvent.click(screen.getByTestId('entry-skip'))
-    expect(await screen.findByRole('button', { name: 'Practice vs Bot' })).toBeTruthy()
-    // No wallet bar clutters the pure-practice menu when disconnected.
-    expect(screen.queryByTestId('wallet-address')).toBeNull()
+    expect(screen.queryByTestId('entry-skip')).toBeNull()
+    expect(screen.getByTestId('entry-connect')).toBeTruthy()
+    expect(screen.getByTestId('entry-sign-in-required')).toBeTruthy()
+  })
+
+  it('sends a signed-out visitor from the practice hub back to onboarding', async () => {
+    renderApp({ route: '/practice', wallet: makeWalletValue() })
+    expect(await screen.findByTestId('entry-screen')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Practice vs Bot' })).toBeNull()
   })
 
   it('shows the config-missing note instead of a connect button', () => {

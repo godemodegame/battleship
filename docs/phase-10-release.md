@@ -272,5 +272,11 @@ latencies, not global performance claims:
 | Hit-impact GLB (122,344 bytes) | 66 ms | 50 ms |
 
 Desktop Chrome and Pixel 5 Chromium public suites both passed on staging and
-production demo: release metadata, wallet-free practice entry, direct
-versioned-match refresh, and critical asset delivery.
+production demo: release metadata, sign-in gating of every playable route,
+direct versioned-match links held at sign-in across a refresh, and critical
+asset delivery.
+
+Note: the public suite's entry probe changed when playing became sign-in only.
+It previously asserted wallet-free practice entry; it now asserts that no guest
+path exists and that a playable route bounces a signed-out visitor to
+onboarding.

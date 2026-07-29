@@ -115,7 +115,8 @@ export const onboardingCopy = {
     { heading: 'Outplay your friend on-chain', body: 'Only final results are revealed.' },
   ],
   next: 'Continue',
-  skip: 'Skip',
+  /** Playing is sign-in only, so the entry screen states the requirement. */
+  signInRequired: 'Sign in to play. Your fleet, your moves, your wallet.',
 } as const
 
 /** Friend match creation (GAME-505/506, Flow 5 in docs/user-flows.md). */
@@ -286,6 +287,9 @@ export const joinCopy = {
 
 /** Encrypted on-chain fleet placement (GAME-602..611). */
 export const encryptedPlacementCopy = {
+  boardLoading: 'Loading the 3D board…',
+  webglRequired:
+    'This game runs in 3D and needs WebGL. Update your browser or try another device.',
   title: 'Deploy Encrypted Fleet',
   helper: 'Tap a ship, then a grid cell. Ships cannot touch.',
   rotate: 'Rotate',

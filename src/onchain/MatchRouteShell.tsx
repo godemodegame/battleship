@@ -17,7 +17,7 @@ import {
 } from '../copy/en'
 import { errorMessage } from '../copy/errors'
 import { parseMatchIdParam } from './client/mapping'
-import { peekBotFleets } from './match/botFleetStash'
+import { peekMatchFleet } from './match/matchFleetStash'
 import { useBattleshipClients } from './client/useBattleshipClients'
 import { usePendingTxRecovery } from './client/usePendingTxRecovery'
 import { useMatchView } from './useMatchView'
@@ -42,19 +42,9 @@ const JoinWithFleetPanel = lazy(async () => {
   return { default: module.JoinWithFleetPanel }
 })
 
-const OnchainBattlePanel = lazy(async () => {
-  const module = await import('./battle/OnchainBattlePanel')
-  return { default: module.OnchainBattlePanel }
-})
-
-const BotBattleController = lazy(async () => {
-  const module = await import('./battle/BotBattleController')
-  return { default: module.BotBattleController }
-})
-
-const MatchSummaryPanel = lazy(async () => {
-  const module = await import('./battle/MatchSummaryPanel')
-  return { default: module.MatchSummaryPanel }
+const OnchainBattleController = lazy(async () => {
+  const module = await import('./battle/OnchainBattleController')
+  return { default: module.OnchainBattleController }
 })
 
 /** Demo addresses (match the ones used in phaseResolver.test.ts for consistency). */
@@ -359,6 +349,15 @@ export function MatchRouteShell() {
     phase.kind === 'finished' ||
     phase.kind === 'forfeited'
 
+  // Phases the full-screen 3D battle controller takes over, including its own
+  // result overlay. The route's own chrome stays out of its way.
+  const battleOwnsScreen =
+    showMatch &&
+    (phase.kind === 'battle' ||
+      phase.kind === 'resolving' ||
+      phase.kind === 'finished' ||
+      phase.kind === 'forfeited')
+
   return (
     <div
       className={`overlay home ${scrollingPhase ? 'match-placement-route' : ''}`}
@@ -558,56 +557,30 @@ export function MatchRouteShell() {
             </>
           )}
 
-          {/* On-chain battle, resolving, AND terminal states (GAME-701..712).
-              A bot match created in this session renders the full practice 3D
-              engine (BotBattleController) from the locally-retained fleets — and
-              that engine owns the terminal screen too (the 3D victory/defeat
-              overlay), so the flat DOM summary is never the bot-mode result.
-              Any other case — friend/open, or a refresh that dropped the stash
-              (no plaintext fleets to rebuild the 3D boards) — uses the
-              authoritative public-data DOM panels. */}
+          {/* On-chain battle, resolving, AND terminal states (GAME-701..712),
+              every mode through the same 3D engine — the game has no flat
+              board. The board is rebuilt from chain history, so a reload or a
+              direct link resumes the real match; the locally-retained fleet
+              (when this client still holds it) only decides whether the
+              player's own hulls are drawn. The controller owns the terminal
+              screen too, so the 3D victory/defeat overlay is always the
+              result. */}
           {(phase.kind === 'battle' ||
             phase.kind === 'resolving' ||
             phase.kind === 'finished' ||
-            phase.kind === 'forfeited') &&
-            (() => {
-              const botFleets =
-                match.matchType === 'Bot'
-                  ? peekBotFleets(match.deploymentId, match.matchId)
-                  : null
-              if (botFleets) {
-                return (
-                  <Suspense fallback={<BattleLoading />}>
-                    <BotBattleController
-                      fleets={botFleets}
-                      match={match}
-                      writeClient={writeClient}
-                      readClient={readClient}
-                      wallet={wallet}
-                      onRefetch={query.refetch}
-                    />
-                  </Suspense>
-                )
-              }
-              if (phase.kind === 'battle' || phase.kind === 'resolving') {
-                return (
-                  <Suspense fallback={<BattleLoading />}>
-                    <OnchainBattlePanel
-                      phase={phase}
-                      match={match}
-                      writeClient={writeClient}
-                      wallet={wallet}
-                      onRefetch={query.refetch}
-                    />
-                  </Suspense>
-                )
-              }
-              return (
-                <Suspense fallback={<BattleLoading />}>
-                  <MatchSummaryPanel match={match} wallet={wallet} />
-                </Suspense>
-              )
-            })()}
+            phase.kind === 'forfeited') && (
+            <Suspense fallback={<BattleLoading />}>
+              <OnchainBattleController
+                mode={match.matchType === 'Bot' ? 'bot' : 'pvp'}
+                ownFleet={peekMatchFleet(match.deploymentId, match.matchId)}
+                match={match}
+                writeClient={writeClient}
+                readClient={readClient}
+                wallet={wallet}
+                onRefetch={query.refetch}
+              />
+            </Suspense>
+          )}
 
           {phase.kind === 'cancelled' && (
             <p className="status-sub" data-testid="match-cancelled">
@@ -626,9 +599,16 @@ export function MatchRouteShell() {
       )}
 
       <div className="home-actions">
-        <Link className="btn primary" to="/practice">
-          {matchRouteCopy.backToPractice}
-        </Link>
+        {/* The 3D battle owns the whole screen from the first shot to the
+            result overlay, and it carries its own exits (forfeit in the HUD,
+            Main Menu on the result). A route-level Back would sit behind it —
+            reachable only by keyboard or a screen reader — and would walk the
+            player out of a live on-chain match without forfeiting. */}
+        {!battleOwnsScreen && (
+          <Link className="btn primary" to="/practice">
+            {matchRouteCopy.backToPractice}
+          </Link>
+        )}
         {!ready && (
           <p className="footnote" data-testid="deployment-pending">
             {deploymentCopy.pendingNote}

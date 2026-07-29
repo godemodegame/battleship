@@ -84,7 +84,10 @@ export function deriveWalletSession(raw: RawWalletState): WalletSession {
   const correctChain = isSupportedChain(chainId)
 
   if (!raw.ready) {
-    return DISCONNECTED_SESSION
+    // Privy is still initializing, which is a *pending* state, not a verdict:
+    // reporting 'disconnected' here would make the sign-in route gate bounce a
+    // signed-in player off their own deep link on every reload.
+    return { ...DISCONNECTED_SESSION, status: 'connecting' }
   }
 
   if (!raw.authenticated) {

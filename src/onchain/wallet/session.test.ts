@@ -14,8 +14,13 @@ function raw(over: Partial<RawWalletState> = {}): RawWalletState {
 }
 
 describe('deriveWalletSession', () => {
-  it('is disconnected until Privy is ready', () => {
-    expect(deriveWalletSession(raw({ ready: false }))).toEqual(DISCONNECTED_SESSION)
+  it('reports connecting until Privy is ready', () => {
+    // Pending, not disconnected: the route gate must wait for the verdict
+    // instead of bouncing a signed-in player on reload.
+    expect(deriveWalletSession(raw({ ready: false }))).toEqual({
+      ...DISCONNECTED_SESSION,
+      status: 'connecting',
+    })
   })
 
   it('is disconnected with no active wallet', () => {

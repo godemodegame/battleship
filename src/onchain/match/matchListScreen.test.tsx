@@ -31,9 +31,10 @@ vi.mock('../../lib/haptics', () => ({
 const noState = () => {}
 
 describe('MatchListScreen', () => {
-  it('prompts to connect while disconnected and issues no reads', async () => {
+  it('sends a disconnected visitor to onboarding and issues no reads', async () => {
+    // Playing is sign-in only: the route gate redirects before the list mounts.
     renderApp({ route: '/matches', wallet: makeWalletValue() })
-    expect(await screen.findByTestId('match-list-connect-prompt')).toBeTruthy()
+    expect(await screen.findByTestId('entry-screen')).toBeTruthy()
     expect(screen.queryByTestId('match-list')).toBeNull()
   })
 

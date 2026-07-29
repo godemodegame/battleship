@@ -178,6 +178,10 @@ On-chain and FHE moments:
 
 All UI text must be English.
 
+The 2D layer is chrome only — HUD, menus, overlays. The board itself is always
+3D: there is no flat grid anywhere in the game, in placement or in battle. A
+device without WebGL is told so plainly instead of being handed a DOM board.
+
 The 2D layer is a printed comic sheet laid over the neo-noir 3D scene. The
 world stays cinematic and dark; the HUD and menus are ink on paper. The two
 layers are deliberately different media — that contrast is the identity.

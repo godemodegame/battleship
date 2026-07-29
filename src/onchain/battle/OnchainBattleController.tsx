@@ -1,25 +1,30 @@
 /**
- * On-chain bot battle, rendered through the practice 3D engine.
+ * The on-chain battle — every mode, always the 3D engine. There is no flat
+ * board anywhere in the game.
  *
- * The client holds ONLY the player's plaintext fleet (see botFleetStash); the
- * bot's fleet stays encrypted on-chain, hidden from the player just like a human
- * opponent's. So this controller seeds the practice store with a `MatchState`
- * whose own board is known and whose enemy board has no geometry
- * (`createMatchVsHiddenEnemy`), and mounts the practice scene + HUD (3D ships on
- * the player's side, projectile arcs, hit/miss/sunk VFX, camera swings, sounds).
- * An injected `BattleDriver` runs every move on-chain and feeds results back:
+ * The opponent's fleet (bot or human) stays encrypted on-chain, so the enemy
+ * board never carries geometry: player shots are applied strictly from the
+ * contract's decrypted result, and the player cannot know hit/miss before the
+ * transaction. The controller mounts the practice scene + HUD (3D hulls,
+ * projectile arcs, hit/miss/sunk VFX, camera swings, sound) and drives every
+ * move through an injected `BattleDriver`:
  *  - the player's shot → `attack` + auto `finalizeAttackWithProof`, then the
- *    contract's decrypted result is read back and animated. The player therefore
- *    cannot know hit/miss before the transaction (the whole point of this mode);
- *  - the bot's shot → `executeBotMove` (the contract picks the cell, which we
- *    read back and resolve LOCALLY against the player's own known board) +
- *    auto-finalize.
+ *    finalized result is read back and animated;
+ *  - the bot's shot → `executeBotMove`, whose contract-chosen cell is read back;
+ *  - a human opponent's shot → poll the chain for their next finalized move,
+ *    helping finalize a shot they left pending (finalization is permissionless,
+ *    so a stalled opponent client can never wedge this one).
+ *
+ * `ownFleet` is this client's own plaintext placement when it still holds it
+ * (it placed the fleet in this session). Fleets are never persisted, so a
+ * reload drops it — then the player's own board is hidden as well and incoming
+ * shots are stamped from the contract's finalized results instead of local
+ * geometry. Either way the board is rebuilt from chain history on mount
+ * (`hydrateLocalMatch`), so a refresh or a second device resumes the real match
+ * rather than an empty one.
  *
  * No manual "Finalize Shot" / "Advance Opponent Turn" buttons: the store's
- * `fire()` loop drives the whole sequence. The enemy board shows only the
- * chain's hit/miss/sunk markers (no revealed bot hulls). On an unrecoverable
- * on-chain error the player can forfeit (on-chain) or reload (which drops the
- * stash and falls back to the authoritative DOM battle panel).
+ * `fire()` loop drives the whole sequence.
  */
 
 import { useEffect, useMemo, useRef } from 'react'
@@ -28,24 +33,33 @@ import { GameCanvas } from '../../three/Scene'
 import { BattleHUD } from '../../ui/BattleHUD'
 import { GameOverScreen } from '../../ui/GameOverScreen'
 import { LoadingOverlay, StatusOverlay } from '../../ui/common'
-import { createMatchVsHiddenEnemy } from '../../game/engine'
-import { botBattleCopy } from '../../copy/en'
+import { battleCopy, botBattleCopy } from '../../copy/en'
+import { errorMessage } from '../../copy/errors'
 import {
   resetPracticeState,
   useStore,
+  type OpponentShotOutcome,
   type PlayerShotOutcome,
 } from '../../practice/practiceStore'
+import type { Placement } from '../../game/types'
+import { hydrateLocalMatch, lastFinalizedMoveId, resolvedShotOf } from './hydrateLocalMatch'
 import type { BattleshipReadClient, BattleshipWriteClient } from '../client/battleshipClient'
 import type { ChainMatchView, ChainMoveView } from '../client/mapping'
+import type { HexAddress } from '../phaseResolver'
 import { useMatchScopes } from './useMatchScopes'
 import { useTrackedWrite, type TrackedWrite } from '../client/useTrackedWrite'
 import { useCofheMatchClient, type CofheClientState } from '../fhenix/useCofheMatchClient'
 import type { WalletContextValue } from '../wallet/WalletSessionContext'
-import type { BotFleets } from '../match/botFleetStash'
 
 /** Everything the on-chain mirror needs, captured in a ref so the driver is stable. */
 interface DriverApi {
   matchId: bigint
+  /** This client's address, to tell our own finalized moves from the opponent's. */
+  viewer: HexAddress | null
+  /** Highest move id already animated locally; the PvP poller waits past it. */
+  lastMoveIdRef: { current: number }
+  /** False once the controller unmounts, so the PvP poll loop stops. */
+  aliveRef: { current: boolean }
   writeClient: BattleshipWriteClient | null
   readClient: BattleshipReadClient | null
   cofhe: CofheClientState
@@ -189,8 +203,81 @@ async function runBotShot(api: DriverApi): Promise<number> {
   return cell
 }
 
-export interface BotBattleControllerProps {
-  fleets: BotFleets
+/** How long to wait between chain reads while the opponent is thinking. */
+const OPPONENT_POLL_MS = 1500
+
+/**
+ * Await the opponent's next finalized move.
+ *
+ * Finalization is permissionless, so whenever their shot is left pending this
+ * client publishes the proofs itself instead of waiting on their tab — a closed
+ * or stalled opponent client can never wedge the match. Returns the move as the
+ * contract resolved it; the caller decides whether to use the result (own board
+ * hidden) or only the cell (own fleet known, resolved locally).
+ */
+async function awaitOpponentShot(api: DriverApi): Promise<OpponentShotOutcome> {
+  if (!api.readClient?.getMatch || !api.readClient?.getMove) {
+    throw new Error('Battle client not ready')
+  }
+  while (api.aliveRef.current) {
+    const pending = await api.readClient.getPendingShot?.(api.matchId)
+    if (pending?.exists && pending.attacker !== api.viewer) {
+      // Their shot is unresolved: publish the decrypt proofs ourselves.
+      await finalizePending(api)
+    }
+
+    const view = await api.readClient.getMatch(api.matchId)
+    if (!view) throw new Error('Match not found on-chain')
+    for (let moveId = api.lastMoveIdRef.current + 1; moveId <= view.moveCount; moveId++) {
+      const move = await api.readClient.getMove(api.matchId, moveId)
+      if (!move?.finalized) break
+      api.lastMoveIdRef.current = moveId
+      if (move.attacker === api.viewer) continue
+      const resolved = resolvedShotOf(move)
+      if (!resolved) continue
+      api.onRefetch()
+      return {
+        cell: move.cellIndex,
+        result: resolved.winner ? 'won' : resolved.result,
+        sunkShipSlot: resolved.shipSlot,
+      }
+    }
+
+    // The match can end without another opponent move (forfeit, timeout sweep);
+    // the terminal effect below lands that, so stop polling.
+    if (view.status === 'Finished' || view.status === 'Forfeited') {
+      throw new Error('Match ended before the opponent moved')
+    }
+    await new Promise((resolve) => setTimeout(resolve, OPPONENT_POLL_MS))
+  }
+  // The route left the battle (unmount): stop polling and let the store's
+  // interrupt handling drop the turn.
+  throw new Error('Battle closed')
+}
+
+/** Bot shot with the contract's finalized result, for a hidden own board. */
+async function runBotShotResolved(api: DriverApi): Promise<OpponentShotOutcome> {
+  const cell = await runBotShot(api)
+  if (!api.readClient?.getMatch || !api.readClient?.getMove) {
+    throw new Error('Battle client not ready')
+  }
+  const view = await api.readClient.getMatch(api.matchId)
+  const move = view ? await api.readClient.getMove(api.matchId, view.moveCount) : null
+  const resolved = move?.finalized ? resolvedShotOf(move) : null
+  if (!resolved) throw new Error('Bot shot result not yet on-chain')
+  api.lastMoveIdRef.current = move!.moveId
+  return {
+    cell,
+    result: resolved.winner ? 'won' : resolved.result,
+    sunkShipSlot: resolved.shipSlot,
+  }
+}
+
+export interface OnchainBattleControllerProps {
+  /** 'bot' drives the opponent's move itself; 'pvp' waits for a human. */
+  mode: 'bot' | 'pvp'
+  /** This client's own plaintext fleet, or null when it no longer holds it. */
+  ownFleet: Placement[] | null
   match: ChainMatchView
   writeClient: BattleshipWriteClient | null
   readClient: BattleshipReadClient | null
@@ -198,14 +285,15 @@ export interface BotBattleControllerProps {
   onRefetch: () => void
 }
 
-export function BotBattleController({
-  fleets,
+export function OnchainBattleController({
+  mode,
+  ownFleet,
   match,
   writeClient,
   readClient,
   wallet,
   onRefetch,
-}: BotBattleControllerProps) {
+}: OnchainBattleControllerProps) {
   const screen = useStore((s) => s.screen)
   const setBattleDriver = useStore((s) => s.setBattleDriver)
   const driverError = useStore((s) => s.driverError)
@@ -223,6 +311,7 @@ export function BotBattleController({
   const botMoveWrite = useTrackedWrite(txScope('botMove'))
   const resolveWrite = useTrackedWrite(txScope('resolve'))
   const forfeitWrite = useTrackedWrite(txScope('forfeit'))
+  const timeoutWrite = useTrackedWrite(txScope('timeout'))
 
   // Start CoFHE init as soon as the wallet can write — it only needs the
   // public/wallet clients + scope, not the bound battle write client. Kicking
@@ -236,8 +325,15 @@ export function BotBattleController({
 
   // The driver is stable; it reads live values through this ref so it never
   // closes over a stale write client or CoFHE session.
+  // Highest move id already animated; seeded from history so a reload does not
+  // replay moves the hydrated board already shows.
+  const lastMoveIdRef = useRef(lastFinalizedMoveId(match))
+  const aliveRef = useRef(true)
   const apiRef = useRef<DriverApi>({
     matchId: match.matchIdBig,
+    viewer,
+    lastMoveIdRef,
+    aliveRef,
     writeClient,
     readClient,
     cofhe,
@@ -250,6 +346,9 @@ export function BotBattleController({
   })
   apiRef.current = {
     matchId: match.matchIdBig,
+    viewer,
+    lastMoveIdRef,
+    aliveRef,
     writeClient,
     readClient,
     cofhe,
@@ -261,10 +360,30 @@ export function BotBattleController({
     onRefetch,
   }
 
+  // Own fleet known → the incoming shot is resolved against local geometry
+  // (cell only), which reproduces the contract exactly and keeps the player's
+  // own hulls and sunk halos intact. Own board hidden → take the contract's
+  // finalized result as well, since there is nothing local to resolve against.
+  const ownBoardHidden = ownFleet === null
   const driver = useMemo(
     () => ({
       submitPlayerShot: (cell: number) => withRetry(() => runPlayerShot(apiRef.current, cell)),
-      resolveBotShot: () => withRetry(() => runBotShot(apiRef.current)),
+      resolveBotShot: () =>
+        withRetry(() =>
+          mode === 'bot'
+            ? runBotShot(apiRef.current)
+            : awaitOpponentShot(apiRef.current).then((outcome) => outcome.cell),
+        ),
+      ...(ownBoardHidden
+        ? {
+            resolveOpponentShot: () =>
+              withRetry(() =>
+                mode === 'bot'
+                  ? runBotShotResolved(apiRef.current)
+                  : awaitOpponentShot(apiRef.current),
+              ),
+          }
+        : {}),
       forfeit: async () => {
         const api = apiRef.current
         if (!api.writeClient) return
@@ -273,18 +392,25 @@ export function BotBattleController({
         api.onRefetch()
       },
     }),
-    [],
+    [mode, ownBoardHidden],
   )
 
-  // Seed the practice store into a live battle from the known fleets, once. The
-  // player moves first (contract rule); `busy` gates input until CoFHE is ready.
+  // Seed the practice store once, rebuilding the board from chain history so a
+  // reload or a mid-match arrival resumes the real match. `busy` gates input
+  // until CoFHE is ready. Only a participant ever reaches this controller; the
+  // guard is for the render before the players read lands.
   useEffect(() => {
+    if (!viewer) return
+    const seeded = hydrateLocalMatch({ match, viewer, ownFleet })
     useStore.setState({
-      screen: 'battle',
-      match: createMatchVsHiddenEnemy(fleets.player.slice()),
+      // A match that is already over when this client arrives (direct link,
+      // reload after the final shot, on-chain forfeit) lands straight on the
+      // 3D result screen rather than an unplayable board.
+      screen: seeded.winner ? 'gameover' : 'battle',
+      match: seeded,
       focus: 'enemy',
       selectedCell: null,
-      busy: true,
+      busy: !seeded.winner,
       confirming: false,
       driverError: false,
       recoveryCell: null,
@@ -292,9 +418,10 @@ export function BotBattleController({
       effects: [],
       projectiles: [],
       toast: null,
-      forfeited: false,
+      forfeited: match.status === 'Forfeited',
     })
     return () => {
+      aliveRef.current = false
       setBattleDriver(null)
       resetPracticeState()
     }
@@ -358,10 +485,38 @@ export function BotBattleController({
 
   const warming = cofhe.status !== 'ready'
 
+  // GAME-710: the player who is NOT on turn may claim the win once the turn
+  // deadline passes. A bot match is paced by the player and the contract
+  // rejects the claim there, so it is never offered.
+  const nowSeconds = Math.floor(Date.now() / 1000)
+  const timeoutClaimable =
+    mode === 'pvp' &&
+    match.status === 'InProgress' &&
+    Boolean(viewer) &&
+    match.currentTurn !== viewer &&
+    match.deadlines.turnDeadline > 0 &&
+    nowSeconds > match.deadlines.turnDeadline &&
+    Boolean(writeClient?.claimTimeoutWin)
+
+  async function claimTimeout() {
+    if (!writeClient?.claimTimeoutWin || !wallet.canWrite) return
+    wallet.actions.prepareHandoff()
+    const result = await timeoutWrite.run((onState) =>
+      writeClient.claimTimeoutWin!(match.matchIdBig, onState),
+    )
+    if (result?.ok) onRefetch()
+  }
+
   // Hash of whichever on-chain write is currently in flight, for the explorer
   // link in the confirming overlay (null until the tx is broadcast).
-  const inFlightWrite = [resolveWrite, botMoveWrite, attackWrite].find((w) => w.busy)
+  const writes = [resolveWrite, botMoveWrite, attackWrite, forfeitWrite, timeoutWrite]
+  const inFlightWrite = writes.find((w) => w.busy)
   const activeTxHash = inFlightWrite?.state.hash ?? null
+
+  // GAME-810: a failed write surfaces its MAPPED message — never a raw revert
+  // string — alongside the automatic retry, so the player learns what the
+  // contract refused (wrong turn, cell already taken, rejected signature).
+  const writeError = writes.find((w) => w.state.error)?.state.error ?? null
 
   // Mid-battle full-screen status so every on-chain wait between shots is
   // legible: a reconnect in progress, the player's own shot landing, or the
@@ -378,12 +533,12 @@ export function BotBattleController({
       : { title: botBattleCopy.resolvingTitle, sub: botBattleCopy.resolvingSub, tone: 'cyan' as const, testId: 'bot-battle-resolving' }
 
   return (
-    <div className="app" data-testid="bot-battle-3d">
+    <div className="app" data-testid="onchain-battle-3d">
       <GameCanvas />
       {screen === 'battle' && <BattleHUD />}
       {screen === 'gameover' && (
         <GameOverScreen
-          onPlayAgain={() => navigate('/match/bot')}
+          onPlayAgain={() => navigate(mode === 'bot' ? '/match/bot' : '/lobby')}
           onMainMenu={() => navigate('/practice')}
         />
       )}
@@ -393,6 +548,24 @@ export function BotBattleController({
           sub={cofhe.status === 'error' ? botBattleCopy.syncFailed : botBattleCopy.warmingSub}
           testId="bot-battle-warming"
         />
+      )}
+      {timeoutClaimable && screen !== 'gameover' && (
+        <div className="chain-claim" data-testid="timeout-claim">
+          <p className="status-sub">{battleCopy.timeoutAvailable}</p>
+          <button
+            className="btn wide"
+            data-testid="claim-timeout-win"
+            disabled={timeoutWrite.busy || !wallet.canWrite}
+            onClick={() => void claimTimeout()}
+          >
+            {battleCopy.claimTimeoutWin}
+          </button>
+        </div>
+      )}
+      {writeError && screen !== 'gameover' && (
+        <p className="chain-error-note" role="alert" data-testid="tx-error">
+          {errorMessage(writeError)}
+        </p>
       )}
       {showChainOverlay && (
         <StatusOverlay

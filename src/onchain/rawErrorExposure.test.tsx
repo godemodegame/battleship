@@ -8,6 +8,7 @@
 import { cleanup, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { useStore } from '../practice/practiceStore'
 import {
   CREATOR,
   INVITED,
@@ -73,11 +74,13 @@ describe('raw error exposure on the match route (GAME-810)', () => {
     })
 
     renderApp({ route: ROUTE, wallet: connectedWalletValue(INVITED), clients })
-    await waitFor(() => expect(screen.getByTestId('onchain-battle-panel')).toBeTruthy())
+    await waitFor(() => expect(screen.getByTestId('onchain-battle-3d')).toBeTruthy())
 
-    const grid = screen.getByTestId('enemy-battle-grid')
-    await userEvent.click(grid.querySelector('[data-cell="3"]') as HTMLButtonElement)
-    await userEvent.click(screen.getByTestId('fire-button'))
+    // Target the way a tap on the 3D board does, then fire for real.
+    useStore.getState().selectCell(3)
+    const fire = await screen.findByRole('button', { name: /Fire at/ })
+    await waitFor(() => expect(fire.hasAttribute('disabled')).toBe(false))
+    await userEvent.click(fire)
 
     await waitFor(() => expect(screen.getByTestId('tx-error')).toBeTruthy())
     expect(screen.getByTestId('tx-error').textContent).toBe('It is not your turn')

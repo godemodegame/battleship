@@ -1042,6 +1042,49 @@ body,
   }
 }
 
+/* Mapped on-chain write error over the 3D battle (GAME-810). Sits above the
+   HUD's bottom stack so the automatic retry and the reason are both visible. */
+.chain-error-note {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: calc(96px + var(--sab));
+  z-index: 14;
+  margin: 0 auto;
+  max-width: 480px;
+  padding: 9px 12px 8px;
+  border: var(--stroke-thin) solid var(--ink);
+  border-radius: var(--radius-sm);
+  background: var(--red);
+  color: var(--white);
+  box-shadow: var(--shadow-pop-sm);
+  text-align: center;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+/* Timeout-win claim over the 3D battle (GAME-710): the opponent ran out the
+   turn clock, so the claim sits above the fire action. */
+.chain-claim {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: calc(96px + var(--sab));
+  z-index: 14;
+  margin: 0 auto;
+  max-width: 480px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  border: var(--stroke) solid var(--ink);
+  border-radius: var(--radius-sm);
+  background: var(--paper);
+  color: var(--ink);
+  box-shadow: var(--shadow-pop-sm);
+  text-align: center;
+}
+
 /* ---------- bottom stack ---------- */
 
 .bottom-stack {

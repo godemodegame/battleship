@@ -59,18 +59,26 @@ export function emptyBoard(): BoardState {
 }
 
 /**
- * A match whose enemy fleet is hidden from this client (on-chain bot mode): the
- * player's own board is fully known, but the opponent board carries no ship
- * geometry. Every player→enemy shot is resolved from the chain and applied with
- * `applyResolvedShot`, so the client can never know a hit/miss before the tx —
- * exactly like a human opponent in PvP.
+ * A match whose enemy fleet is hidden from this client (every on-chain mode):
+ * the opponent board carries no ship geometry, so every player→enemy shot is
+ * resolved from the chain and applied with `applyResolvedShot` — the client can
+ * never know a hit/miss before the transaction.
+ *
+ * `playerPlacements` is the player's own fleet when this client still holds it
+ * (it placed the fleet in this session). Pass `null` when it does not — a
+ * reload drops the plaintext, since fleets are never persisted — and the
+ * player's board is hidden too: incoming shots then land from the chain's
+ * finalized results via `applyResolvedShotBy` instead of local geometry.
  */
 export function createMatchVsHiddenEnemy(
-  playerPlacements: Placement[],
+  playerPlacements: Placement[] | null,
   firstTurn: Side = 'player',
 ): MatchState {
   return {
-    boards: { player: buildBoard(playerPlacements), bot: emptyBoard() },
+    boards: {
+      player: playerPlacements ? buildBoard(playerPlacements) : emptyBoard(),
+      bot: emptyBoard(),
+    },
     turn: firstTurn,
     moves: [],
     winner: null,
@@ -154,35 +162,51 @@ function revealSunkEnemyShip(
 }
 
 /**
- * Apply a chain-decided result of a player's shot to the hidden enemy board.
- * Unlike `applyShot`, it never consults a known fleet (there is none) — it stamps
- * the cell marker (miss/hit/sunk) and threads the turn + winner the contract
- * reported. On a sink it additionally reveals the ship's destroyed hull and the
- * no-touch halo, reconstructed from the now-public markers (see
- * `revealSunkEnemyShip`), so the player never learned geometry before the kill.
+ * Apply a chain-decided shot result to the board the shot was fired at. Unlike
+ * `applyShot` it never consults a known fleet — it stamps the cell marker
+ * (miss/hit/sunk) and threads the turn + winner the contract reported. On a
+ * sink it additionally reveals the ship's destroyed hull and the no-touch halo,
+ * reconstructed from the now-public markers (see `revealSunkEnemyShip`), so no
+ * geometry was known before the kill.
+ *
+ * `by` is the attacker: 'player' marks the hidden enemy board (both on-chain
+ * modes), 'bot' marks the player's own board, which is how an opponent's shot
+ * lands when this client no longer holds its own plaintext fleet.
  */
-export function applyResolvedShot(
+export function applyResolvedShotBy(
   match: MatchState,
+  by: Side,
   cell: number,
   resolved: ResolvedShot,
 ): { match: MatchState; move: Move } {
-  const board = match.boards.bot
+  const defender: Side = by === 'player' ? 'bot' : 'player'
+  const board = match.boards[defender]
   const shots = board.shots.slice()
   shots[cell] = resolved.result === 'miss' ? 1 : resolved.result === 'hit' ? 2 : 3
-  const move: Move = { by: 'player', cell, result: resolved.result, shipSlot: resolved.shipSlot }
+  const move: Move = { by, cell, result: resolved.result, shipSlot: resolved.shipSlot }
   const nextBoard =
     resolved.result === 'sunk'
       ? revealSunkEnemyShip({ ...board, shots }, cell, resolved.shipSlot)
       : { ...board, shots }
   return {
     match: {
-      boards: { ...match.boards, bot: nextBoard },
-      turn: resolved.result === 'miss' ? 'bot' : 'player',
+      boards: { ...match.boards, [defender]: nextBoard },
+      // A miss passes the turn to the defender; anything else keeps it.
+      turn: resolved.result === 'miss' ? defender : by,
       moves: [...match.moves, move],
-      winner: resolved.winner ? 'player' : null,
+      winner: resolved.winner ? by : null,
     },
     move,
   }
+}
+
+/** Chain-resolved player shot against the hidden enemy board. */
+export function applyResolvedShot(
+  match: MatchState,
+  cell: number,
+  resolved: ResolvedShot,
+): { match: MatchState; move: Move } {
+  return applyResolvedShotBy(match, 'player', cell, resolved)
 }
 
 const otherSide = (side: Side): Side => (side === 'player' ? 'bot' : 'player')

@@ -3,6 +3,8 @@ import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Routes } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { resetPracticeState, useStore } from '../../practice/practiceStore'
+import { WalletSessionContext } from '../../onchain/wallet/WalletSessionContext'
+import { CREATOR, connectedWalletValue, makeWalletValue } from '../../onchain/testSupport'
 import { appRoutes } from './appRoutes'
 
 vi.mock('../../three/Scene', () => ({
@@ -47,11 +49,25 @@ vi.mock('../../lib/haptics', () => ({
   },
 }))
 
-function TestRouter({ initialEntries }: { initialEntries: string[] }) {
+/**
+ * Every playable route is sign-in only, so the router is mounted with a
+ * connected wallet by default; `signedOut` exercises the gate itself.
+ */
+function TestRouter({
+  initialEntries,
+  signedOut = false,
+}: {
+  initialEntries: string[]
+  signedOut?: boolean
+}) {
   return (
-    <MemoryRouter initialEntries={initialEntries}>
-      <Routes>{appRoutes}</Routes>
-    </MemoryRouter>
+    <WalletSessionContext.Provider
+      value={signedOut ? makeWalletValue() : connectedWalletValue(CREATOR)}
+    >
+      <MemoryRouter initialEntries={initialEntries}>
+        <Routes>{appRoutes}</Routes>
+      </MemoryRouter>
+    </WalletSessionContext.Provider>
   )
 }
 
@@ -69,15 +85,34 @@ describe('application routes', () => {
     expect(screen.getByTestId('app-shell')).toBeTruthy()
   })
 
-  it('shows the wallet-aware entry at the root and keeps practice reachable (GAME-504)', async () => {
-    const user = userEvent.setup()
-    render(<TestRouter initialEntries={['/']} />)
-    // No wallet provider mounted → disconnected session → short onboarding.
+  it('shows the wallet-aware entry at the root while signed out (GAME-504)', () => {
+    render(<TestRouter initialEntries={['/']} signedOut />)
     expect(screen.getByTestId('entry-screen')).toBeTruthy()
     expect(screen.getByTestId('onboarding-slides')).toBeTruthy()
-    // Skip keeps local practice playable without a wallet.
-    await user.click(screen.getByTestId('entry-skip'))
-    expect(await screen.findByRole('button', { name: 'Practice vs Bot' })).toBeTruthy()
+    // Signing in is the only way in: no guest/skip path exists.
+    expect(screen.queryByTestId('entry-skip')).toBeNull()
+    expect(screen.getByTestId('entry-connect')).toBeTruthy()
+    expect(screen.getByTestId('entry-sign-in-required')).toBeTruthy()
+  })
+
+  it('bounces a signed-out visitor off every playable route', async () => {
+    for (const route of ['/practice', '/lobby', '/matches', '/match/new', '/match/bot']) {
+      const view = render(<TestRouter initialEntries={[route]} signedOut />)
+      expect(await screen.findByTestId('entry-screen')).toBeTruthy()
+      expect(screen.queryByRole('button', { name: 'Practice vs Bot' })).toBeNull()
+      view.unmount()
+    }
+  })
+
+  it('keeps a signed-out invite link and resumes it after sign-in', async () => {
+    const view = render(
+      <TestRouter initialEntries={['/match/arb-sepolia-v1/42']} signedOut />,
+    )
+    expect(await screen.findByTestId('entry-screen')).toBeTruthy()
+    view.unmount()
+    // The same history entry with a connected wallet lands on the match.
+    render(<TestRouter initialEntries={['/match/arb-sepolia-v1/42']} />)
+    expect(await screen.findByRole('heading', { name: 'Match Route' })).toBeTruthy()
   })
 
   it('renders practice at the explicit practice route', async () => {

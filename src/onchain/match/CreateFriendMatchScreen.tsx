@@ -46,7 +46,7 @@ import {
   usePlacementStore,
   type PlacementScope,
 } from '../placement/placementStore'
-import { stashBotFleets } from './botFleetStash'
+import { stashMatchFleet } from './matchFleetStash'
 import { TxStatusLine } from './TxStatusLine'
 
 const ADDRESS_RE = /^0x[0-9a-fA-F]{40}$/
@@ -197,7 +197,7 @@ function CreateMatchScreen({ mode }: { mode: 'friend' | 'open' | 'bot' }) {
       // player's plaintext fleet so the battle route can render their board and
       // resolve incoming bot shots locally; the bot's plaintext is discarded
       // right after encryption so the player can't know a shot's result before
-      // the tx — those results come from the contract (see botFleetStash).
+      // the tx — those results come from the contract (see matchFleetStash).
       const botPlacements = autoPlaceFleet()
       const pair = await submission.encryptBotPair(placements, botPlacements)
       if (!pair) return
@@ -209,7 +209,7 @@ function CreateMatchScreen({ mode }: { mode: 'friend' | 'open' | 'bot' }) {
       )
       const playerFleet = completedFleet({ placements })
       if (result?.ok && playerFleet) {
-        stashBotFleets(deploymentId, result.matchId.toString(), {
+        stashMatchFleet(deploymentId, result.matchId.toString(), {
           player: playerFleet,
         })
       }
@@ -230,6 +230,16 @@ function CreateMatchScreen({ mode }: { mode: 'friend' | 'open' | 'bot' }) {
       }
     }
     if (result?.ok) {
+      // Hand the player's own plaintext fleet to the battle route before the
+      // placement store wipes it: the 3D board draws their hulls from it and
+      // resolves incoming shots locally. In-memory only, so a reload still
+      // falls back to a hidden own board driven entirely by chain results.
+      if (!isBot) {
+        const ownFleet = completedFleet({ placements })
+        if (ownFleet) {
+          stashMatchFleet(deploymentId, result.matchId.toString(), { player: ownFleet })
+        }
+      }
       // GAME-607: clear the plaintext fleet once the fleet is on-chain.
       clearFleet()
       navigate(inviteLinkPath(deploymentId, result.matchId.toString()))

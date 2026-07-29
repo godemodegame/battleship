@@ -6,7 +6,6 @@
  */
 
 import { cleanup, render, screen, waitFor } from '@testing-library/react'
-import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { BattleshipWriteClient } from '../client/battleshipClient'
 import type { ChainMatchView } from '../client/mapping'
@@ -113,9 +112,9 @@ function rerenderWith(
 }
 
 async function placeOneShip() {
-  // Slot 0 (carrier) is auto-selected; tapping A1 places it horizontally.
-  const grid = screen.getByRole('grid', { name: 'Fleet placement grid' })
-  await userEvent.click(grid.querySelector('[aria-label^="A1"]') as HTMLButtonElement)
+  // The board is 3D everywhere and jsdom cannot tap the canvas, so place the
+  // way the canvas does: slot 0 (carrier) is auto-selected, dropped at A1.
+  usePlacementStore.getState().placeAt(0, 0)
   expect(usePlacementStore.getState().placements[0]).not.toBeNull()
 }
 

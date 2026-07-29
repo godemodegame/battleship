@@ -87,7 +87,7 @@ describe('accessible names on key screens (GAME-806)', () => {
     expectAllButtonsNamed()
   })
 
-  it('on-chain battle panel exposes named controls only', async () => {
+  it('on-chain 3D battle exposes named controls only', async () => {
     const contract = makeFakeContract()
     contract.startBattle()
     renderApp({
@@ -95,12 +95,8 @@ describe('accessible names on key screens (GAME-806)', () => {
       wallet: connectedWalletValue(INVITED),
       clients: contract.clientsFor(INVITED),
     })
-    await waitFor(() => expect(screen.getByTestId('onchain-battle-panel')).toBeTruthy())
+    await waitFor(() => expect(screen.getByTestId('onchain-battle-3d')).toBeTruthy())
     expectAllButtonsNamed()
-    // Battle cells carry coordinate + state names for screen readers.
-    const grid = screen.getByTestId('enemy-battle-grid')
-    const cell = grid.querySelector('[data-cell="0"]') as HTMLButtonElement
-    expect(cell.getAttribute('aria-label')).toMatch(/^A1, (untried|miss|hit|sunk)$/)
   })
 
   it('join screen exposes named controls only', async () => {

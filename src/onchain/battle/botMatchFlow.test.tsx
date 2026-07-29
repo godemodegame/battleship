@@ -1,15 +1,15 @@
 /**
- * Bot (single-player practice) match frontend flow. Verifies the on-chain bot
- * UI wiring against the shared fake contract: creating a bot match lands in
- * battle on the player's turn, and the bot's turn is advanced through the
- * permissionless executeBotMove via the "Advance Opponent Turn" button, then
- * resolved exactly like a human shot. The contract chooses the bot's target;
- * the frontend never does.
+ * Bot (single-player practice) match frontend flow against the shared fake
+ * contract. Creating a bot match lands in the 3D battle on the player's turn,
+ * and the bot's move runs through the permissionless `executeBotMove` inside
+ * the store's fire loop — there is no manual "Advance Opponent Turn" button and
+ * no flat board anywhere. The contract chooses the bot's target; the frontend
+ * never does.
  */
 
-import { screen, waitFor } from '@testing-library/react'
+import { cleanup, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   BOT_OPPONENT,
   CREATOR,
@@ -19,7 +19,8 @@ import {
   renderApp,
 } from '../testSupport'
 import { autoPlaceFleet } from '../../game/board'
-import { resetBotFleetStash, stashBotFleets } from '../match/botFleetStash'
+import { resetPracticeState, useStore } from '../../practice/practiceStore'
+import { resetMatchFleetStash, stashMatchFleet } from '../match/matchFleetStash'
 import { resetMoveFx } from './moveFx'
 
 vi.mock('../../three/Scene', () => ({
@@ -34,15 +35,21 @@ vi.mock('../../lib/haptics', () => ({
   haptics: new Proxy({}, { get: () => vi.fn() }),
 }))
 
-const ROUTE = '/match/arb-sepolia-v1/1'
+const ROUTE = `/match/${DEPLOYMENT_ID}/1`
 
 beforeEach(() => {
   resetMoveFx()
-  resetBotFleetStash()
+  resetMatchFleetStash()
+  resetPracticeState()
+})
+
+afterEach(() => {
+  cleanup()
+  resetPracticeState()
 })
 
 describe('bot match frontend flow', () => {
-  it('creates a bot match from the menu route and lands in battle on the player turn', async () => {
+  it('creates a bot match from the menu route and lands in the 3D battle on the player turn', async () => {
     const contract = makeFakeContract()
     renderApp({
       route: '/match/bot',
@@ -60,20 +67,22 @@ describe('bot match frontend flow', () => {
     )
     await userEvent.click(screen.getByTestId('create-match'))
 
-    // Lands on the battle, player moves first, no bot-advance button yet.
-    await waitFor(() => expect(screen.getByTestId('onchain-battle-panel')).toBeTruthy())
-    expect(screen.getByTestId('fire-button')).toBeTruthy()
+    // Lands in the 3D battle; the player moves first and drives every turn from
+    // the Fire action — no manual advance/finalize controls exist.
+    await waitFor(() => expect(screen.getByTestId('onchain-battle-3d')).toBeTruthy())
     expect(screen.queryByTestId('advance-bot-turn')).toBeNull()
+    expect(screen.queryByTestId('finalize-shot')).toBeNull()
     expect(contract.match!.matchType).toBe('Bot')
     expect(contract.match!.currentTurn).toBe(CREATOR)
   })
 
-  it('advances the bot turn: executeBotMove then finalize hands the turn back', async () => {
+  it('runs the bot turn on-chain after the player misses', async () => {
     const contract = makeFakeContract()
-    // Set up a started bot match, then force the bot's turn.
     await contract.writeClientFor(CREATOR).createBotMatch!([], [], () => {})
-    contract.match!.currentTurn = BOT_OPPONENT
-    contract.nextResults.push({ result: 'Miss' })
+    // The player's shot misses, which passes the turn to the bot; the bot's own
+    // shot then misses too, handing the turn back.
+    contract.nextResults.push({ result: 'Miss' }, { result: 'Miss' })
+    stashMatchFleet(DEPLOYMENT_ID, '1', { player: autoPlaceFleet() })
 
     renderApp({
       route: ROUTE,
@@ -81,66 +90,39 @@ describe('bot match frontend flow', () => {
       clients: contract.clientsFor(CREATOR),
     })
 
-    await waitFor(() => expect(screen.getByTestId('onchain-battle-panel')).toBeTruthy())
-    // The bot's turn shows the advance button instead of the fire button.
-    const advance = await screen.findByTestId('advance-bot-turn')
-    expect(screen.queryByTestId('fire-button')).toBeNull()
+    expect(await screen.findByTestId('onchain-battle-3d')).toBeTruthy()
+    useStore.getState().selectCell(7)
+    const fire = await screen.findByRole('button', { name: /Fire at/ })
+    await waitFor(() => expect(fire.hasAttribute('disabled')).toBe(false))
+    await userEvent.click(fire)
 
-    await userEvent.click(advance)
+    // The contract resolved the player's shot, then executeBotMove ran for the
+    // bot — both without a single manual tap.
+    await waitFor(() => expect(contract.moves[0]?.result).toBe('Miss'))
+    await waitFor(() => expect(contract.moves.length).toBeGreaterThan(1), { timeout: 4000 })
+    expect(contract.moves[1].attacker).toBe(BOT_OPPONENT)
+    expect(contract.moves[1].defender).toBe(CREATOR)
+  })
 
-    // executeBotMove freezes the match in ResolvingShot with the bot as attacker.
-    await waitFor(() => expect(screen.getByTestId('shot-resolving')).toBeTruthy())
-    expect(contract.pendingShot!.attacker).toBe(BOT_OPPONENT)
-    expect(contract.pendingShot!.defender).toBe(CREATOR)
+  it('renders the 3D battle whether or not the fleet was retained', async () => {
+    const contract = makeFakeContract()
+    await contract.writeClientFor(CREATOR).createBotMatch!([], [], () => {})
+    // No stash: a refresh or another device dropped the in-memory fleet. The
+    // battle is still 3D — the own board is simply hidden.
 
+    renderApp({
+      route: ROUTE,
+      wallet: connectedWalletValue(CREATOR),
+      clients: contract.clientsFor(CREATOR),
+    })
+
+    expect(await screen.findByTestId('onchain-battle-3d')).toBeTruthy()
     await waitFor(() =>
-      expect(screen.getByTestId('finalize-shot').hasAttribute('disabled')).toBe(false),
+      expect(useStore.getState().match?.boards.player.ships).toHaveLength(0),
     )
-    await userEvent.click(screen.getByTestId('finalize-shot'))
-
-    // A bot miss hands the turn back to the player.
-    await waitFor(() => expect(screen.getByTestId('fire-button')).toBeTruthy())
-    expect(contract.match!.currentTurn).toBe(CREATOR)
-    expect(screen.queryByTestId('advance-bot-turn')).toBeNull()
   })
 
-  it('renders the 3D battle through the practice engine when fleets are retained', async () => {
-    const contract = makeFakeContract()
-    await contract.writeClientFor(CREATOR).createBotMatch!([], [], () => {})
-    // The create screen retains only the player's plaintext fleet for the 3D
-    // match; the bot's stays encrypted on-chain.
-    stashBotFleets(DEPLOYMENT_ID, '1', { player: autoPlaceFleet() })
-
-    renderApp({
-      route: ROUTE,
-      wallet: connectedWalletValue(CREATOR),
-      clients: contract.clientsFor(CREATOR),
-    })
-
-    // The 3D controller mounts instead of the flat DOM battle panel; there are
-    // no manual Finalize-Shot / Advance-Opponent buttons on this path.
-    expect(await screen.findByTestId('bot-battle-3d')).toBeTruthy()
-    expect(screen.queryByTestId('onchain-battle-panel')).toBeNull()
-    expect(screen.queryByTestId('finalize-shot')).toBeNull()
-    expect(screen.queryByTestId('advance-bot-turn')).toBeNull()
-  })
-
-  it('falls back to the DOM battle panel when the fleets were not retained (refresh)', async () => {
-    const contract = makeFakeContract()
-    await contract.writeClientFor(CREATOR).createBotMatch!([], [], () => {})
-    // No stash: a refresh or another device dropped the in-memory fleets.
-
-    renderApp({
-      route: ROUTE,
-      wallet: connectedWalletValue(CREATOR),
-      clients: contract.clientsFor(CREATOR),
-    })
-
-    expect(await screen.findByTestId('onchain-battle-panel')).toBeTruthy()
-    expect(screen.queryByTestId('bot-battle-3d')).toBeNull()
-  })
-
-  it('owns the terminal screen in 3D — the flat DOM summary never shows for bot mode', async () => {
+  it('owns the terminal screen in 3D', async () => {
     const contract = makeFakeContract()
     await contract.writeClientFor(CREATOR).createBotMatch!([], [], () => {})
     // The match ended on-chain before the local 3D sequence did (an on-chain
@@ -153,7 +135,7 @@ describe('bot match frontend flow', () => {
       currentTurn: null,
       finishedAt: nowTs,
     }
-    stashBotFleets(DEPLOYMENT_ID, '1', { player: autoPlaceFleet() })
+    stashMatchFleet(DEPLOYMENT_ID, '1', { player: autoPlaceFleet() })
 
     renderApp({
       route: ROUTE,
@@ -161,36 +143,10 @@ describe('bot match frontend flow', () => {
       clients: contract.clientsFor(CREATOR),
     })
 
-    // The 3D engine stays mounted and renders its own victory/defeat overlay;
-    // the flat DOM MatchSummaryPanel is never the bot-mode terminal screen.
-    expect(await screen.findByTestId('bot-battle-3d')).toBeTruthy()
+    expect(await screen.findByTestId('onchain-battle-3d')).toBeTruthy()
     expect(await screen.findByRole('heading', { name: 'Defeat' })).toBeTruthy()
-    expect(screen.queryByTestId('match-summary-panel')).toBeNull()
     // The overlay buttons drive the on-chain rematch / exit (not practice flow).
     expect(screen.getByRole('button', { name: 'Play Again' })).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Main Menu' })).toBeTruthy()
-  })
-
-  it('still shows the DOM summary for a finished friend match (no 3D engine)', async () => {
-    const contract = makeFakeContract()
-    contract.startBattle({ currentTurn: CREATOR })
-    // A friend match has no client-held opponent fleet, so the terminal screen
-    // stays the authoritative public-data summary.
-    contract.match = {
-      ...contract.match!,
-      status: 'Finished',
-      winner: CREATOR,
-      currentTurn: null,
-      finishedAt: Math.floor(Date.now() / 1000),
-    }
-
-    renderApp({
-      route: ROUTE,
-      wallet: connectedWalletValue(CREATOR),
-      clients: contract.clientsFor(CREATOR),
-    })
-
-    expect(await screen.findByTestId('match-summary-panel')).toBeTruthy()
-    expect(screen.queryByTestId('bot-battle-3d')).toBeNull()
   })
 })

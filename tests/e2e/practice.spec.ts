@@ -1,20 +1,25 @@
 import { expect, test, type Page } from '@playwright/test'
 
 async function openReady(page: Page) {
-  // `/` is the wallet-aware entry since Phase 5 (GAME-504); practice lives at
-  // its explicit route and must stay playable without a wallet.
-  await page.goto('/practice')
+  // `/` is the wallet-aware entry since Phase 5 (GAME-504) and playing is
+  // sign-in only, so the practice hub is opened with the mocked signed-in
+  // wallet the e2e build injects.
+  await page.goto('/practice?e2eWallet=creator')
   await expect(page.getByRole('heading', { name: /Encrypted Battleship/i }))
     .toBeVisible({ timeout: 30_000 })
   await expect(page.getByText('Loading Battlefield')).toBeHidden({ timeout: 30_000 })
 }
 
-test('entry onboarding keeps practice reachable without a wallet', async ({ page }) => {
+test('entry onboarding is the only door — no guest play', async ({ page }) => {
   await page.goto('/')
   await expect(page.getByTestId('entry-screen')).toBeVisible({ timeout: 30_000 })
-  await page.getByTestId('entry-skip').click()
-  await expect(page.getByRole('button', { name: 'Practice vs Bot' }))
-    .toBeVisible({ timeout: 30_000 })
+  await expect(page.getByTestId('entry-skip')).toHaveCount(0)
+  await expect(page.getByTestId('entry-connect')).toBeVisible()
+
+  // A signed-out visitor cannot reach the hub by typing the route either.
+  await page.goto('/practice')
+  await expect(page.getByTestId('entry-screen')).toBeVisible({ timeout: 30_000 })
+  await expect(page.getByRole('button', { name: 'Practice vs Bot' })).toHaveCount(0)
 })
 
 async function storeValue<T>(page: Page, selector: string): Promise<T> {
