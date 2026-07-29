@@ -1,6 +1,6 @@
 import * as THREE from 'three'
 import { useMemo } from 'react'
-import { useFBX, useTexture } from '@react-three/drei'
+import { useFBX, useGLTF, useTexture } from '@react-three/drei'
 import type { ShipClassId } from '../game/types'
 
 /**
@@ -12,6 +12,9 @@ import type { ShipClassId } from '../game/types'
 export const CELL = 1.04
 
 const MODEL = (name: string) => `/models/${name}.fbx`
+
+/** Floating life-ring marker dropped on every missed cell (its own PBR glb). */
+export const MISS_BUOY_MODEL = '/models/miss-lifebuoy.glb'
 const TEXTURE = (name: string) => `/textures/${name}-texture.jpg`
 const TRANSPARENT_PIXEL =
   'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw=='
@@ -123,4 +126,5 @@ export function preloadAll() {
     useFBX.preload(MODEL(name))
     useTexture.preload(TEXTURE(name))
   }
+  useGLTF.preload(MISS_BUOY_MODEL)
 }

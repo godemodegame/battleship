@@ -22,13 +22,13 @@ const sequence = (folder: string, name: string, count: number) =>
     (_, index) => `/textures/vfx/${folder}/${name}-${String(index + 1).padStart(2, '0')}.webp`,
   )
 
-const HIT_FRAMES = sequence('hit-flash', 'vfx-hit-flash', 6)
-const SMOKE_FRAMES = sequence('ink-smoke', 'vfx-ink-smoke', 8)
+export const HIT_FRAMES = sequence('hit-flash', 'vfx-hit-flash', 6)
+export const SMOKE_FRAMES = sequence('ink-smoke', 'vfx-ink-smoke', 8)
 const MISS_FRAMES = sequence('miss-splash', 'vfx-miss-splash', 8)
 const SUNK_BREAK = '/textures/vfx/sunk-state-overlay/vfx-sunk-break-flash.webp'
 const SUNK_RESIDUAL = '/textures/vfx/sunk-state-overlay/vfx-sunk-residual-ink.webp'
 const IMPACT_CRACK = '/textures/vfx/shockwave-and-crack-decals/vfx-impact-crack-decal.webp'
-const SHOCKWAVE = '/textures/vfx/shockwave-and-crack-decals/vfx-shockwave-ring.webp'
+export const SHOCKWAVE = '/textures/vfx/shockwave-and-crack-decals/vfx-shockwave-ring.webp'
 const SMEAR_ARC = '/textures/vfx/smear-frame-cards/vfx-smear-arc.webp'
 const SMEAR_IMPACT = '/textures/vfx/smear-frame-cards/vfx-smear-impact.webp'
 const SMEAR_CAMERA_CUT = '/textures/vfx/smear-frame-cards/vfx-smear-camera-cut.webp'

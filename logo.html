@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Fhenix wordmark — slot reveal</title>
+    <style>
+      /* Served from assets/brand/ in dev only; never part of the app bundle. */
+      @font-face {
+        font-family: 'GeistMono';
+        src: url('/assets/brand/GeistMono-Bold.ttf') format('truetype');
+        font-weight: 700;
+        font-display: block;
+      }
+
+      html,
+      body {
+        margin: 0;
+        width: 100%;
+        height: 100%;
+        background: #000;
+        overflow: hidden;
+      }
+
+      #frame {
+        width: 100vw;
+        height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: #000;
+      }
+
+      /* Wordmark occupies ~64% of the 16:9 frame width. */
+      #stage {
+        width: 74%;
+        aspect-ratio: 1646 / 702;
+      }
+
+      #stage svg {
+        display: block;
+        overflow: visible;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="frame"><div id="stage"></div></div>
+    <script type="module" src="/src/logo-anim/main.ts"></script>
+  </body>
+</html>

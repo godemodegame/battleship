@@ -79,9 +79,12 @@ export function BattleHUD() {
   return (
     <div className="hud">
       <div className="topbar">
-        <button className="icon-btn danger" aria-label="Forfeit" onClick={() => setConfirmForfeit(true)}>
-          ⚑
-        </button>
+        <button
+          className="icon-btn danger"
+          data-ic="flag"
+          aria-label="Forfeit"
+          onClick={() => setConfirmForfeit(true)}
+        />
         <div className="topbar-status">
           <span className={`status-label pulse-${status.tone}`}>{status.text}</span>
           <span className="status-sub">

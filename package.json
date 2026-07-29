@@ -24,7 +24,9 @@
     "test:contracts": "npm --prefix contracts test",
     "verify:release": "node scripts/verify-release.mjs && node scripts/check-release-config.mjs",
     "release:sync-manifest": "node scripts/sync-deployment-manifest.mjs",
-    "release:verify-public": "node scripts/verify-public-deployment.mjs"
+    "release:verify-public": "node scripts/verify-public-deployment.mjs",
+    "render:cinematic": "node scripts/render-cinematic.mjs",
+    "render:logo": "node scripts/render-logo.mjs"
   },
   "overrides": {
     "uuid": "11.1.1",
@@ -35,6 +37,8 @@
   },
   "dependencies": {
     "@cofhe/sdk": "0.6.0",
+    "@fontsource/bangers": "^5.3.0",
+    "@fontsource/nunito": "^5.3.0",
     "@privy-io/react-auth": "^3.29.2",
     "@react-three/drei": "^9.122.0",
     "@react-three/fiber": "^8.18.0",

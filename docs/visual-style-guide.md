@@ -178,17 +178,34 @@ On-chain and FHE moments:
 
 All UI text must be English.
 
-The UI should feel like a tactical overlay placed on top of the 3D scene:
+The 2D layer is a printed comic sheet laid over the neo-noir 3D scene. The
+world stays cinematic and dark; the HUD and menus are ink on paper. The two
+layers are deliberately different media — that contrast is the identity.
 
-- sharp panels;
-- small radius corners;
-- thin lines;
-- high contrast text;
+- cream paper plates (`#F7EFDD`) with thick near-black ink contours (`#14121C`);
+- flat saturated fills — amber, impact red, ink blue, hot pink, comic cyan;
+- hard offset ink shadows, never blurred glow or neon bloom;
+- halftone dot tint inside plates;
+- display lettering (condensed comic caps) with an ink outline and hard shadow;
+- slight rotations on plates so nothing sits perfectly square;
+- press feedback = the control slams down and its shadow collapses;
 - icon-first buttons where possible;
 - compact controls for mobile;
 - no large marketing hero sections inside the game;
 - no decorative card stacks;
 - no explanatory blocks that clutter the battle view.
+
+Explicitly out of the 2D layer: glass blur, scanlines, animated encryption
+sheens, neon text glow, chrome or gradient bevels. Those cues belong to the 3D
+world, not to the HUD.
+
+Typography: `Bangers` for display lettering (titles, buttons, status labels,
+result words), `Nunito` 700/800 for body copy. Both are bundled locally via
+`@fontsource`; the stack falls back to Impact / system sans.
+
+Art slots for this layer live in `assets/2d-comics/ui-hud/` — every surface has
+a procedural CSS stand-in, and a generated asset upgrades it by swapping a
+`--tex-*` variable.
 
 Important player actions need clear labels:
 

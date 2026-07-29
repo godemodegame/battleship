@@ -10,15 +10,14 @@ export function MuteButton() {
   return (
     <button
       className="icon-btn"
+      data-ic={muted ? 'mute' : 'sound'}
       aria-label={muted ? 'Unmute sound' : 'Mute sound'}
       onClick={() => {
         sfx.setMuted(!muted)
         setMuted(!muted)
         if (muted) sfx.ui()
       }}
-    >
-      {muted ? '🔇' : '🔊'}
-    </button>
+    />
   )
 }
 

@@ -1,49 +1,102 @@
+/* ============================================================================
+   Comic-book HUD layer.
+
+   The 3D world stays neo-noir; every 2D control above it is drawn as printed
+   comic art: cream paper plates, thick near-black ink contours, flat saturated
+   fills, hard offset shadows instead of neon bloom, halftone dot texture, and
+   display lettering with an inked outline. No scanlines, no glass blur, no
+   glow washes.
+   ========================================================================= */
+
 :root {
-  --ink: #07080d;
+  /* ---- ink & paper base ---- */
+  --ink: #14121c;
+  --ink-2: #2a2438;
+  --ink-40: rgba(20, 18, 28, 0.4);
+  --ink-22: rgba(20, 18, 28, 0.22);
+  --ink-12: rgba(20, 18, 28, 0.12);
+  --paper: #f7efdd;
+  --paper-2: #e9dcc0;
+  --paper-3: #d8c8a6;
+  --night: #171426;
+
+  /* ---- flat comic accents (printed inks, not neon) ---- */
+  --cyan: #2fc0e0;
+  --magenta: #f8508f;
+  --amber: #ffc63c;
+  --red: #e8402e;
+  --blue: #2f6fd0;
+  /* Darker cut of the same blue for small text on paper (AA at 12-16px). */
+  --blue-ink: #245bb0;
+  --green: #46b96b;
+  --white: #fffaf0;
+
+  /* Legacy aliases kept so older rules and inline usages stay valid. */
   --deep: #101622;
   --petrol: #16242a;
-  --cyan: #21f4ff;
-  --magenta: #ff2ea6;
-  --amber: #ffb000;
-  --red: #ff3b30;
-  --white: #e8f7ff;
-  --glass: rgba(13, 19, 30, 0.78);
-  --line: rgba(33, 244, 255, 0.35);
+  --glass: var(--paper);
+  --line: var(--ink);
+
   --sat: env(safe-area-inset-top, 0px);
   --sab: env(safe-area-inset-bottom, 0px);
 
-  /* Visual-style-guide pass: sharp tactical-overlay framing tokens. Small
-     radii (inked, not rounded), thin cyan lines at graded strengths, a cold
-     top hairline for dimensional buttons, and deep neo-noir drop shadows. */
-  --radius: 6px;
-  --radius-sm: 4px;
-  --line-dim: rgba(33, 244, 255, 0.2);
-  --line-bright: rgba(33, 244, 255, 0.6);
-  --hairline: rgba(232, 247, 255, 0.14);
-  --shadow-deep: 0 16px 40px rgba(0, 0, 0, 0.6);
-  --glow-cyan: 0 0 16px rgba(33, 244, 255, 0.28);
-  --glow-amber: 0 0 16px rgba(255, 176, 0, 0.3);
+  /* ---- comic framing tokens ---- */
+  --radius: 14px;
+  --radius-sm: 10px;
+  --stroke: 3px;
+  --stroke-thin: 2px;
+  --line-dim: var(--ink);
+  --line-bright: var(--ink);
+  --hairline: rgba(255, 255, 255, 0.5);
+  /* Hard printed drop shadow — the whole "sticker on a page" read. */
+  --shadow-pop: 4px 5px 0 var(--ink);
+  --shadow-pop-sm: 3px 3px 0 var(--ink);
+  --shadow-deep: 5px 7px 0 var(--ink);
+  --glow-cyan: none;
+  --glow-amber: none;
+
+  /* Display lettering. */
+  --font-comic: 'Bangers', 'Impact', 'Haettenschweiler', 'Arial Narrow Bold', sans-serif;
+  --font-ui: 'Nunito', 'Segoe UI', system-ui, -apple-system, sans-serif;
 }
 
-/* Inline line-art icon masks (stroke alpha drives the mask coverage; the stroke
-   color is irrelevant). Kept here so every action can pull a crisp, monochrome,
-   currentColor-tinted glyph that renders identically across platforms. */
+/* Generated comic art slots (see assets/2d-comics/ui-hud/). Each one defaults
+   to a procedural CSS stand-in so the UI is complete without art; dropping the
+   produced WebP into /public/textures/ui-comic and swapping the value here
+   upgrades the surface with no other change. */
 :root {
-  --ic-target: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='8'/%3E%3Ccircle cx='12' cy='12' r='2.5'/%3E%3Cpath d='M12 1v3M12 20v3M1 12h3M20 12h3'/%3E%3C/svg%3E");
-  --ic-crosshair: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='7'/%3E%3Cpath d='M12 1v5M12 18v5M1 12h5M18 12h5'/%3E%3Ccircle cx='12' cy='12' r='1'/%3E%3C/svg%3E");
-  --ic-swords: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='14.5 17.5 3 6 3 3 6 3 17.5 14.5'/%3E%3Cline x1='13' x2='19' y1='19' y2='13'/%3E%3Cline x1='16' x2='20' y1='16' y2='20'/%3E%3Cline x1='19' x2='21' y1='21' y2='19'/%3E%3Cpolyline points='14.5 6.5 18 3 21 3 21 6 17.5 9.5'/%3E%3Cline x1='5' x2='9' y1='14' y2='18'/%3E%3Cline x1='7' x2='4' y1='17' y2='20'/%3E%3Cline x1='3' x2='5' y1='19' y2='21'/%3E%3C/svg%3E");
-  --ic-list: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M8 6h13M8 12h13M8 18h13'/%3E%3Cpath d='M3 6h.01M3 12h.01M3 18h.01'/%3E%3C/svg%3E");
-  --ic-globe: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='10'/%3E%3Cpath d='M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20'/%3E%3Cpath d='M2 12h20'/%3E%3C/svg%3E");
-  --ic-info: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='10'/%3E%3Cpath d='M12 16v-4'/%3E%3Cpath d='M12 8h.01'/%3E%3C/svg%3E");
-  --ic-plus: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 5v14M5 12h14'/%3E%3C/svg%3E");
-  --ic-back: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M15 18l-6-6 6-6'/%3E%3C/svg%3E");
-  --ic-rotate: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M21 12a9 9 0 1 1-3-6.7L21 8'/%3E%3Cpath d='M21 3v5h-5'/%3E%3C/svg%3E");
-  --ic-shuffle: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M16 3h5v5'/%3E%3Cpath d='M4 20 21 3'/%3E%3Cpath d='M21 16v5h-5'/%3E%3Cpath d='M15 15l6 6'/%3E%3Cpath d='M4 4l5 5'/%3E%3C/svg%3E");
-  --ic-check: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20 6 9 17l-5-5'/%3E%3C/svg%3E");
-  --ic-trash: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 6h18'/%3E%3Cpath d='M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2'/%3E%3Cpath d='M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6'/%3E%3C/svg%3E");
-  --ic-login: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4'/%3E%3Cpath d='M10 17l5-5-5-5'/%3E%3Cpath d='M15 12H3'/%3E%3C/svg%3E");
-  --ic-power: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 2v10'/%3E%3Cpath d='M18.4 6.6a9 9 0 1 1-12.77.04'/%3E%3C/svg%3E");
-  --ic-switch: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M17 2l4 4-4 4'/%3E%3Cpath d='M3 11v-1a4 4 0 0 1 4-4h14'/%3E%3Cpath d='M7 22l-4-4 4-4'/%3E%3Cpath d='M21 13v1a4 4 0 0 1-4 4H3'/%3E%3C/svg%3E");
+  --tex-halftone: radial-gradient(var(--ink-12) 1.1px, transparent 1.2px);
+  --tex-halftone-size: 6px 6px;
+  --tex-paper: linear-gradient(
+    118deg,
+    rgba(255, 255, 255, 0.5) 0%,
+    rgba(255, 255, 255, 0) 42%,
+    rgba(20, 18, 28, 0.05) 100%
+  );
+}
+
+/* Inline line-art icon masks. Stroke alpha drives mask coverage, so the glyph
+   always tints with the button's text color. Weights are inked (2.6) so they
+   read as hand-drawn contours next to the 3px plate borders. */
+:root {
+  --ic-target: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='8'/%3E%3Ccircle cx='12' cy='12' r='2.5'/%3E%3Cpath d='M12 1v3M12 20v3M1 12h3M20 12h3'/%3E%3C/svg%3E");
+  --ic-crosshair: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='7'/%3E%3Cpath d='M12 1v5M12 18v5M1 12h5M18 12h5'/%3E%3Ccircle cx='12' cy='12' r='1.2'/%3E%3C/svg%3E");
+  --ic-swords: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='14.5 17.5 3 6 3 3 6 3 17.5 14.5'/%3E%3Cline x1='13' x2='19' y1='19' y2='13'/%3E%3Cline x1='16' x2='20' y1='16' y2='20'/%3E%3Cpolyline points='14.5 6.5 18 3 21 3 21 6 17.5 9.5'/%3E%3Cline x1='5' x2='9' y1='14' y2='18'/%3E%3Cline x1='7' x2='4' y1='17' y2='20'/%3E%3C/svg%3E");
+  --ic-list: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M8 6h13M8 12h13M8 18h13'/%3E%3Cpath d='M3 6h.01M3 12h.01M3 18h.01'/%3E%3C/svg%3E");
+  --ic-globe: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='9.5'/%3E%3Cpath d='M12 2.5a14.5 14.5 0 0 0 0 19 14.5 14.5 0 0 0 0-19'/%3E%3Cpath d='M2.5 12h19'/%3E%3C/svg%3E");
+  --ic-info: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='9.5'/%3E%3Cpath d='M12 16.5v-5'/%3E%3Cpath d='M12 7.6h.01'/%3E%3C/svg%3E");
+  --ic-plus: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 5v14M5 12h14'/%3E%3C/svg%3E");
+  --ic-back: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M15 18.5l-6.5-6.5L15 5.5'/%3E%3C/svg%3E");
+  --ic-rotate: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M21 12a9 9 0 1 1-3-6.7L21 8'/%3E%3Cpath d='M21 3v5h-5'/%3E%3C/svg%3E");
+  --ic-shuffle: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M16 3h5v5'/%3E%3Cpath d='M4 20 21 3'/%3E%3Cpath d='M21 16v5h-5'/%3E%3Cpath d='M15 15l6 6'/%3E%3Cpath d='M4 4l5 5'/%3E%3C/svg%3E");
+  --ic-check: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20 6 9 17l-5-5'/%3E%3C/svg%3E");
+  --ic-trash: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 6h18'/%3E%3Cpath d='M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2'/%3E%3Cpath d='M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6'/%3E%3C/svg%3E");
+  --ic-login: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4'/%3E%3Cpath d='M10 17l5-5-5-5'/%3E%3Cpath d='M15 12H3'/%3E%3C/svg%3E");
+  --ic-power: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 2v10'/%3E%3Cpath d='M18.4 6.6a9 9 0 1 1-12.77.04'/%3E%3C/svg%3E");
+  --ic-switch: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M17 2l4 4-4 4'/%3E%3Cpath d='M3 11v-1a4 4 0 0 1 4-4h14'/%3E%3Cpath d='M7 22l-4-4 4-4'/%3E%3Cpath d='M21 13v1a4 4 0 0 1-4 4H3'/%3E%3C/svg%3E");
+  --ic-flag: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 22V3'/%3E%3Cpath d='M5 4h11l-2 4 2 4H5'/%3E%3C/svg%3E");
+  --ic-sound: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 9v6h4l5 4V5L8 9H4z'/%3E%3Cpath d='M16.5 8.5a5 5 0 0 1 0 7'/%3E%3Cpath d='M19.5 5.5a9 9 0 0 1 0 13'/%3E%3C/svg%3E");
+  --ic-mute: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 9v6h4l5 4V5L8 9H4z'/%3E%3Cpath d='M17 9.5l4.5 5'/%3E%3Cpath d='M21.5 9.5l-4.5 5'/%3E%3C/svg%3E");
 }
 
 * {
@@ -53,7 +106,7 @@
 
 /* GAME-806: visible keyboard focus on every interactive element. */
 :focus-visible {
-  outline: 2px solid var(--cyan);
+  outline: 3px solid var(--amber);
   outline-offset: 2px;
 }
 
@@ -94,9 +147,10 @@ body,
   margin: 0;
   height: 100%;
   overflow: hidden;
-  background: var(--ink);
-  color: var(--white);
-  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  background: var(--night);
+  color: var(--paper);
+  font-family: var(--font-ui);
+  font-weight: 700;
   user-select: none;
   -webkit-user-select: none;
 }
@@ -147,180 +201,195 @@ body,
   pointer-events: auto;
 }
 
+/* A panel is a printed comic plate: cream paper, thick ink contour, halftone
+   tint, and a hard offset shadow. No blur, no bloom. */
 .panel {
   position: relative;
-  background: var(--glass);
-  border: 1px solid var(--line-dim);
+  background-color: var(--paper);
+  background-image: var(--tex-halftone), var(--tex-paper);
+  background-size: var(--tex-halftone-size), cover;
+  border: var(--stroke) solid var(--ink);
   border-radius: var(--radius);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
-  box-shadow: inset 0 1px 0 var(--hairline), 0 0 28px rgba(33, 244, 255, 0.07),
-    var(--shadow-deep);
+  color: var(--ink);
+  box-shadow: var(--shadow-deep);
 }
 
-/* Tactical corner brackets on the framed moments (modal, result) — a sealed
-   HUD-overlay read rather than a plain rounded card. */
+/* Double-ruled inner border — the classic printed panel edge. Replaces the old
+   tactical corner brackets. */
 .panel.modal::before,
-.panel.modal::after,
-.panel.result::before,
-.panel.result::after {
+.panel.result::before {
   content: '';
   position: absolute;
-  width: 14px;
-  height: 14px;
-  border-color: var(--cyan);
-  opacity: 0.65;
+  inset: 5px;
+  border: 1.5px solid var(--ink-22);
+  border-radius: calc(var(--radius) - 5px);
   pointer-events: none;
 }
 
-.panel.modal::before,
-.panel.result::before {
-  top: 7px;
-  left: 7px;
-  border-top: 1.5px solid;
-  border-left: 1.5px solid;
-}
-
+/* Halftone corner wedge for a printed-ink accent. */
 .panel.modal::after,
 .panel.result::after {
-  bottom: 7px;
-  right: 7px;
-  border-bottom: 1.5px solid;
-  border-right: 1.5px solid;
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 74px;
+  height: 74px;
+  border-radius: 0 calc(var(--radius) - 3px) 0 0;
+  background: radial-gradient(var(--cyan) 1.6px, transparent 1.7px) 0 0 / 7px 7px;
+  -webkit-mask: linear-gradient(225deg, #000 24%, transparent 62%);
+  mask: linear-gradient(225deg, #000 24%, transparent 62%);
+  opacity: 0.55;
+  pointer-events: none;
 }
 
-.panel.result.lost::before,
 .panel.result.lost::after {
-  border-color: var(--magenta);
+  background: radial-gradient(var(--magenta) 1.6px, transparent 1.7px) 0 0 / 7px 7px;
 }
 
 /* ---------- buttons ---------- */
 
 .btn {
   appearance: none;
+  position: relative;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 9px;
   text-align: center;
   text-decoration: none;
-  border: 1px solid var(--line-dim);
-  background: linear-gradient(180deg, rgba(28, 38, 54, 0.9), rgba(12, 18, 28, 0.92));
-  color: var(--white);
-  font: 600 15px/1 inherit;
-  letter-spacing: 0.05em;
-  padding: 14px 18px;
+  border: var(--stroke) solid var(--ink);
+  background: var(--paper);
+  color: var(--ink);
+  font: 400 21px/1 var(--font-comic);
+  letter-spacing: 0.055em;
+  padding: 13px 18px 11px;
   border-radius: var(--radius);
   cursor: pointer;
   /* GAME-806: 44px minimum touch target on every action. */
   min-height: 44px;
-  box-shadow: inset 0 1px 0 var(--hairline), 0 10px 24px rgba(0, 0, 0, 0.4);
-  transition: transform 0.08s ease, box-shadow 0.15s ease, background 0.15s ease,
-    border-color 0.15s ease, color 0.15s ease;
+  box-shadow: var(--shadow-pop);
+  transition: transform 0.06s ease, box-shadow 0.06s ease, background 0.12s ease,
+    color 0.12s ease;
 }
 
 @media (hover: hover) {
   .btn:hover:not(:disabled) {
-    border-color: var(--line-bright);
-    box-shadow: inset 0 1px 0 var(--hairline), var(--glow-cyan), 0 12px 26px rgba(0, 0, 0, 0.45);
+    transform: translate(-1px, -1px);
+    box-shadow: 5px 6px 0 var(--ink);
   }
 }
 
+/* Press = the sticker slams onto the page and its shadow collapses. */
 .btn:active:not(:disabled) {
-  transform: scale(0.97);
+  transform: translate(4px, 5px);
+  box-shadow: 0 0 0 var(--ink);
 }
 
 .btn.primary {
-  background: linear-gradient(180deg, rgba(33, 244, 255, 0.26), rgba(33, 244, 255, 0.05));
-  border-color: var(--cyan);
-  box-shadow: inset 0 1px 0 rgba(232, 247, 255, 0.32), 0 0 20px rgba(33, 244, 255, 0.3),
-    0 10px 26px rgba(0, 0, 0, 0.45);
-  text-shadow: 0 0 8px rgba(33, 244, 255, 0.6);
+  background: var(--amber);
+  color: var(--ink);
 }
 
 .btn.fire {
-  font-size: 17px;
-  padding: 16px 18px;
+  font-size: 24px;
+  padding: 15px 18px 13px;
   --ic: var(--ic-crosshair);
-  background: linear-gradient(180deg, rgba(255, 176, 0, 0.3), rgba(255, 59, 48, 0.16));
-  border-color: var(--amber);
-  box-shadow: inset 0 1px 0 rgba(255, 222, 150, 0.35), 0 0 22px rgba(255, 176, 0, 0.32),
-    0 10px 26px rgba(0, 0, 0, 0.45);
-  text-shadow: 0 0 10px rgba(255, 176, 0, 0.5);
-}
-
-.btn.fire:disabled {
-  box-shadow: inset 0 1px 0 var(--hairline);
+  background: var(--red);
+  color: var(--white);
 }
 
 .btn.danger {
-  border-color: var(--red);
-  background: linear-gradient(180deg, rgba(255, 59, 48, 0.2), rgba(255, 59, 48, 0.05));
-  color: #ffd7d3;
-  box-shadow: inset 0 1px 0 rgba(255, 180, 174, 0.22), 0 0 16px rgba(255, 59, 48, 0.2);
+  background: var(--red);
+  color: var(--white);
 }
 
 .btn.ghost {
   background: transparent;
-  border-color: var(--line-dim);
+  border-color: currentColor;
+  color: inherit;
   box-shadow: none;
-  color: rgba(232, 247, 255, 0.82);
+  opacity: 0.9;
 }
 
 @media (hover: hover) {
   .btn.ghost:hover:not(:disabled) {
-    background: rgba(33, 244, 255, 0.06);
-    color: var(--white);
+    background: rgba(247, 239, 221, 0.12);
+    opacity: 1;
+    transform: none;
+    box-shadow: none;
   }
 }
 
+.btn.ghost:active:not(:disabled) {
+  transform: translate(2px, 2px);
+  box-shadow: none;
+}
+
 .btn.small {
-  padding: 10px 9px;
-  font-size: 13px;
-  gap: 6px;
+  padding: 10px 8px 8px;
+  font-size: 15px;
+  gap: 5px;
   letter-spacing: 0.02em;
+  border-width: var(--stroke-thin);
+  box-shadow: var(--shadow-pop-sm);
   /* Small buttons keep the 44px touch height (GAME-806). */
   min-height: 44px;
+}
+
+.btn.small:active:not(:disabled) {
+  transform: translate(3px, 3px);
 }
 
 .btn.wide {
   width: 100%;
 }
 
+/* Disabled stays opaque printed card stock — a translucent button would let
+   the dark scene bleed through and read as a muddy color, not as "off". */
 .btn:disabled {
-  opacity: 0.38;
   cursor: default;
-  box-shadow: inset 0 1px 0 var(--hairline);
+  background: var(--paper-3);
+  color: var(--ink-40);
+  border-color: var(--ink-40);
+  box-shadow: var(--shadow-pop-sm);
+  transform: none;
 }
 
-/* Icon-first actions (visual-style-guide). A decorative leading glyph is drawn
-   from an inline SVG mask, so it tints with the button's text color and stays
-   out of the accessible name (no text node, no aria impact). Buttons opt in
-   with a data-ic attribute; the .fire action carries a crosshair by default. */
+/* Icon-first actions. A decorative leading glyph is drawn from an inline SVG
+   mask, so it tints with the button's text color and stays out of the
+   accessible name. Buttons opt in with data-ic; .fire carries a crosshair. */
 .btn[data-ic]::before,
-.btn.fire::before {
+.btn.fire::before,
+.icon-btn[data-ic]::before {
   content: '';
-  width: 17px;
-  height: 17px;
+  width: 19px;
+  height: 19px;
   flex: 0 0 auto;
   background-color: currentColor;
   -webkit-mask: var(--ic) center / contain no-repeat;
   mask: var(--ic) center / contain no-repeat;
-  opacity: 0.92;
 }
 
 .btn.small[data-ic]::before {
-  width: 14px;
-  height: 14px;
+  width: 16px;
+  height: 16px;
 }
 
-.btn[data-ic='target'] { --ic: var(--ic-target); }
+.icon-btn[data-ic]::before {
+  width: 21px;
+  height: 21px;
+}
+
+.btn[data-ic='target'],
+.icon-btn[data-ic='target'] { --ic: var(--ic-target); }
 .btn[data-ic='swords'] { --ic: var(--ic-swords); }
 .btn[data-ic='list'] { --ic: var(--ic-list); }
 .btn[data-ic='globe'] { --ic: var(--ic-globe); }
 .btn[data-ic='info'] { --ic: var(--ic-info); }
 .btn[data-ic='plus'] { --ic: var(--ic-plus); }
-.btn[data-ic='back'] { --ic: var(--ic-back); }
+.btn[data-ic='back'],
+.icon-btn[data-ic='back'] { --ic: var(--ic-back); }
 .btn[data-ic='rotate'] { --ic: var(--ic-rotate); }
 .btn[data-ic='shuffle'] { --ic: var(--ic-shuffle); }
 .btn[data-ic='check'] { --ic: var(--ic-check); }
@@ -328,44 +397,49 @@ body,
 .btn[data-ic='login'] { --ic: var(--ic-login); }
 .btn[data-ic='power'] { --ic: var(--ic-power); }
 .btn[data-ic='switch'] { --ic: var(--ic-switch); }
+.btn[data-ic='flag'],
+.icon-btn[data-ic='flag'] { --ic: var(--ic-flag); }
+.icon-btn[data-ic='sound'] { --ic: var(--ic-sound); }
+.icon-btn[data-ic='mute'] { --ic: var(--ic-mute); }
 
+/* Round inked token — the comic counterpart of a square HUD chip. */
 .icon-btn {
   appearance: none;
   /* GAME-806: 44x44 minimum touch target. */
   width: 44px;
   height: 44px;
-  border-radius: var(--radius);
-  border: 1px solid var(--line-dim);
-  background: var(--glass);
-  color: var(--white);
-  font-size: 18px;
+  border-radius: 50%;
+  border: var(--stroke) solid var(--ink);
+  background: var(--paper);
+  color: var(--ink);
+  font-size: 19px;
+  line-height: 1;
   cursor: pointer;
   display: grid;
   place-items: center;
-  box-shadow: inset 0 1px 0 var(--hairline), 0 8px 20px rgba(0, 0, 0, 0.4);
-  transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.08s ease;
+  box-shadow: var(--shadow-pop-sm);
+  transition: transform 0.06s ease, box-shadow 0.06s ease, background 0.12s ease;
 }
 
 .icon-btn:active:not(:disabled) {
-  transform: scale(0.94);
+  transform: translate(3px, 3px);
+  box-shadow: 0 0 0 var(--ink);
 }
 
 @media (hover: hover) {
   .icon-btn:hover:not(:disabled) {
-    border-color: var(--line-bright);
-    box-shadow: inset 0 1px 0 var(--hairline), var(--glow-cyan);
+    background: var(--paper-2);
   }
 }
 
 .icon-btn.danger {
-  border-color: rgba(255, 59, 48, 0.6);
-  color: #ffb4ae;
+  background: var(--red);
+  color: var(--white);
 }
 
 @media (hover: hover) {
   .icon-btn.danger:hover:not(:disabled) {
-    border-color: var(--red);
-    box-shadow: inset 0 1px 0 var(--hairline), 0 0 16px rgba(255, 59, 48, 0.28);
+    background: #f2523f;
   }
 }
 
@@ -374,7 +448,8 @@ body,
 .home {
   justify-content: space-between;
   padding: calc(14px + var(--sat)) 20px calc(20px + var(--sab));
-  background: linear-gradient(180deg, rgba(7, 8, 13, 0.45) 0%, transparent 35%, transparent 55%, rgba(7, 8, 13, 0.88) 100%);
+  background: linear-gradient(180deg, rgba(23, 20, 38, 0.55) 0%, transparent 32%, transparent 52%, rgba(23, 20, 38, 0.9) 100%);
+  color: var(--paper);
   overflow-y: auto;
   overscroll-behavior: contain;
 }
@@ -388,38 +463,56 @@ body,
   margin-top: 4vh;
 }
 
+/* Kicker sits in a small inked caption tab, like a comic issue banner. */
 .title-kicker {
-  font-size: 11px;
-  letter-spacing: 0.34em;
+  display: inline-block;
+  padding: 4px 10px 3px;
+  border: var(--stroke-thin) solid var(--ink);
+  border-radius: var(--radius-sm);
+  background: var(--amber);
+  color: var(--ink);
+  font: 400 14px/1 var(--font-comic);
+  letter-spacing: 0.16em;
   text-transform: uppercase;
-  color: var(--amber);
-  text-shadow: 0 0 10px rgba(255, 176, 0, 0.5);
+  box-shadow: var(--shadow-pop-sm);
+  transform: rotate(-2deg);
 }
 
+/* Cover lettering: flat fill, heavy ink outline, hard printed shadow. */
 .title-lockup h1 {
-  margin: 10px 0 8px;
-  font-size: clamp(38px, 11vw, 56px);
-  line-height: 0.98;
+  margin: 14px 0 10px;
+  font-family: var(--font-comic);
+  font-weight: 400;
+  font-size: clamp(46px, 14vw, 74px);
+  line-height: 0.9;
   text-transform: uppercase;
   letter-spacing: 0.02em;
-  background: linear-gradient(180deg, var(--white) 30%, var(--cyan) 100%);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-  filter: drop-shadow(0 0 14px rgba(33, 244, 255, 0.35));
+  color: var(--paper);
+  -webkit-text-stroke: 6px var(--ink);
+  paint-order: stroke fill;
+  text-shadow: 5px 6px 0 var(--ink);
+  transform: rotate(-1.6deg);
 }
 
 .tagline {
   margin: 0;
-  color: rgba(232, 247, 255, 0.75);
+  display: inline-block;
+  padding: 6px 11px 5px;
+  border: var(--stroke-thin) solid var(--ink);
+  border-radius: var(--radius-sm);
+  background: var(--paper);
+  color: var(--ink);
   font-size: 14px;
-  letter-spacing: 0.06em;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  box-shadow: var(--shadow-pop-sm);
+  transform: rotate(0.8deg);
 }
 
 .home-actions {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 11px;
   max-width: 420px;
   width: 100%;
   align-self: center;
@@ -433,31 +526,33 @@ body,
 }
 
 .difficulty-label {
-  font-size: 12px;
-  letter-spacing: 0.12em;
+  font: 400 17px/1 var(--font-comic);
+  letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: rgba(232, 247, 255, 0.65);
+  color: inherit;
 }
 
 .segmented {
   display: flex;
-  border: 1px solid var(--line-dim);
+  border: var(--stroke-thin) solid var(--ink);
   border-radius: var(--radius-sm);
   overflow: hidden;
-  background: rgba(7, 11, 18, 0.5);
+  background: var(--paper);
+  box-shadow: var(--shadow-pop-sm);
 }
 
 .segmented button {
   appearance: none;
   border: 0;
-  border-left: 1px solid var(--line-dim);
+  border-left: var(--stroke-thin) solid var(--ink);
   background: transparent;
-  color: rgba(232, 247, 255, 0.55);
-  font: 600 13px/1 inherit;
+  color: var(--ink);
+  font: 400 16px/1 var(--font-comic);
   letter-spacing: 0.04em;
-  padding: 10px 14px;
+  padding: 11px 14px 9px;
   cursor: pointer;
-  transition: color 0.15s ease, background 0.15s ease;
+  opacity: 0.68;
+  transition: color 0.12s ease, background 0.12s ease, opacity 0.12s ease;
 }
 
 .segmented button:first-child {
@@ -465,24 +560,29 @@ body,
 }
 
 .segmented button.on {
-  background: linear-gradient(180deg, rgba(33, 244, 255, 0.24), rgba(33, 244, 255, 0.07));
-  color: var(--white);
-  text-shadow: 0 0 8px rgba(33, 244, 255, 0.7);
-  box-shadow: inset 0 1px 0 rgba(232, 247, 255, 0.25), inset 0 0 12px rgba(33, 244, 255, 0.22);
+  background: var(--amber);
+  color: var(--ink);
+  opacity: 1;
 }
 
+/* Secondary copy appears both over the dark 3D scene and inside paper panels,
+   so it inherits the local ink and only dials back its weight. */
 .footnote {
   margin: 4px 0 0;
   text-align: center;
   font-size: 12px;
-  /* GAME-806: lifted from 0.42 alpha for readable contrast on the dark glass. */
-  color: rgba(232, 247, 255, 0.66);
-  letter-spacing: 0.04em;
+  font-weight: 700;
+  /* GAME-806: readable contrast in both contexts. */
+  color: inherit;
+  opacity: 0.8;
+  letter-spacing: 0.02em;
 }
 
-/* GAME-804: non-blocking warning tone (low balance, degraded states). */
+/* GAME-804: non-blocking warning tone (low balance, degraded states). Red
+   reads as a warning on paper and on the dark scene alike. */
 .footnote.warn {
-  color: var(--amber);
+  color: var(--red);
+  opacity: 1;
 }
 
 /* GAME-809: local perf readout (?perf=1), kept out of the way of play. */
@@ -496,10 +596,11 @@ body,
   gap: 8px;
   max-width: 90vw;
   padding: 4px 8px;
-  border-radius: 4px;
-  background: rgba(7, 8, 13, 0.8);
-  color: var(--cyan);
-  font: 600 10px/1.5 ui-monospace, monospace;
+  border: var(--stroke-thin) solid var(--ink);
+  border-radius: 6px;
+  background: var(--paper);
+  color: var(--ink);
+  font: 700 10px/1.5 ui-monospace, monospace;
   pointer-events: none;
 }
 
@@ -512,11 +613,11 @@ body,
   z-index: 40;
   padding: calc(8px + var(--sat)) 16px 8px;
   text-align: center;
-  font-size: 13px;
-  font-weight: 600;
-  letter-spacing: 0.05em;
+  font: 400 19px/1.2 var(--font-comic);
+  letter-spacing: 0.06em;
   color: var(--ink);
   background: var(--amber);
+  border-bottom: var(--stroke) solid var(--ink);
 }
 
 /* ---------- wallet (Phase 2) ---------- */
@@ -533,30 +634,29 @@ body,
 .wallet-address {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 13px;
-  color: var(--white);
-  letter-spacing: 0.04em;
+  font-weight: 700;
+  color: inherit;
+  letter-spacing: 0.02em;
 }
 
 .network-badge {
-  font-size: 11px;
+  font: 400 15px/1 var(--font-comic);
   text-transform: uppercase;
-  letter-spacing: 0.08em;
-  padding: 3px 9px;
+  letter-spacing: 0.06em;
+  padding: 5px 10px 3px;
   border-radius: 999px;
-  border: 1px solid var(--line-dim);
-  background: rgba(7, 11, 18, 0.55);
+  border: var(--stroke-thin) solid var(--ink);
+  background: var(--paper);
+  color: var(--ink);
+  box-shadow: var(--shadow-pop-sm);
 }
 
 .network-badge.ok {
-  color: var(--cyan);
-  border-color: rgba(33, 244, 255, 0.5);
-  box-shadow: 0 0 10px rgba(33, 244, 255, 0.18);
+  background: var(--cyan);
 }
 
 .network-badge.warn {
-  color: var(--amber);
-  border-color: rgba(255, 176, 0, 0.5);
-  box-shadow: 0 0 10px rgba(255, 176, 0, 0.18);
+  background: var(--amber);
 }
 
 .wrong-network-panel {
@@ -570,14 +670,18 @@ body,
 
 .wrong-network-panel h2 {
   margin: 0;
+  font-family: var(--font-comic);
+  font-weight: 400;
+  letter-spacing: 0.05em;
   color: var(--amber);
 }
 
 .error-note {
   margin: 0;
   font-size: 13px;
+  font-weight: 800;
   color: var(--red);
-  letter-spacing: 0.03em;
+  letter-spacing: 0.01em;
 }
 
 /* ---------- modal ---------- */
@@ -585,7 +689,7 @@ body,
 .modal-backdrop {
   position: absolute;
   inset: 0;
-  background: rgba(7, 8, 13, 0.7);
+  background: rgba(23, 20, 38, 0.72);
   display: grid;
   place-items: center;
   padding: 24px;
@@ -599,14 +703,15 @@ body,
   display: flex;
   flex-direction: column;
   gap: 12px;
+  transform: rotate(-0.7deg);
 }
 
 .modal h2 {
   margin: 0;
-  font-size: 18px;
-  letter-spacing: 0.08em;
+  font: 400 30px/1 var(--font-comic);
+  letter-spacing: 0.04em;
   text-transform: uppercase;
-  color: var(--cyan);
+  color: var(--ink);
 }
 
 .modal ul {
@@ -616,14 +721,20 @@ body,
   flex-direction: column;
   gap: 8px;
   font-size: 14px;
+  font-weight: 700;
   line-height: 1.45;
-  color: rgba(232, 247, 255, 0.85);
+  color: var(--ink);
+}
+
+.modal li::marker {
+  color: var(--red);
 }
 
 .modal p {
   margin: 0;
   font-size: 14px;
-  color: rgba(232, 247, 255, 0.85);
+  font-weight: 700;
+  color: var(--ink);
 }
 
 /* ---------- top bar ---------- */
@@ -639,56 +750,57 @@ body,
   z-index: 12;
 }
 
+/* Caption box: the narrator strip at the top of a comic panel. */
 .topbar-status {
   flex: 1;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 2px;
-  background: var(--glass);
-  border: 1px solid var(--line-dim);
-  border-radius: var(--radius);
-  padding: 7px 10px;
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-  box-shadow: inset 0 1px 0 var(--hairline), 0 8px 22px rgba(0, 0, 0, 0.45);
+  gap: 1px;
+  background-color: var(--paper);
+  background-image: var(--tex-halftone);
+  background-size: var(--tex-halftone-size);
+  border: var(--stroke) solid var(--ink);
+  border-radius: var(--radius-sm);
+  padding: 7px 10px 6px;
+  color: var(--ink);
+  box-shadow: var(--shadow-pop-sm);
+  transform: rotate(-0.6deg);
 }
 
 .status-label {
-  font-size: 14px;
-  font-weight: 700;
-  letter-spacing: 0.12em;
+  font: 400 22px/1 var(--font-comic);
+  letter-spacing: 0.07em;
   text-transform: uppercase;
 }
 
 .status-sub {
   font-size: 12px;
-  /* GAME-806: contrast lift. */
-  color: rgba(232, 247, 255, 0.72);
-  letter-spacing: 0.04em;
+  font-weight: 800;
+  color: inherit;
+  opacity: 0.62;
+  letter-spacing: 0.01em;
 }
 
+/* Turn tones: flat printed ink with a thin outline, never a glow. */
 .pulse-cyan {
-  color: var(--cyan);
-  text-shadow: 0 0 10px rgba(33, 244, 255, 0.7);
+  color: var(--blue-ink);
   animation: pulse 2.2s ease-in-out infinite;
 }
 
 .pulse-red {
   color: var(--magenta);
-  text-shadow: 0 0 10px rgba(255, 46, 166, 0.7);
   animation: pulse 1.6s ease-in-out infinite;
 }
 
 .pulse-amber {
-  color: var(--amber);
-  text-shadow: 0 0 10px rgba(255, 176, 0, 0.7);
+  color: var(--red);
   animation: pulse 1.2s ease-in-out infinite;
 }
 
 @keyframes pulse {
   50% {
-    opacity: 0.55;
+    opacity: 0.5;
   }
 }
 
@@ -696,7 +808,7 @@ body,
 
 .strips {
   position: absolute;
-  top: calc(68px + var(--sat));
+  top: calc(72px + var(--sat));
   left: 12px;
   right: 12px;
   display: flex;
@@ -712,19 +824,33 @@ body,
   display: flex;
   flex-direction: column;
   gap: 3px;
-  background: rgba(13, 19, 30, 0.6);
-  border: 1px solid rgba(33, 244, 255, 0.18);
-  border-radius: 6px;
-  padding: 6px 8px;
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
+  background: var(--paper);
+  border: var(--stroke-thin) solid var(--ink);
+  border-radius: var(--radius-sm);
+  padding: 6px 8px 7px;
+  color: var(--ink);
+  box-shadow: var(--shadow-pop-sm);
+}
+
+/* Nested on a paper panel (on-chain battle), the strips take the shade tone so
+   paper does not sit on identical paper. */
+.panel .fleet-strip {
+  background: var(--paper-2);
+}
+
+.fleet-strip.enemy {
+  transform: rotate(-1.4deg);
+}
+
+.fleet-strip:not(.enemy) {
+  transform: rotate(1.4deg);
 }
 
 .strip-label {
-  font-size: 9px;
-  letter-spacing: 0.14em;
+  font: 400 13px/1 var(--font-comic);
+  letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: rgba(232, 247, 255, 0.5);
+  color: var(--ink-40);
 }
 
 .strip-ships {
@@ -748,46 +874,47 @@ body,
 
 .strip-ship {
   display: inline-flex;
-  gap: 1.5px;
+  gap: 2px;
 }
 
 .strip-ship i {
   width: 7px;
   height: 7px;
-  border-radius: 1.5px;
-  background: rgba(33, 244, 255, 0.8);
-  box-shadow: 0 0 5px rgba(33, 244, 255, 0.5);
+  border: 1px solid var(--ink);
+  border-radius: 2px;
+  background: var(--blue);
 }
 
 .fleet-strip.enemy .strip-ship i {
-  background: rgba(255, 46, 166, 0.8);
-  box-shadow: 0 0 5px rgba(255, 46, 166, 0.5);
+  background: var(--magenta);
 }
 
 .strip-ship.sunk i {
-  background: rgba(120, 130, 145, 0.35);
-  box-shadow: none;
+  background: var(--paper-3);
+  opacity: 0.7;
 }
 
 /* Higher specificity than .fleet-strip.enemy .strip-ship i so sunk ships grey out. */
 .fleet-strip.enemy .strip-ship.sunk i {
-  background: rgba(120, 130, 145, 0.35);
-  box-shadow: none;
+  background: var(--paper-3);
+  opacity: 0.7;
 }
 
+/* Text toast = a spoken burst on paper. The image toasts (comic SFX sprites)
+   strip the plate entirely and show the drawn word alone. */
 .toast {
   position: absolute;
   top: 38%;
   left: 50%;
   transform: translateX(-50%);
-  padding: 10px 22px;
+  padding: 10px 22px 8px;
   border-radius: var(--radius);
-  border: 1px solid var(--line-dim);
-  background: var(--glass);
-  box-shadow: inset 0 1px 0 var(--hairline), var(--shadow-deep);
-  font-size: 16px;
-  font-weight: 700;
-  letter-spacing: 0.14em;
+  border: var(--stroke) solid var(--ink);
+  background: var(--paper);
+  color: var(--ink);
+  box-shadow: var(--shadow-deep);
+  font: 400 28px/1 var(--font-comic);
+  letter-spacing: 0.06em;
   text-transform: uppercase;
   white-space: nowrap;
   pointer-events: none;
@@ -801,6 +928,7 @@ body,
   padding: 0;
   border: 0;
   background: transparent;
+  box-shadow: none;
   animation: comic-toast-in 1.55s ease-out forwards;
 }
 
@@ -808,7 +936,7 @@ body,
   display: block;
   width: 100%;
   height: auto;
-  filter: drop-shadow(0 12px 22px rgba(0, 0, 0, 0.48));
+  filter: drop-shadow(4px 6px 0 rgba(20, 18, 28, 0.75));
 }
 
 .toast.comic-kaboom {
@@ -816,30 +944,75 @@ body,
 }
 
 .tone-cyan {
-  color: var(--cyan);
-  border-color: rgba(33, 244, 255, 0.5);
+  color: var(--blue);
 }
 
 .tone-red {
   color: var(--magenta);
-  border-color: rgba(255, 46, 166, 0.55);
 }
 
 .tone-amber {
-  color: var(--amber);
-  border-color: rgba(255, 176, 0, 0.55);
+  color: var(--red);
 }
 
 @keyframes toast-in {
   0% {
     opacity: 0;
-    transform: translateX(-50%) translateY(8px) scale(0.92);
+    transform: translateX(-50%) translateY(8px) rotate(-4deg) scale(0.7);
   }
-  12% {
+  10% {
     opacity: 1;
-    transform: translateX(-50%) translateY(0) scale(1);
+    transform: translateX(-50%) translateY(0) rotate(2deg) scale(1.08);
+  }
+  18% {
+    transform: translateX(-50%) rotate(-1.5deg) scale(1);
   }
   75% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+/* Toasts and banners are only ever removed by the animation reaching opacity 0
+   — the store keeps the last one in state. Under reduced motion the global
+   0.01ms override would therefore make every result announcement vanish before
+   it can be read, so those two keep a full-length opacity-only fade (no
+   movement, no scale, no rotation). */
+@media (prefers-reduced-motion: reduce) {
+  .toast {
+    animation: toast-hold 2.4s ease forwards !important;
+  }
+
+  .battle-banner {
+    animation: banner-hold 2.4s ease forwards !important;
+  }
+}
+
+[data-motion='reduced'] .toast {
+  animation: toast-hold 2.4s ease forwards !important;
+}
+
+[data-motion='reduced'] .battle-banner {
+  animation: banner-hold 2.4s ease forwards !important;
+}
+
+@keyframes toast-hold {
+  0%,
+  82% {
+    opacity: 1;
+    transform: translateX(-50%);
+  }
+  100% {
+    opacity: 0;
+    transform: translateX(-50%);
+  }
+}
+
+@keyframes banner-hold {
+  0%,
+  82% {
     opacity: 1;
   }
   100% {
@@ -897,9 +1070,9 @@ body,
 
 .fleet-tray {
   display: flex;
-  gap: 6px;
+  gap: 7px;
   overflow-x: auto;
-  padding: 4px 2px;
+  padding: 4px 3px 8px;
   scrollbar-width: none;
 }
 
@@ -907,6 +1080,7 @@ body,
   display: none;
 }
 
+/* Ship chips read as cut-out paper stickers. */
 .chip {
   appearance: none;
   flex: 0 0 auto;
@@ -916,12 +1090,17 @@ body,
   gap: 5px;
   padding: 8px 10px;
   border-radius: var(--radius-sm);
-  border: 1px solid var(--line-dim);
-  background: linear-gradient(180deg, rgba(20, 28, 42, 0.85), rgba(11, 17, 27, 0.9));
-  box-shadow: inset 0 1px 0 var(--hairline);
-  color: rgba(232, 247, 255, 0.85);
+  border: var(--stroke-thin) solid var(--ink);
+  background: var(--paper);
+  box-shadow: var(--shadow-pop-sm);
+  color: var(--ink);
   cursor: pointer;
-  transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+  transition: transform 0.06s ease, box-shadow 0.06s ease, background 0.12s ease;
+}
+
+.chip:active {
+  transform: translate(3px, 3px);
+  box-shadow: 0 0 0 var(--ink);
 }
 
 .chip-cells {
@@ -930,37 +1109,34 @@ body,
 }
 
 .chip-cells i {
-  width: 10px;
-  height: 10px;
+  width: 11px;
+  height: 11px;
+  border: 1.5px solid var(--ink);
   border-radius: 2px;
-  background: rgba(33, 244, 255, 0.75);
-  box-shadow: 0 0 6px rgba(33, 244, 255, 0.45);
+  background: var(--blue);
 }
 
 .chip-label {
-  font-size: 10px;
-  letter-spacing: 0.08em;
+  font: 400 13px/1 var(--font-comic);
+  letter-spacing: 0.06em;
   text-transform: uppercase;
 }
 
 .chip.active {
-  border-color: var(--amber);
-  background: linear-gradient(180deg, rgba(255, 176, 0, 0.16), rgba(255, 176, 0, 0.03));
-  box-shadow: inset 0 1px 0 rgba(255, 222, 150, 0.3), 0 0 14px rgba(255, 176, 0, 0.32);
+  background: var(--amber);
+  transform: rotate(-2deg) translateY(-2px);
 }
 
 .chip.active .chip-cells i {
-  background: var(--amber);
-  box-shadow: 0 0 6px rgba(255, 176, 0, 0.6);
+  background: var(--red);
 }
 
 .chip.placed {
-  opacity: 0.45;
+  opacity: 0.5;
 }
 
 .chip.placed .chip-cells i {
-  background: rgba(120, 200, 215, 0.4);
-  box-shadow: none;
+  background: var(--paper-3);
 }
 
 /* ---------- encrypted on-chain placement ---------- */
@@ -987,15 +1163,19 @@ body,
 
 .orientation-badge {
   flex: 0 0 auto;
-  padding: 5px 7px;
-  border: 1px solid var(--line);
+  padding: 5px 9px 3px;
+  border: var(--stroke-thin) solid var(--ink);
   border-radius: 999px;
-  color: var(--cyan);
-  font-size: 10px;
-  letter-spacing: 0.08em;
+  background: var(--cyan);
+  color: var(--ink);
+  font: 400 14px/1 var(--font-comic);
+  letter-spacing: 0.06em;
   text-transform: uppercase;
+  box-shadow: var(--shadow-pop-sm);
 }
 
+/* The grid is drawn like a hand-ruled comic page: heavy outer contour, thin
+   inner rules, paper fill. No animated encryption sheen. */
 .placement-grid {
   /* GAME-806: maximize cell touch size. A 10x10 board cannot reach 44px per
      cell on phones; cells are the documented game-board exception and are
@@ -1005,11 +1185,13 @@ body,
   align-self: center;
   display: grid;
   grid-template-columns: repeat(10, 1fr);
-  border-top: 1px solid rgba(33, 244, 255, 0.4);
-  border-left: 1px solid rgba(33, 244, 255, 0.4);
-  background: linear-gradient(115deg, transparent 38%, rgba(33, 244, 255, 0.08) 50%, transparent 62%);
-  background-size: 240% 240%;
-  animation: sealed-shimmer 7s ease-in-out infinite;
+  border: var(--stroke) solid var(--ink);
+  border-radius: 6px;
+  overflow: hidden;
+  background-color: rgba(247, 239, 221, 0.9);
+  background-image: var(--tex-halftone);
+  background-size: var(--tex-halftone-size);
+  box-shadow: var(--shadow-pop);
 }
 
 .placement-cell {
@@ -1017,19 +1199,19 @@ body,
   min-width: 0;
   padding: 0;
   border: 0;
-  border-right: 1px solid rgba(33, 244, 255, 0.28);
-  border-bottom: 1px solid rgba(33, 244, 255, 0.28);
-  background: linear-gradient(160deg, rgba(13, 36, 50, 0.74), rgba(7, 19, 29, 0.82));
+  border-right: 1.5px solid var(--ink-22);
+  border-bottom: 1.5px solid var(--ink-22);
+  background: transparent;
   color: transparent;
   font: 700 9px/1 ui-monospace, monospace;
   cursor: pointer;
-  transition: background 0.15s ease, box-shadow 0.15s ease;
+  transition: background 0.12s ease;
 }
 
 .placement-cell.occupied {
-  color: var(--white);
-  background: linear-gradient(180deg, rgba(33, 244, 255, 0.32), rgba(33, 244, 255, 0.16));
-  box-shadow: inset 0 0 8px rgba(33, 244, 255, 0.5);
+  color: var(--ink);
+  background: var(--blue);
+  box-shadow: inset 0 0 0 1.5px var(--ink);
 }
 
 /* 3D placement board (practice-mode look); the DOM grid stays as fallback.
@@ -1057,11 +1239,13 @@ body,
   flex-direction: column;
   gap: 3px;
   padding: 10px;
-  border: 1px solid rgba(255, 59, 48, 0.7);
-  border-radius: 6px;
-  background: rgba(255, 59, 48, 0.12);
-  color: #ffd1ce;
+  border: var(--stroke-thin) solid var(--ink);
+  border-radius: var(--radius-sm);
+  background: var(--red);
+  color: var(--white);
   font-size: 12px;
+  font-weight: 800;
+  box-shadow: var(--shadow-pop-sm);
 }
 
 .match-placement-route {
@@ -1088,14 +1272,17 @@ body,
 
 .match-placement-route .title-lockup h1 {
   margin: 0;
-  font-size: 17px;
-  letter-spacing: 0.08em;
-  filter: none;
+  font-size: 24px;
+  letter-spacing: 0.05em;
+  -webkit-text-stroke: 3px var(--ink);
+  text-shadow: 2px 3px 0 var(--ink);
+  transform: none;
 }
 
 .match-placement-route .tagline {
   font-size: 11px;
-  color: rgba(232, 247, 255, 0.5);
+  padding: 4px 8px 3px;
+  transform: none;
 }
 
 .match-placement-route .wallet-bar {
@@ -1105,8 +1292,8 @@ body,
 }
 
 .match-placement-route .wallet-bar .network-badge {
-  font-size: 10px;
-  padding: 2px 7px;
+  font-size: 13px;
+  padding: 3px 8px 2px;
 }
 
 .match-placement-route .wallet-bar .wallet-address {
@@ -1114,22 +1301,37 @@ body,
 }
 
 .match-placement-route .wallet-bar .btn {
-  padding: 6px 12px;
-  font-size: 12px;
+  padding: 6px 12px 5px;
+  font-size: 15px;
   margin-left: auto;
 }
 
-/* The placement panel sheds its glass box; its content overlays the fixed
+/* The placement panel sheds its paper plate; its content overlays the fixed
    fullscreen scene. The section itself ignores pointer events so taps in the
    open middle fall through to the 3D board; its children re-enable them. */
 .match-placement-route .onchain-placement {
   background: transparent;
   border: 0;
   box-shadow: none;
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none;
   padding: 0;
   pointer-events: none;
+  /* No paper plate here, so the loose copy flips back to light ink to stay
+     readable directly on top of the dark 3D scene. */
+  color: var(--paper);
+}
+
+/* The heading keeps a caption plate of its own so the fleet status still reads
+   as printed lettering rather than floating text. */
+.match-placement-route .placement-heading {
+  align-items: center;
+  padding: 8px 11px 9px;
+  border: var(--stroke-thin) solid var(--ink);
+  border-radius: var(--radius-sm);
+  background-color: var(--paper);
+  background-image: var(--tex-halftone);
+  background-size: var(--tex-halftone-size);
+  color: var(--ink);
+  box-shadow: var(--shadow-pop-sm);
 }
 
 .match-placement-route .onchain-placement > * {
@@ -1214,22 +1416,13 @@ body,
   aspect-ratio: 1;
   display: grid;
   grid-template-columns: repeat(10, 1fr);
-  border-top: 1px solid rgba(33, 244, 255, 0.4);
-  border-left: 1px solid rgba(33, 244, 255, 0.4);
-  /* Sealed-data read: a slow encrypted sheen drifts behind the translucent
-     unattacked tiles (visual-style-guide: hidden cells look sealed). */
-  background: linear-gradient(115deg, transparent 38%, rgba(33, 244, 255, 0.08) 50%, transparent 62%);
-  background-size: 240% 240%;
-  animation: sealed-shimmer 7s ease-in-out infinite;
-}
-
-@keyframes sealed-shimmer {
-  0% {
-    background-position: 130% 130%;
-  }
-  100% {
-    background-position: -130% -130%;
-  }
+  border: var(--stroke) solid var(--ink);
+  border-radius: 6px;
+  overflow: hidden;
+  background-color: rgba(247, 239, 221, 0.9);
+  background-image: var(--tex-halftone);
+  background-size: var(--tex-halftone-size);
+  box-shadow: var(--shadow-pop);
 }
 
 .battle-cell {
@@ -1237,49 +1430,52 @@ body,
   min-width: 0;
   padding: 0;
   border: 0;
-  border-right: 1px solid rgba(33, 244, 255, 0.28);
-  border-bottom: 1px solid rgba(33, 244, 255, 0.28);
-  background: linear-gradient(160deg, rgba(13, 36, 50, 0.74), rgba(7, 19, 29, 0.82));
+  border-right: 1.5px solid var(--ink-22);
+  border-bottom: 1.5px solid var(--ink-22);
+  background: transparent;
   color: transparent;
   font: 700 11px/1 ui-monospace, monospace;
   cursor: pointer;
-  transition: background 0.15s ease, box-shadow 0.15s ease;
+  transition: background 0.12s ease;
 }
 
 .battle-cell:disabled {
   cursor: default;
 }
 
+/* Miss = a small inked water dot; hit = a solid printed splat; sunk = the
+   heaviest ink. Results stay legible without any glow. */
 .battle-cell.miss {
-  color: rgba(160, 210, 225, 0.9);
-  background: rgba(40, 70, 90, 0.6);
+  color: var(--ink-40);
+  background: radial-gradient(circle at 50% 50%, var(--ink-22) 0 26%, transparent 27%),
+    rgba(47, 111, 208, 0.18);
 }
 
 .battle-cell.hit {
-  color: #ffd9a8;
-  background: rgba(255, 138, 30, 0.38);
-  box-shadow: inset 0 0 8px rgba(255, 138, 30, 0.55);
+  color: var(--ink);
+  background: var(--amber);
+  box-shadow: inset 0 0 0 1.5px var(--ink);
 }
 
 .battle-cell.sunk {
-  color: #ffc2bd;
-  background: rgba(255, 59, 48, 0.42);
-  box-shadow: inset 0 0 9px rgba(255, 59, 48, 0.6);
+  color: var(--white);
+  background: var(--red);
+  box-shadow: inset 0 0 0 1.5px var(--ink);
 }
 
 .battle-cell.selected {
-  outline: 2px solid var(--cyan);
-  outline-offset: -2px;
-  background: rgba(33, 244, 255, 0.24);
+  outline: 3px solid var(--ink);
+  outline-offset: -3px;
+  background: var(--cyan);
 }
 
 .battle-cell.flash {
-  animation: battle-cell-flash 1.2s ease;
+  animation: battle-cell-flash 1.2s steps(4, end);
 }
 
 @keyframes battle-cell-flash {
   0% {
-    filter: brightness(2.4);
+    filter: brightness(1.9) saturate(1.4);
   }
   100% {
     filter: brightness(1);
@@ -1288,15 +1484,15 @@ body,
 
 .battle-banner {
   margin: 0;
-  padding: 8px 12px;
-  border: 1px solid var(--line-dim);
-  border-radius: var(--radius);
-  background: var(--glass);
-  box-shadow: inset 0 1px 0 var(--hairline), var(--shadow-deep);
+  padding: 9px 12px 7px;
+  border: var(--stroke) solid var(--ink);
+  border-radius: var(--radius-sm);
+  background: var(--paper);
+  color: var(--ink);
+  box-shadow: var(--shadow-pop-sm);
   text-align: center;
-  font-size: 14px;
-  font-weight: 700;
-  letter-spacing: 0.12em;
+  font: 400 22px/1.1 var(--font-comic);
+  letter-spacing: 0.06em;
   text-transform: uppercase;
   animation: toast-in 2.4s ease forwards;
 }
@@ -1316,7 +1512,8 @@ body,
   flex-direction: column;
   gap: 3px;
   font-size: 12px;
-  color: var(--muted, #9fb6c3);
+  font-weight: 700;
+  color: var(--ink-40);
 }
 
 .battle-history-list li {
@@ -1328,7 +1525,8 @@ body,
 .history-result.hit,
 .history-result.sunk,
 .history-result.win {
-  color: var(--amber, #ffb000);
+  color: var(--red);
+  font-weight: 800;
 }
 
 @media (max-height: 760px) {
@@ -1348,7 +1546,7 @@ body,
   align-items: center;
   justify-content: center;
   padding: 24px;
-  background: rgba(7, 8, 13, 0.55);
+  background: rgba(23, 20, 38, 0.6);
 }
 
 .result {
@@ -1359,36 +1557,44 @@ body,
   flex-direction: column;
   gap: 12px;
   text-align: center;
+  transform: rotate(-1deg);
 }
 
 .result-kicker {
-  font-size: 11px;
-  letter-spacing: 0.3em;
+  font: 400 16px/1 var(--font-comic);
+  letter-spacing: 0.18em;
   text-transform: uppercase;
-  color: rgba(232, 247, 255, 0.55);
+  color: var(--ink-40);
 }
 
+/* The result word is the splash lettering of the page. */
 .result h1 {
-  margin: 0;
-  font-size: 44px;
-  letter-spacing: 0.06em;
+  margin: 2px 0;
+  font-family: var(--font-comic);
+  font-weight: 400;
+  font-size: 62px;
+  line-height: 0.92;
+  letter-spacing: 0.04em;
   text-transform: uppercase;
+  -webkit-text-stroke: 5px var(--ink);
+  paint-order: stroke fill;
+  text-shadow: 4px 5px 0 var(--ink);
+  transform: rotate(-2deg);
 }
 
 .result.won h1 {
-  color: var(--cyan);
-  text-shadow: 0 0 22px rgba(33, 244, 255, 0.6);
+  color: var(--amber);
 }
 
 .result.lost h1 {
   color: var(--magenta);
-  text-shadow: 0 0 22px rgba(255, 46, 166, 0.55);
 }
 
 .result-sub {
   margin: 0;
   font-size: 13px;
-  color: rgba(232, 247, 255, 0.7);
+  font-weight: 700;
+  color: var(--ink);
   line-height: 1.4;
 }
 
@@ -1400,26 +1606,27 @@ body,
 }
 
 .stat {
-  border: 1px solid rgba(33, 244, 255, 0.18);
-  border-radius: 6px;
-  padding: 10px 8px;
+  border: var(--stroke-thin) solid var(--ink);
+  border-radius: var(--radius-sm);
+  padding: 10px 8px 8px;
   display: flex;
   flex-direction: column;
-  gap: 3px;
-  background: rgba(16, 22, 34, 0.6);
+  gap: 2px;
+  background: var(--paper-2);
+  box-shadow: var(--shadow-pop-sm);
 }
 
 .stat-value {
-  font-size: 22px;
-  font-weight: 700;
-  color: var(--white);
+  font: 400 28px/1 var(--font-comic);
+  color: var(--ink);
 }
 
 .stat-label {
   font-size: 10px;
-  letter-spacing: 0.1em;
+  font-weight: 800;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: rgba(232, 247, 255, 0.5);
+  color: var(--ink-40);
 }
 
 /* ---------- loading ---------- */
@@ -1427,16 +1634,14 @@ body,
 .loading {
   align-items: center;
   justify-content: center;
-  background: var(--ink);
+  background: var(--night);
   z-index: 50;
   animation: overlay-in 0.22s ease-out;
 }
 
 /* Mid-battle scrim: keep the board visible behind the status. */
 .loading.dim {
-  background: rgba(7, 8, 13, 0.66);
-  backdrop-filter: blur(3px);
-  -webkit-backdrop-filter: blur(3px);
+  background: rgba(23, 20, 38, 0.7);
 }
 
 .loading-box {
@@ -1446,93 +1651,64 @@ body,
   align-items: center;
   gap: 13px;
   width: min(330px, 78vw);
-  padding: 30px 26px 26px;
-  border: 1px solid var(--line-dim);
+  padding: 26px 24px 24px;
+  border: var(--stroke) solid var(--ink);
   border-radius: var(--radius);
-  background: rgba(13, 19, 30, 0.62);
-  box-shadow: inset 0 1px 0 var(--hairline), 0 0 30px rgba(33, 244, 255, 0.1);
+  background-color: var(--paper);
+  background-image: var(--tex-halftone);
+  background-size: var(--tex-halftone-size);
+  color: var(--ink);
+  box-shadow: var(--shadow-deep);
+  transform: rotate(-0.8deg);
 }
 
-/* Tactical corner brackets, matching the panel framing language. */
-.loading-box::before,
-.loading-box::after {
+/* Inner rule, matching the panel framing language. */
+.loading-box::before {
   content: '';
   position: absolute;
-  width: 14px;
-  height: 14px;
-  border-color: var(--cyan);
-  opacity: 0.6;
+  inset: 5px;
+  border: 1.5px solid var(--ink-22);
+  border-radius: calc(var(--radius) - 5px);
   pointer-events: none;
 }
-.loading-box::before {
-  top: 7px;
-  left: 7px;
-  border-top: 1.5px solid;
-  border-left: 1.5px solid;
-}
-.loading-box::after {
-  bottom: 7px;
-  right: 7px;
-  border-bottom: 1.5px solid;
-  border-right: 1.5px solid;
-}
-.loading-amber {
-  border-color: rgba(255, 176, 0, 0.32);
-  box-shadow: inset 0 1px 0 var(--hairline), 0 0 30px rgba(255, 176, 0, 0.12);
-}
-.loading-amber::before,
-.loading-amber::after {
-  border-color: var(--amber);
+
+.loading-amber .loading-title {
+  color: var(--red);
 }
 
 .loading-title {
   position: relative;
-  font-size: 15px;
-  font-weight: 700;
-  letter-spacing: 0.26em;
+  font: 400 24px/1.1 var(--font-comic);
+  letter-spacing: 0.09em;
   text-transform: uppercase;
-  color: var(--cyan);
-  text-shadow: 0 0 12px rgba(33, 244, 255, 0.6);
-  animation: pulse 1.6s ease-in-out infinite;
-}
-/* Scan-line sweeping under the title — an "encrypted channel" cue. */
-.loading-title::after {
-  content: '';
-  position: absolute;
-  bottom: -5px;
-  left: 0;
-  right: 0;
-  height: 1px;
-  background: linear-gradient(90deg, transparent, var(--cyan), transparent);
-  animation: scan-sweep 2.1s ease-in-out infinite;
-}
-.loading-amber .loading-title {
-  color: var(--amber);
-  text-shadow: 0 0 12px rgba(255, 176, 0, 0.55);
-}
-.loading-amber .loading-title::after {
-  background: linear-gradient(90deg, transparent, var(--amber), transparent);
+  text-align: center;
+  color: var(--ink);
 }
 
 .loading-bar {
   width: 100%;
-  height: 4px;
-  border-radius: 2px;
-  background: rgba(33, 244, 255, 0.12);
+  height: 12px;
+  border: var(--stroke-thin) solid var(--ink);
+  border-radius: 999px;
+  background: var(--paper-2);
   overflow: hidden;
 }
 
 .loading-fill {
   height: 100%;
-  background: linear-gradient(90deg, var(--cyan), var(--magenta));
-  box-shadow: 0 0 10px rgba(33, 244, 255, 0.7);
+  background: repeating-linear-gradient(
+    -45deg,
+    var(--amber) 0 7px,
+    #ffd873 7px 14px
+  );
   transition: width 0.25s ease;
 }
 
 .loading-sub {
   font-size: 11px;
-  letter-spacing: 0.12em;
-  color: rgba(232, 247, 255, 0.55);
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  color: var(--ink-40);
   text-transform: uppercase;
   text-align: center;
   animation: subtitle-pulse 3s ease-in-out infinite;
@@ -1540,53 +1716,41 @@ body,
 
 .tx-explorer-link {
   margin-top: 2px;
-  font-size: 11px;
-  letter-spacing: 0.08em;
-  color: var(--cyan);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  color: var(--blue-ink);
   text-decoration: none;
-  border-bottom: 1px solid rgba(33, 244, 255, 0.35);
+  border-bottom: 2px solid var(--blue-ink);
   padding-bottom: 1px;
 }
 .tx-explorer-link:hover {
-  color: #b7f7ff;
-  border-bottom-color: var(--cyan);
+  color: var(--ink);
+  border-bottom-color: var(--ink);
 }
 
 .loading-error .loading-title {
-  color: #ffb4ae;
-  text-shadow: 0 0 12px rgba(255, 59, 48, 0.55);
+  color: var(--red);
 }
 
+/* Inked spinner: a heavy contour ring with a single printed arc, stepped so it
+   ticks like limited animation rather than gliding. */
 .loading-spinner {
   position: relative;
-  width: 42px;
-  height: 42px;
+  width: 44px;
+  height: 44px;
   border-radius: 50%;
-  border: 3px solid rgba(33, 244, 255, 0.16);
-  border-top-color: var(--cyan);
-  box-shadow: 0 0 14px rgba(33, 244, 255, 0.45);
-  animation: spin 0.9s linear infinite;
+  border: 4px solid var(--ink);
+  border-top-color: var(--red);
+  border-right-color: var(--amber);
+  background: var(--paper-2);
+  animation: spin 0.96s steps(8, end) infinite;
   will-change: transform;
 }
-/* Counter-rotating outer ring for depth. */
-.loading-spinner::before {
-  content: '';
-  position: absolute;
-  inset: -7px;
-  border-radius: 50%;
-  border: 2px solid transparent;
-  border-top-color: rgba(33, 244, 255, 0.55);
-  border-right-color: rgba(33, 244, 255, 0.28);
-  animation: spin 1.6s linear infinite reverse;
-}
+
 .loading-amber .loading-spinner {
-  border-color: rgba(255, 176, 0, 0.16);
   border-top-color: var(--amber);
-  box-shadow: 0 0 14px rgba(255, 176, 0, 0.45);
-}
-.loading-amber .loading-spinner::before {
-  border-top-color: rgba(255, 176, 0, 0.55);
-  border-right-color: rgba(255, 176, 0, 0.28);
+  border-right-color: var(--red);
 }
 
 @keyframes spin {
@@ -1595,25 +1759,13 @@ body,
   }
 }
 
-@keyframes scan-sweep {
-  0%,
-  100% {
-    transform: scaleX(0);
-    opacity: 0.2;
-  }
-  50% {
-    transform: scaleX(1);
-    opacity: 1;
-  }
-}
-
 @keyframes subtitle-pulse {
   0%,
   100% {
-    opacity: 0.5;
+    opacity: 0.6;
   }
   50% {
-    opacity: 0.85;
+    opacity: 1;
   }
 }
 
@@ -1629,10 +1781,8 @@ body,
 @media (prefers-reduced-motion: reduce) {
   .loading,
   .loading-title,
-  .loading-title::after,
   .loading-sub,
-  .loading-spinner,
-  .loading-spinner::before {
+  .loading-spinner {
     animation: none !important;
   }
 }
@@ -1648,70 +1798,86 @@ body,
   gap: 12px;
 }
 
+/* Each step is its own little panel with a colored ink spine. */
 .onboarding-slides li {
   position: relative;
   display: flex;
   flex-direction: column;
   gap: 2px;
-  padding: 10px 14px 10px 18px;
-  border: 1px solid var(--line-dim);
-  border-left: 2px solid var(--cyan);
+  padding: 10px 14px 10px 16px;
+  border: var(--stroke-thin) solid var(--ink);
+  border-left-width: 7px;
+  border-left-color: var(--cyan);
   border-radius: var(--radius-sm);
-  background: linear-gradient(90deg, rgba(33, 244, 255, 0.07), rgba(13, 19, 30, 0.55) 42%);
-  box-shadow: inset 0 1px 0 var(--hairline);
+  background: var(--paper);
+  color: var(--ink);
+  box-shadow: var(--shadow-pop-sm);
+}
+
+.onboarding-slides li:nth-child(2n) {
+  border-left-color: var(--amber);
+}
+
+.onboarding-slides li:nth-child(3n) {
+  border-left-color: var(--magenta);
 }
 
 .onboarding-slides strong {
-  font-size: 14px;
+  font: 400 19px/1.1 var(--font-comic);
   letter-spacing: 0.04em;
-  color: var(--white);
+  color: var(--ink);
 }
 
 .onboarding-slides span {
   font-size: 12px;
-  color: rgba(232, 247, 255, 0.6);
+  font-weight: 700;
+  color: var(--ink-40);
 }
 
+/* Doubles as a form label inside paper panels and as a section heading over
+   the dark scene, so it takes the local ink instead of a fixed color. */
 .field-label {
-  font-size: 12px;
+  font: 400 16px/1 var(--font-comic);
   text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: rgba(232, 247, 255, 0.65);
+  letter-spacing: 0.06em;
+  color: inherit;
   text-align: left;
 }
 
 .text-field {
   appearance: none;
   width: 100%;
-  min-height: 44px;
+  min-height: 46px;
   padding: 12px 14px;
-  border: 1px solid var(--line-dim);
+  border: var(--stroke-thin) solid var(--ink);
   border-radius: var(--radius-sm);
-  background: rgba(8, 13, 21, 0.85);
-  color: var(--white);
-  font: 500 14px/1.2 ui-monospace, SFMono-Regular, Menlo, monospace;
-  letter-spacing: 0.03em;
-  box-shadow: inset 0 1px 0 var(--hairline), inset 0 0 10px rgba(0, 0, 0, 0.35);
-  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  background: var(--paper);
+  color: var(--ink);
+  font: 700 14px/1.2 ui-monospace, SFMono-Regular, Menlo, monospace;
+  letter-spacing: 0.01em;
+  box-shadow: inset 2px 2px 0 var(--ink-12);
+  transition: box-shadow 0.12s ease, background 0.12s ease;
 }
 
 .text-field::placeholder {
-  color: rgba(232, 247, 255, 0.35);
+  color: var(--ink-40);
 }
 
 .text-field:focus {
   outline: none;
-  border-color: var(--cyan);
-  box-shadow: inset 0 1px 0 var(--hairline), 0 0 14px rgba(33, 244, 255, 0.28);
+  background: #fffaf0;
+  box-shadow: inset 2px 2px 0 var(--ink-12), var(--shadow-pop-sm);
 }
 
 .invite-link {
   margin: 0;
   padding: 10px 12px;
-  border: 1px dashed var(--line);
-  border-radius: 6px;
+  border: 2px dashed var(--ink);
+  border-radius: var(--radius-sm);
+  background: var(--paper-2);
   font-size: 12px;
-  color: rgba(232, 247, 255, 0.75);
+  font-weight: 700;
+  color: var(--ink);
   word-break: break-all;
   user-select: all;
   -webkit-user-select: all;
@@ -1726,7 +1892,8 @@ body,
 }
 
 .tx-status .ok {
-  color: var(--cyan);
+  color: var(--green);
+  font-weight: 800;
 }
 
 .match-identity {
@@ -1742,12 +1909,15 @@ body,
 .match-list-section {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
   margin-top: 6px;
 }
 
 .match-list-section h2 {
   margin: 0 0 2px;
+  font: 400 26px/1 var(--font-comic);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
 }
 
 .match-card {
@@ -1756,17 +1926,18 @@ body,
   gap: 6px;
   padding: 12px 14px;
   text-decoration: none;
-  color: var(--white);
+  color: var(--ink);
 }
 
 .match-card:active {
-  border-color: var(--cyan);
+  transform: translate(4px, 5px);
+  box-shadow: 0 0 0 var(--ink);
 }
 
 @media (hover: hover) {
   .match-card:hover {
-    border-color: var(--line-bright);
-    box-shadow: inset 0 1px 0 var(--hairline), var(--glow-cyan), var(--shadow-deep);
+    transform: translate(-1px, -1px);
+    box-shadow: 6px 8px 0 var(--ink);
   }
 }
 
@@ -1778,40 +1949,47 @@ body,
 }
 
 .match-card-id {
-  font: 600 14px/1.2 inherit;
+  font: 400 20px/1 var(--font-comic);
   letter-spacing: 0.04em;
 }
 
 .match-card-when {
   font-size: 11px;
-  color: rgba(232, 247, 255, 0.55);
+  font-weight: 700;
+  color: var(--ink-40);
 }
 
 .match-card-opponent {
   font-size: 12px;
-  color: rgba(232, 247, 255, 0.66);
-  letter-spacing: 0.03em;
+  font-weight: 700;
+  color: var(--ink-40);
+  letter-spacing: 0.01em;
 }
 
 .match-card-status {
-  font-size: 12px;
-  letter-spacing: 0.06em;
+  font: 400 16px/1 var(--font-comic);
+  letter-spacing: 0.05em;
   text-transform: uppercase;
-  color: rgba(33, 244, 255, 0.85);
+  color: var(--blue-ink);
   white-space: nowrap;
 }
 
 .match-card-status.won {
-  color: var(--cyan);
-  text-shadow: 0 0 8px rgba(33, 244, 255, 0.6);
+  color: var(--green);
 }
 
 .match-card-status.lost {
   color: var(--magenta);
 }
 
+/* Inline links land on paper plates and on the dark scene alike, so they take
+   the local ink and carry a colored underline as the affordance — a fixed blue
+   would fall under AA contrast on the dark route pages. */
 .explorer-link {
-  color: rgba(33, 244, 255, 0.75);
+  color: inherit;
+  font-weight: 800;
   text-decoration: underline;
-  text-underline-offset: 2px;
+  text-decoration-thickness: 2px;
+  text-decoration-color: var(--cyan);
+  text-underline-offset: 3px;
 }
