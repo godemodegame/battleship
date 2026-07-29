@@ -115,7 +115,8 @@ export const onboardingCopy = {
     { heading: 'Outplay your friend on-chain', body: 'Only final results are revealed.' },
   ],
   next: 'Continue',
-  skip: 'Skip',
+  /** Playing is sign-in only, so the entry screen states the requirement. */
+  signInRequired: 'Sign in to play. Your fleet, your moves, your wallet.',
 } as const
 
 /** Friend match creation (GAME-505/506, Flow 5 in docs/user-flows.md). */

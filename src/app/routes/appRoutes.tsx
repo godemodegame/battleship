@@ -3,6 +3,7 @@ import { Route } from 'react-router-dom'
 import { EntryScreen } from '../../onchain/menu/EntryScreen'
 import { AppShell } from './AppShell'
 import { NotFoundScreen } from './NotFoundScreen'
+import { RequireWallet } from './RequireWallet'
 
 /**
  * GAME-808: route-level code splitting. Practice pulls the entire three.js
@@ -57,18 +58,23 @@ function suspended(node: ReactNode) {
   return <Suspense fallback={<RouteFallback />}>{node}</Suspense>
 }
 
+/** Playable routes are sign-in only; `/` is the sole unauthenticated surface. */
+function gated(node: ReactNode) {
+  return <RequireWallet>{suspended(node)}</RequireWallet>
+}
+
 export const appRoutes = (
   <Route element={<AppShell />}>
     {/* Wallet-aware entry: onboarding while disconnected, otherwise straight to
         the practice hub which doubles as the menu (GAME-504). */}
     <Route index element={<EntryScreen />} />
-    <Route path="practice" element={suspended(<PracticeApp />)} />
-    <Route path="match/new" element={suspended(<CreateFriendMatchScreen />)} />
-    <Route path="match/open" element={suspended(<CreateOpenMatchScreen />)} />
-    <Route path="match/bot" element={suspended(<CreateBotMatchScreen />)} />
-    <Route path="lobby" element={suspended(<OpenMatchLobbyScreen />)} />
-    <Route path="matches" element={suspended(<MatchListScreen />)} />
-    <Route path="match/:deploymentId/:matchId" element={suspended(<MatchRouteShell />)} />
+    <Route path="practice" element={gated(<PracticeApp />)} />
+    <Route path="match/new" element={gated(<CreateFriendMatchScreen />)} />
+    <Route path="match/open" element={gated(<CreateOpenMatchScreen />)} />
+    <Route path="match/bot" element={gated(<CreateBotMatchScreen />)} />
+    <Route path="lobby" element={gated(<OpenMatchLobbyScreen />)} />
+    <Route path="matches" element={gated(<MatchListScreen />)} />
+    <Route path="match/:deploymentId/:matchId" element={gated(<MatchRouteShell />)} />
     <Route path="*" element={<NotFoundScreen />} />
   </Route>
 )

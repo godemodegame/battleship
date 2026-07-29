@@ -45,9 +45,11 @@ async function placeFleetAndWaitReady() {
 }
 
 describe('CreateFriendMatchScreen (GAME-505/506)', () => {
-  it('asks a disconnected visitor to connect instead of showing the form', async () => {
+  it('sends a disconnected visitor to onboarding instead of the form', async () => {
+    // Playing is sign-in only: the route gate redirects before this screen
+    // mounts, so no match form is ever exposed to a signed-out visitor.
     renderApp({ route: '/match/new', wallet: makeWalletValue() })
-    expect(await screen.findByTestId('create-connect-prompt')).toBeTruthy()
+    expect(await screen.findByTestId('entry-screen')).toBeTruthy()
     expect(screen.queryByTestId('create-match-form')).toBeNull()
   })
 

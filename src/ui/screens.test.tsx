@@ -68,9 +68,28 @@ vi.mock('../lib/haptics', () => ({
   },
 }))
 
-import App from '../App'
+import { MemoryRouter, Routes } from 'react-router-dom'
+import { appRoutes } from '../app/routes/appRoutes'
+import { WalletSessionContext } from '../onchain/wallet/WalletSessionContext'
+import { CREATOR, connectedWalletValue } from '../onchain/testSupport'
 import { LoadingOverlay, MuteButton } from './common'
 import { resetPracticeState, setPracticeRandomSource, useStore } from '../practice/practiceStore'
+
+/**
+ * The practice screens under a signed-in session. Playing is sign-in only, so
+ * the route gate would bounce a disconnected render straight to onboarding —
+ * these suites are about the screens themselves, not the gate (see
+ * routes.test.tsx for that).
+ */
+function App() {
+  return (
+    <WalletSessionContext.Provider value={connectedWalletValue(CREATOR)}>
+      <MemoryRouter initialEntries={['/practice']}>
+        <Routes>{appRoutes}</Routes>
+      </MemoryRouter>
+    </WalletSessionContext.Provider>
+  )
+}
 
 const twoCellShip: Placement[] = [
   { slot: 3, row: 0, col: 0, orientation: 'h' },
@@ -130,7 +149,7 @@ describe('HomeScreen', () => {
     // Practice vs Bot now navigates to the on-chain bot create route rather than
     // starting a local game, so the practice store stays on the home screen.
     await user.click(screen.getByRole('button', { name: 'Practice vs Bot' }))
-    expect(window.location.pathname).toBe('/match/bot')
+    expect(await screen.findByTestId('create-bot-match-screen')).toBeTruthy()
     expect(useStore.getState().screen).toBe('home')
   })
 })

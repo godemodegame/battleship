@@ -24,12 +24,22 @@ const CONFIG_MISSING_CONTEXT: WalletContextValue = {
   configMissing: true,
 }
 
+/**
+ * The bridge chunk is still streaming, so no verdict on the session exists yet.
+ * It reports 'connecting' rather than 'disconnected' so the sign-in route gate
+ * waits instead of bouncing a signed-in player off a deep link.
+ */
+const BRIDGE_LOADING_CONTEXT: WalletContextValue = {
+  ...DISCONNECTED_CONTEXT,
+  session: { ...DISCONNECTED_CONTEXT.session, status: 'connecting' },
+}
+
 const PrivyWalletBridge = lazy(() => import('./PrivyWalletBridge'))
 
-/** Children under the default disconnected session while the bridge loads. */
+/** Children under a pending ('connecting') session while the bridge loads. */
 function BridgeLoading({ children }: { children: ReactNode }) {
   return (
-    <WalletSessionContext.Provider value={DISCONNECTED_CONTEXT}>
+    <WalletSessionContext.Provider value={BRIDGE_LOADING_CONTEXT}>
       {children}
     </WalletSessionContext.Provider>
   )

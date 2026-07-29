@@ -7,6 +7,8 @@ import { cleanup, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Routes } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { WalletSessionContext } from '../onchain/wallet/WalletSessionContext'
+import { CREATOR, connectedWalletValue } from '../onchain/testSupport'
 import {
   QUALITY_PROFILES,
   isReducedMotion,
@@ -91,10 +93,13 @@ describe('persistence (GAME-807)', () => {
 
 describe('home screen controls (GAME-807)', () => {
   it('changes settings and applies data-motion to the document root', async () => {
+    // Playing is sign-in only, so the hub renders under a connected session.
     render(
-      <MemoryRouter initialEntries={['/practice']}>
-        <Routes>{appRoutes}</Routes>
-      </MemoryRouter>,
+      <WalletSessionContext.Provider value={connectedWalletValue(CREATOR)}>
+        <MemoryRouter initialEntries={['/practice']}>
+          <Routes>{appRoutes}</Routes>
+        </MemoryRouter>
+      </WalletSessionContext.Provider>,
     )
 
     await userEvent.click(await screen.findByTestId('motion-reduced'))
