@@ -21,9 +21,7 @@ export function PlacementScreen() {
   return (
     <div className="hud">
       <div className="topbar">
-        <button className="icon-btn" aria-label="Back" onClick={toHome}>
-          ‹
-        </button>
+        <button className="icon-btn" data-ic="back" aria-label="Back" onClick={toHome} />
         <div className="topbar-status">
           <span className="status-label">Deploy Fleet</span>
           <span className="status-sub">

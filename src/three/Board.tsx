@@ -1,11 +1,11 @@
 import * as THREE from 'three'
 import { memo, useEffect, useMemo, useRef } from 'react'
 import { useFrame, type ThreeEvent } from '@react-three/fiber'
-import { useFBX } from '@react-three/drei'
+import { useFBX, useGLTF } from '@react-three/drei'
 import { BOARD_SIZE, cellIndex } from '../game/constants'
 import { haptics } from '../lib/haptics'
 import type { CellShot } from '../game/types'
-import { CELL, cellPosition } from './models'
+import { CELL, MISS_BUOY_MODEL, cellPosition } from './models'
 
 const COLORS = {
   tile: new THREE.Color('#101622'),
@@ -179,17 +179,80 @@ function AxisLabels() {
   )
 }
 
+/** Footprint (in board units) the floating buoy occupies on its cell. */
+const BUOY_FOOTPRINT = 0.62
+
+/**
+ * Loads the life-ring glb once and returns a normalized prototype: the ring
+ * laid flat (its thinnest bounding axis — the disc normal — pointing up),
+ * recentred in XZ, grounded at y=0 and scaled to BUOY_FOOTPRINT. The glb's
+ * volume material is rebuilt as a plain MeshStandardMaterial so it lights like
+ * the rest of the scene; every marker clones this prototype, sharing geometry
+ * and materials rather than reloading the model per miss.
+ */
+function useBuoyPrototype(): THREE.Group {
+  const { scene } = useGLTF(MISS_BUOY_MODEL)
+  return useMemo(() => {
+    const model = scene.clone(true)
+
+    const raw = new THREE.Box3().setFromObject(model)
+    const span = raw.getSize(new THREE.Vector3())
+    if (span.x <= span.y && span.x <= span.z) model.rotation.z = Math.PI / 2
+    else if (span.z <= span.x && span.z <= span.y) model.rotation.x = Math.PI / 2
+
+    const inner = new THREE.Group()
+    inner.add(model)
+    const box = new THREE.Box3().setFromObject(inner)
+    const size = box.getSize(new THREE.Vector3())
+    const center = box.getCenter(new THREE.Vector3())
+    model.position.x -= center.x
+    model.position.z -= center.z
+    inner.scale.setScalar(BUOY_FOOTPRINT / Math.max(size.x, size.z, 1e-6))
+    inner.position.y = -new THREE.Box3().setFromObject(inner).min.y
+
+    model.traverse((obj) => {
+      const mesh = obj as THREE.Mesh
+      if (!mesh.isMesh) return
+      const src = mesh.material as THREE.MeshStandardMaterial
+      const mat = new THREE.MeshStandardMaterial({
+        map: src.map ?? null,
+        normalMap: src.normalMap ?? null,
+        roughnessMap: src.roughnessMap ?? null,
+        metalnessMap: src.metalnessMap ?? null,
+        color: src.color?.clone() ?? new THREE.Color('#ffffff'),
+        roughness: src.roughness ?? 0.7,
+        metalness: src.metalness ?? 0.1,
+      })
+      if (mat.map) mat.map.colorSpace = THREE.SRGBColorSpace
+      mesh.material = mat
+      mesh.castShadow = true
+      mesh.receiveShadow = true
+    })
+
+    const outer = new THREE.Group()
+    outer.add(inner)
+    return outer
+  }, [scene])
+}
+
 function MissMarker({ x, z }: { x: number; z: number }) {
+  const prototype = useBuoyPrototype()
+  const model = useMemo(() => prototype.clone(true), [prototype])
+  const ref = useRef<THREE.Group>(null)
+  // Desync the bob between cells so a board full of misses doesn't pulse in
+  // lockstep.
+  const phase = useMemo(() => ((x * 12.9898 + z * 78.233) % (Math.PI * 2)), [x, z])
+  useFrame(({ clock }) => {
+    const g = ref.current
+    if (!g) return
+    const t = clock.elapsedTime * 1.3 + phase
+    g.position.y = 0.06 + Math.sin(t) * 0.03
+    g.rotation.x = Math.sin(t * 0.9) * 0.07
+    g.rotation.z = Math.cos(t * 0.7) * 0.07
+  })
   return (
-    <group position={[x, 0.07, z]}>
-      <mesh rotation-x={-Math.PI / 2}>
-        <ringGeometry args={[0.16, 0.26, 24]} />
-        <meshBasicMaterial color={COLORS.miss} transparent opacity={0.55} depthWrite={false} />
-      </mesh>
-      <mesh rotation-x={-Math.PI / 2}>
-        <circleGeometry args={[0.08, 16]} />
-        <meshBasicMaterial color={COLORS.miss} transparent opacity={0.8} depthWrite={false} />
-      </mesh>
+    <group ref={ref} position={[x, 0.06, z]}>
+      <primitive object={model} />
     </group>
   )
 }
