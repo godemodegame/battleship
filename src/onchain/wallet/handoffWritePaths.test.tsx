@@ -11,8 +11,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { BattleshipWriteClient } from '../client/battleshipClient'
 import type { BattleshipClients } from '../client/useBattleshipClients'
 import { resetMoveFx } from '../battle/moveFx'
+import { autoPlaceFleet } from '../../game/board'
+import { useStore } from '../../practice/practiceStore'
+import { stashMatchFleet } from '../match/matchFleetStash'
 import {
   CREATOR,
+  DEPLOYMENT_ID,
   INVITED,
   TX_HASH,
   connectedWalletValue,
@@ -109,30 +113,28 @@ describe('mobile wallet handoff on write paths (GAME-801)', () => {
     const contract = makeFakeContract()
     contract.startBattle() // invited moves first
     contract.nextResults.push({ result: 'Miss' })
+    stashMatchFleet(DEPLOYMENT_ID, '1', { player: autoPlaceFleet() })
     const { order, wallet, clients } = instrumented(INVITED, contract)
 
     renderApp({ route: ROUTE, wallet, clients })
-    await waitFor(() => expect(screen.getByTestId('onchain-battle-panel')).toBeTruthy())
+    await waitFor(() => expect(screen.getByTestId('onchain-battle-3d')).toBeTruthy())
 
-    const grid = screen.getByTestId('enemy-battle-grid')
-    await userEvent.click(grid.querySelector('[data-cell="5"]') as HTMLButtonElement)
-    await userEvent.click(screen.getByTestId('fire-button'))
-    expectHandoffBefore(order, 'write:attack')
+    // One Fire drives the whole on-chain turn: attack, then the automatic
+    // permissionless finalization. Both must record handoff intent first.
+    useStore.getState().selectCell(5)
+    const fire = await screen.findByRole('button', { name: /Fire at/ })
+    await waitFor(() => expect(fire.hasAttribute('disabled')).toBe(false))
+    await userEvent.click(fire)
 
-    await waitFor(() => expect(screen.getByTestId('shot-resolving')).toBeTruthy())
-    order.length = 0
-    // The finalize action needs the scoped CoFHE client before it enables.
-    await waitFor(() =>
-      expect(screen.getByTestId('finalize-shot').hasAttribute('disabled')).toBe(false),
-    )
-    await userEvent.click(screen.getByTestId('finalize-shot'))
+    await waitFor(() => expectHandoffBefore(order, 'write:attack'))
     await waitFor(() => expectHandoffBefore(order, 'write:finalizeAttackWithProof'))
 
-    await waitFor(() => expect(screen.getByTestId('forfeit-button')).toBeTruthy())
     order.length = 0
-    await userEvent.click(screen.getByTestId('forfeit-button'))
-    await userEvent.click(screen.getByTestId('forfeit-confirm'))
-    expectHandoffBefore(order, 'write:forfeit')
+    // The HUD's flag icon opens the confirm modal; the modal's button commits.
+    await userEvent.click(await screen.findByLabelText('Forfeit'))
+    const [, confirm] = await screen.findAllByRole('button', { name: 'Forfeit' })
+    await userEvent.click(confirm)
+    await waitFor(() => expectHandoffBefore(order, 'write:forfeit'))
   })
 
   it('timeout claim records handoff intent before claimTimeoutWin', async () => {

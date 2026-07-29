@@ -113,16 +113,16 @@ UI states:
 
 Primary button:
 
-- `Connect Wallet`
-
-Secondary button:
-
-- `Skip`
+- `Sign in`
 
 Notes:
 
 - onboarding must be short;
 - onboarding must not appear when a wallet is already connected;
+- signing in is the only way into the game: there is no guest or skip path,
+  because every mode is played on-chain. A signed-out visitor who opens any
+  playable route (hub, practice, lobby, match list, a match link) is returned
+  here, and the route they wanted is replayed after sign-in;
 - wallet connection is the final onboarding action;
 - no long tutorial before wallet connection;
 - onboarding can show a lightweight visual preview, but the actual gameplay field must wait for the game field loading gate.

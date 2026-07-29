@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import { FLEET } from '../game/constants'
 import { autoPlaceFleet, canPlace, isFleetComplete, rotated } from '../game/board'
-import { applyAttack, applyResolvedShot, createMatch, sunkHalo } from '../game/engine'
+import { applyAttack, applyResolvedShotBy, createMatch, sunkHalo } from '../game/engine'
 import type { ResolvedShot } from '../game/engine'
 import { chooseBotTarget } from '../game/bot'
 import type { Difficulty, MatchState, Move, Orientation, Placement, Side } from '../game/types'
@@ -51,6 +51,14 @@ export interface PlayerShotOutcome {
   sunkShipSlot: number | null
 }
 
+/** An opponent shot as the contract finalized it (PvP). */
+export interface OpponentShotOutcome {
+  cell: number
+  result: 'miss' | 'hit' | 'sunk' | 'won'
+  /** FLEET slot of the ship it sank, or null. */
+  sunkShipSlot: number | null
+}
+
 export interface BattleDriver {
   /**
    * Submit the player's shot on-chain (attack + finalize) and resolve to the
@@ -60,6 +68,13 @@ export interface BattleDriver {
   submitPlayerShot: (cell: number) => Promise<PlayerShotOutcome>
   /** Run the bot's move on-chain (executeBotMove); resolves to the contract-chosen cell. */
   resolveBotShot: () => Promise<number>
+  /**
+   * PvP: await the opponent's next finalized move on-chain and return both the
+   * cell and the contract's result. Used instead of local geometry whenever the
+   * opponent's shot must be authoritative — always in PvP, since this client may
+   * no longer hold its own plaintext fleet (a reload drops it).
+   */
+  resolveOpponentShot?: () => Promise<OpponentShotOutcome>
   /** Drive the on-chain forfeit; the route refetch lands the terminal summary. */
   forfeit?: () => Promise<void>
   /** Toggle the "confirming on-chain" indicator (e.g. while a write settles). */
@@ -278,7 +293,7 @@ export const useStore = create<AppState>((set, get) => {
       }
       if (outcome === null) return 'stalled'
       if (interrupted(sessionId)) return 'aborted'
-      const applied = applyResolvedShot(get().match!, cell, outcome)
+      const applied = applyResolvedShotBy(get().match!, by, cell, outcome)
       resolvedMatch = applied.match
       move = applied.move
     } else {
@@ -315,15 +330,30 @@ export const useStore = create<AppState>((set, get) => {
     while (get().match?.turn === 'bot') {
       const battleDriver = get().battleDriver
       let target: number
+      // In PvP the contract's finalized result is the only truth about an
+      // incoming shot — this client may hold no plaintext fleet to resolve it
+      // against — so the driver returns cell *and* result and the animation
+      // replays exactly that.
+      let resolved: ResolvedShot | null = null
       if (battleDriver) {
-        // Authoritative: the contract picks the bot's cell. Run it on-chain,
-        // read the chosen cell back, then animate that exact shot locally so
-        // the boards stay in lockstep with the chain.
+        // Authoritative: the chain decides the opponent's cell (and, in PvP,
+        // its result). Run it on-chain, read it back, then animate that exact
+        // shot locally so the boards stay in lockstep with the chain.
         battleDriver.onConfirming?.(true)
         set({ confirming: true })
         let botCell: number | null
         try {
-          botCell = await battleDriver.resolveBotShot()
+          if (battleDriver.resolveOpponentShot) {
+            const outcome = await battleDriver.resolveOpponentShot()
+            botCell = outcome.cell
+            resolved = {
+              result: outcome.result === 'won' ? 'sunk' : outcome.result,
+              shipSlot: outcome.sunkShipSlot,
+              winner: outcome.result === 'won',
+            }
+          } else {
+            botCell = await battleDriver.resolveBotShot()
+          }
         } catch (err) {
           battleDriver.onError?.(err instanceof Error ? err.message : String(err))
           botCell = null
@@ -337,7 +367,14 @@ export const useStore = create<AppState>((set, get) => {
       } else {
         target = chooseBotTarget(get().match!.boards.player, get().difficulty, randomSource)
       }
-      const botResult = await resolveShot('bot', target, sessionId)
+      const botResult = await resolveShot(
+        'bot',
+        target,
+        sessionId,
+        // Already resolved on-chain above: the thunk just hands the outcome to
+        // the shared animation path, which stamps it on the player's board.
+        resolved ? async () => resolved : undefined,
+      )
       if (botResult === 'aborted' || interrupted(sessionId)) return 'aborted'
       if (botResult === 'won') return 'won'
       if (botResult === 'miss') break

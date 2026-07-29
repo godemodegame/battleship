@@ -19,6 +19,7 @@ import {
   walletCopy,
 } from '../../copy/en'
 import { errorMessage } from '../../copy/errors'
+import { stashMatchFleet } from '../match/matchFleetStash'
 import { isFleetComplete } from '../../game/board'
 import type { BattleshipWriteClient } from '../client/battleshipClient'
 import { isJoinExpired, type ChainMatchView } from '../client/mapping'
@@ -31,6 +32,7 @@ import { TxStatusLine } from '../match/TxStatusLine'
 import { FleetPlacementBoard } from './FleetPlacementBoard'
 import { useFleetSubmission } from './useFleetSubmission'
 import {
+  completedFleet,
   placementScopeKey,
   usePlacementStore,
   type PlacementScope,
@@ -133,6 +135,14 @@ export function JoinWithFleetPanel({
       writeClient.joinWithFleet!(match.matchIdBig, encrypted, onState),
     )
     if (result?.ok) {
+      // Carry the player's own plaintext fleet to the battle route before the
+      // placement store wipes it, so the 3D board draws their hulls. In-memory
+      // only: a reload renders the same battle with the own board hidden and
+      // every result taken from the chain.
+      const ownFleet = completedFleet({ placements })
+      if (ownFleet) {
+        stashMatchFleet(match.deploymentId, match.matchId, { player: ownFleet })
+      }
       // GAME-607: clear the plaintext fleet once it is on-chain.
       clearFleet()
       onJoined()

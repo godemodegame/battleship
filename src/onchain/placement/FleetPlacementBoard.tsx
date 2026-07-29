@@ -2,9 +2,14 @@
  * Shared fleet-placement surface (GAME-602).
  *
  * The interactive board a player uses to arrange their fleet before it is
- * encrypted and submitted: a DOM grid (which doubles as the no-WebGL fallback
- * and the 3D loading state) or the lazy three.js `PlacementCanvas`, plus the
- * ship tray and the rotate / auto-place / clear controls.
+ * encrypted and submitted: the lazy three.js `PlacementCanvas`, the ship tray,
+ * and the rotate / auto-place / clear controls.
+ *
+ * The board is 3D everywhere — the game has no flat grid, in placement or in
+ * battle. While the scene chunk streams the player sees a status line, and a
+ * device without WebGL is told so plainly instead of being handed a DOM board
+ * that leads to an unplayable battle. The tray controls (auto-place, rotate,
+ * clear) stay usable in both cases.
  *
  * It is purely presentational over `usePlacementStore`: it owns no encryption,
  * no contract calls, and no phase logic. The match-route `EncryptedFleetPanel`
@@ -13,13 +18,11 @@
  */
 
 import { Suspense, lazy } from 'react'
-import { FLEET, cellLabel } from '../../game/constants'
-import { shipCells } from '../../game/board'
+import { FLEET } from '../../game/constants'
 import { encryptedPlacementCopy } from '../../copy/en'
 import { usePlacementStore } from './placementStore'
 
-// The 3D board (three.js) loads as its own chunk so callers stay light; the
-// DOM grid below doubles as the loading state and the no-WebGL fallback.
+// The 3D board (three.js) loads as its own chunk so callers stay light.
 const PlacementCanvas = lazy(() =>
   import('../../three/PlacementCanvas').then((m) => ({ default: m.PlacementCanvas })),
 )
@@ -39,19 +42,6 @@ export function supportsWebgl(): boolean {
   return webglProbe
 }
 
-function occupiedSlots(
-  placements: ReturnType<typeof usePlacementStore.getState>['placements'],
-): Array<number | null> {
-  const cells: Array<number | null> = Array.from({ length: 100 }, () => null)
-  for (const placement of placements) {
-    if (!placement) continue
-    for (const cell of shipCells(placement, FLEET[placement.slot].length) ?? []) {
-      cells[cell] = placement.slot
-    }
-  }
-  return cells
-}
-
 export interface FleetPlacementBoardProps {
   /** Disables all interaction (e.g. while encrypting or a write is in flight). */
   busy: boolean
@@ -69,34 +59,18 @@ export function FleetPlacementBoard({ busy }: FleetPlacementBoardProps) {
   const clearFleet = usePlacementStore((state) => state.clearFleet)
 
   const placedCount = placements.filter(Boolean).length
-  const cells = occupiedSlots(placements)
-
-  const grid = (
-    <div className="placement-grid" role="grid" aria-label="Fleet placement grid">
-      {cells.map((slot, cell) => (
-        <button
-          key={cell}
-          type="button"
-          role="gridcell"
-          className={`placement-cell ${slot !== null ? 'occupied' : ''}`}
-          aria-label={`${cellLabel(cell)}${slot !== null ? `, ${FLEET[slot].label}` : ''}`}
-          onClick={() => {
-            if (busy) return
-            if (slot !== null) pickUpAt(cell)
-            else placeAt(Math.floor(cell / 10), cell % 10)
-          }}
-        >
-          {slot !== null ? slot + 1 : ''}
-        </button>
-      ))}
-    </div>
-  )
 
   return (
     <>
       {supportsWebgl() ? (
         <div className="placement-stage" data-testid="placement-stage">
-          <Suspense fallback={grid}>
+          <Suspense
+            fallback={
+              <p className="status-sub" data-testid="placement-board-loading">
+                {encryptedPlacementCopy.boardLoading}
+              </p>
+            }
+          >
             <PlacementCanvas
               placements={placements}
               selectedSlot={selectedSlot}
@@ -108,7 +82,9 @@ export function FleetPlacementBoard({ busy }: FleetPlacementBoardProps) {
           </Suspense>
         </div>
       ) : (
-        grid
+        <p className="error-note" role="alert" data-testid="placement-webgl-required">
+          {encryptedPlacementCopy.webglRequired}
+        </p>
       )}
 
       <div className="fleet-tray">

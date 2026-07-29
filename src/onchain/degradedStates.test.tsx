@@ -135,7 +135,7 @@ describe('low balance warning (GAME-804)', () => {
     // The full blocking notice is reserved for zero balances.
     expect(screen.queryByTestId('low-balance-notice')).toBeNull()
     // The battle still renders; the warning does not strand the route.
-    await waitFor(() => expect(screen.getByTestId('onchain-battle-panel')).toBeTruthy())
+    await waitFor(() => expect(screen.getByTestId('onchain-battle-3d')).toBeTruthy())
   })
 })
 
