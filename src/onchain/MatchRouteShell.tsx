@@ -349,6 +349,15 @@ export function MatchRouteShell() {
     phase.kind === 'finished' ||
     phase.kind === 'forfeited'
 
+  // Phases the full-screen 3D battle controller takes over, including its own
+  // result overlay. The route's own chrome stays out of its way.
+  const battleOwnsScreen =
+    showMatch &&
+    (phase.kind === 'battle' ||
+      phase.kind === 'resolving' ||
+      phase.kind === 'finished' ||
+      phase.kind === 'forfeited')
+
   return (
     <div
       className={`overlay home ${scrollingPhase ? 'match-placement-route' : ''}`}
@@ -590,9 +599,16 @@ export function MatchRouteShell() {
       )}
 
       <div className="home-actions">
-        <Link className="btn primary" to="/practice">
-          {matchRouteCopy.backToPractice}
-        </Link>
+        {/* The 3D battle owns the whole screen from the first shot to the
+            result overlay, and it carries its own exits (forfeit in the HUD,
+            Main Menu on the result). A route-level Back would sit behind it —
+            reachable only by keyboard or a screen reader — and would walk the
+            player out of a live on-chain match without forfeiting. */}
+        {!battleOwnsScreen && (
+          <Link className="btn primary" to="/practice">
+            {matchRouteCopy.backToPractice}
+          </Link>
+        )}
         {!ready && (
           <p className="footnote" data-testid="deployment-pending">
             {deploymentCopy.pendingNote}

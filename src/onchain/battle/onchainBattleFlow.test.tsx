@@ -87,6 +87,9 @@ describe('on-chain battle flow (Phase 7)', () => {
     })
 
     expect(await screen.findByTestId('onchain-battle-3d')).toBeTruthy()
+    // The 3D battle owns the screen: no route-level exit sits behind it. The
+    // HUD's forfeit is the only way out of a live match.
+    expect(screen.queryByRole('link', { name: 'Back to Practice' })).toBeNull()
     await fireAt(5)
 
     // GAME-704/705: attack then permissionless finalization, no manual step.
@@ -195,5 +198,8 @@ describe('on-chain battle flow (Phase 7)', () => {
 
     expect(await screen.findByTestId('onchain-battle-3d')).toBeTruthy()
     expect(await screen.findByRole('heading', { name: 'Victory' })).toBeTruthy()
+    // The result overlay carries its own Main Menu; the route link stays hidden.
+    expect(screen.queryByRole('link', { name: 'Back to Practice' })).toBeNull()
+    expect(screen.getByRole('button', { name: 'Main Menu' })).toBeTruthy()
   })
 })
